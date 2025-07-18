@@ -63,18 +63,44 @@ func (m *Ci) AcceptanceTest(
 	source *dagger.Directory,
 	// +optional
 	image string,
+	// +optional
+	// +default="localhost:5000"
+	registry string,
 ) (string, error) {
+	// Build and push image if not provided
 	if image == "" {
-		// Build the image first
 		container := m.buildContainer(ctx, source, "linux/amd64")
-		image = "fern-platform:test"
-		// Export to Docker daemon format for k3d
-		_, err := container.Export(ctx, fmt.Sprintf("%s.tar", image))
-		if err != nil {
-			return "", err
+		
+		// If registry is provided (e.g., k3d registry), push to it
+		if registry != "" {
+			imageRef := fmt.Sprintf("%s/fern-platform:test", registry)
+			addr, err := container.Publish(ctx, imageRef)
+			if err != nil {
+				// If push fails, continue with local image
+				fmt.Printf("Warning: Failed to push to registry %s: %v\n", registry, err)
+				image = "fern-platform:test"
+			} else {
+				image = addr
+				fmt.Printf("Published image to: %s\n", addr)
+			}
+		} else {
+			image = "fern-platform:test"
 		}
 	}
 	return m.runAcceptanceTests(ctx, source, image)
+}
+
+// AcceptanceTestPlaywright runs Playwright-based acceptance tests
+// This is a simpler function that just runs the tests without k8s deployment
+func (m *Ci) AcceptanceTestPlaywright(
+	ctx context.Context,
+	// +required
+	source *dagger.Directory,
+	// +optional
+	// +default="http://localhost:8080"
+	baseURL string,
+) (string, error) {
+	return m.runAcceptanceTestsWithPlaywright(ctx, source, baseURL)
 }
 
 // Publish builds and publishes container images
@@ -245,56 +271,152 @@ func (m *Ci) runSecurityScan(ctx context.Context, source *dagger.Directory) (str
 	return output, nil
 }
 
+// runAcceptanceTestsWithPlaywright runs acceptance tests using Playwright for browser automation
+func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagger.Directory, baseURL string) (string, error) {
+	// Default base URL if not provided
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
+	
+	// Run acceptance tests in a container with Playwright support
+	output, err := dag.Container().
+		From("mcr.microsoft.com/playwright:v1.40.0-focal").
+		WithMountedDirectory("/workspace", source).
+		WithWorkdir("/workspace/acceptance").
+		// Install Go
+		WithExec([]string{"sh", "-c", "curl -LO https://go.dev/dl/go1.23.0.linux-amd64.tar.gz && tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz"}).
+		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
+		WithEnvVariable("GOPATH", "/go").
+		// Install ginkgo
+		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@latest"}).
+		// Download dependencies
+		WithExec([]string{"go", "mod", "download"}).
+		// Set test environment variables
+		WithEnvVariable("FERN_BASE_URL", baseURL).
+		WithEnvVariable("FERN_USERNAME", "fern-user@fern.com").
+		WithEnvVariable("FERN_PASSWORD", "test123").
+		WithEnvVariable("FERN_TEAM_NAME", "fern").
+		WithEnvVariable("FERN_HEADLESS", "true").
+		WithEnvVariable("FERN_RECORD_VIDEO", "false").
+		// Run tests
+		WithExec([]string{"ginkgo", "-r", "-v"}).
+		Stdout(ctx)
+	
+	if err != nil {
+		return "", err
+	}
+	
+	return output, nil
+}
+
 // Helper function to run acceptance tests
 func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, image string) (string, error) {
-	// Create a k3d container with Docker-in-Docker
-	k3dContainer := dag.Container().
-		From("rancher/k3d:5.3.0-dind").
-		WithExec([]string{"apk", "add", "--no-cache", "bash", "make", "go", "nodejs", "npm", "curl", "wget", "ca-certificates"}).
-		// Update ca-certificates to fix SSL issues
-		WithExec([]string{"update-ca-certificates"}).
-		// Install kubectl using wget with a specific version
-		WithExec([]string{"wget", "--no-check-certificate", "-O", "/usr/local/bin/kubectl", "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"}).
-		WithExec([]string{"chmod", "+x", "/usr/local/bin/kubectl"}).
-		// Install vela CLI directly from GitHub releases
-		WithExec([]string{"wget", "--no-check-certificate", "-O", "/tmp/vela.tar.gz", "https://github.com/kubevela/kubevela/releases/download/v1.9.7/vela-v1.9.7-linux-amd64.tar.gz"}).
-		WithExec([]string{"tar", "-xzf", "/tmp/vela.tar.gz", "-C", "/usr/local/bin/", "linux-amd64/vela"}).
-		WithExec([]string{"mv", "/usr/local/bin/linux-amd64/vela", "/usr/local/bin/vela"}).
-		WithExec([]string{"chmod", "+x", "/usr/local/bin/vela"}).
-		WithExec([]string{"rm", "-rf", "/tmp/vela.tar.gz", "/usr/local/bin/linux-amd64"}).
-		WithMountedDirectory("/workspace", source).
-		WithWorkdir("/workspace").
-		WithEntrypoint([]string{"dockerd-entrypoint.sh"})
-
-	// Start the k3d service
-	k3dService := k3dContainer.
-		WithExposedPort(6443).
-		WithExposedPort(80).
-		WithExposedPort(443).
-		AsService()
-
-	// Run acceptance tests
+	// This function supports two modes:
+	// 1. When KUBECONFIG is set (e.g., from GitHub Actions with k3d already running)
+	// 2. Local development with full k3d setup
+	
+	// Build the container image first if not provided
+	if image == "" {
+		image = "fern-platform:test"
+	}
+	
+	// Check if we're in GitHub Actions with external k3d
+	// Use Ubuntu-based image for better Playwright support
 	return dag.Container().
-		From("golang:1.23-alpine").
-		WithServiceBinding("k3d", k3dService).
+		From("golang:1.23-bookworm").
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace").
-		WithExec([]string{"apk", "add", "--no-cache", "docker-cli", "kubectl", "make", "bash", "curl"}).
-		// Set KUBECONFIG
-		WithEnvVariable("KUBECONFIG", "/workspace/.kube/config").
-		WithEnvVariable("DOCKER_HOST", "tcp://k3d:2375").
-		// Wait for Docker to be ready
-		WithExec([]string{"sh", "-c", "for i in $(seq 1 30); do docker info && break || sleep 1; done"}).
-		// Create k3d cluster
-		WithExec([]string{"k3d", "cluster", "create", "test-cluster", "--api-port", "6550", "--servers", "1", "--agents", "1", "--wait"}).
-		// Load the image into k3d
-		WithExec([]string{"sh", "-c", fmt.Sprintf("k3d image import %s -c test-cluster", image)}).
-		// Deploy with vela
-		WithExec([]string{"vela", "up", "-f", "deployments/fern-platform-kubevela.yaml"}).
-		// Wait for deployment
-		WithExec([]string{"kubectl", "wait", "--for=condition=ready", "pod", "-l", "app=fern-platform", "-n", "fern-platform", "--timeout=300s"}).
-		// Run acceptance tests
-		WithExec([]string{"make", "test-acceptance"}).
+		// Install required packages
+		WithExec([]string{"apt-get", "update"}).
+		WithExec([]string{"apt-get", "install", "-y", "curl", "git", "make", "bash", "docker.io", "wget"}).
+		// Install kubectl
+		WithExec([]string{"sh", "-c", "curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/"}).
+		// Install vela CLI
+		WithExec([]string{"wget", "-O", "/tmp/vela.tar.gz", "https://github.com/kubevela/kubevela/releases/download/v1.9.7/vela-v1.9.7-linux-amd64.tar.gz"}).
+		WithExec([]string{"tar", "-xzf", "/tmp/vela.tar.gz", "-C", "/tmp"}).
+		WithExec([]string{"mv", "/tmp/linux-amd64/vela", "/usr/local/bin/vela"}).
+		WithExec([]string{"chmod", "+x", "/usr/local/bin/vela"}).
+		// Install ginkgo for acceptance tests
+		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@latest"}).
+		// Pass the image reference to the deployment
+		WithEnvVariable("FERN_IMAGE", image).
+		// Set up PATH to include Go bin
+		WithEnvVariable("PATH", "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
+		WithExec([]string{"sh", "-c", `
+			if [ -n "$KUBECONFIG" ] && [ -f "$KUBECONFIG" ]; then
+				echo "=== Using existing Kubernetes cluster from GitHub Actions ==="
+				kubectl version --client
+				kubectl get nodes
+				
+				# Create namespace if it doesn't exist
+				kubectl create namespace fern-platform || true
+				
+				# Update the deployment YAML with the correct image
+				echo "Using image: $FERN_IMAGE"
+				sed -i "s|image: fern-platform:latest|image: $FERN_IMAGE|g" deployments/fern-platform-kubevela.yaml
+				
+				# Deploy the application
+				echo "Deploying application with vela..."
+				vela up -f deployments/fern-platform-kubevela.yaml
+				
+				# Wait for deployment
+				echo "Waiting for deployment to be ready..."
+				kubectl wait --for=condition=ready pod -l app=fern-platform -n fern-platform --timeout=300s
+				
+				# Check pod status
+				kubectl get pods -n fern-platform
+				kubectl describe pod -l app=fern-platform -n fern-platform
+				
+				# Get service information
+				echo "Getting service endpoints..."
+				kubectl get svc -n fern-platform
+				
+				# Port-forward the fern-platform service for testing
+				echo "Setting up port forwarding..."
+				kubectl port-forward -n fern-platform svc/fern-platform 8080:8080 &
+				PF_PID=$!
+				sleep 5
+				
+				# Export the test URL
+				export FERN_BASE_URL="http://localhost:8080"
+				echo "Fern Platform URL: $FERN_BASE_URL"
+				
+				# Check if the service is responding
+				echo "Checking service health..."
+				curl -f $FERN_BASE_URL/health || echo "Warning: Health check failed"
+				
+				# Run acceptance tests
+				echo "Running acceptance tests..."
+				cd acceptance && go mod download
+				
+				# Install Playwright browsers
+				cd acceptance && go run github.com/playwright-community/playwright-go/cmd/playwright install chromium
+				cd acceptance && go run github.com/playwright-community/playwright-go/cmd/playwright install-deps chromium
+				
+				# Run tests with ginkgo
+				cd acceptance && ginkgo -r -v || TEST_RESULT=$?
+				
+				# Clean up port-forward
+				kill $PF_PID || true
+				
+				# Exit with test result
+				exit ${TEST_RESULT:-0}
+			else
+				echo "=== No external Kubernetes cluster detected ==="
+				echo "For CI environments, start k3d in GitHub Actions before running Dagger"
+				echo "For local development, run 'make deploy-all' to set up k3d with proper privileges"
+				echo ""
+				echo "Example GitHub Actions setup:"
+				echo "  - uses: AbsaOSS/k3d-action@v2"
+				echo "    with:"
+				echo "      cluster-name: 'test-cluster'"
+				echo "      args: >-"
+				echo "        --agents 1"
+				echo "        --no-lb"
+				echo "        --k3s-arg '--no-deploy=traefik,servicelb,metrics-server@server:*'"
+				exit 1
+			fi
+		`}).
 		Stdout(ctx)
 }
 

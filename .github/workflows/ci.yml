@@ -81,12 +81,38 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Set up k3d cluster
+      uses: AbsaOSS/k3d-action@v2
+      with:
+        cluster-name: "test-cluster"
+        args: >-
+          --agents 1
+          --no-lb
+          --k3s-arg "--no-deploy=traefik,servicelb,metrics-server@server:*"
+          --registry-create fern-registry:0.0.0.0:5000
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+    
+    - name: Wait for cluster to be ready
+      run: |
+        kubectl wait --for=condition=ready node --all --timeout=120s
+        kubectl get nodes
+    
+    - name: Export KUBECONFIG for Dagger
+      run: |
+        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+        mkdir -p $HOME/.kube
+        k3d kubeconfig get test-cluster > $HOME/.kube/config
+    
     - uses: dagger/dagger-for-github@v6
       with:
         version: "0.16.3"
         verb: call
         module: ./ci
-        args: acceptance-test --source .
+        args: acceptance-test --source . --registry k3d-fern-registry:5000
 
   all-checks:
     runs-on: ubuntu-latest
