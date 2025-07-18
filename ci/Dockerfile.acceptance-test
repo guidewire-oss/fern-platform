@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     bash \
     docker.io \
     wget \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install kubectl

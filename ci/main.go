@@ -361,6 +361,21 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 		WithExec([]string{"sh", "-c", `
 			if [ -n "$KUBECONFIG" ] && [ -f "$KUBECONFIG" ]; then
 				echo "=== Using existing Kubernetes cluster from GitHub Actions ==="
+				
+				# Fix kubeconfig to work inside container
+				# In GitHub Actions, k3d exposes the API on the host network
+				# We need to replace 0.0.0.0 with the actual host IP
+				
+				# Try to get the host IP from the default gateway
+				HOST_IP=$(ip route | grep default | awk '{print $3}')
+				echo "Host IP detected: $HOST_IP"
+				
+				# Replace 0.0.0.0 with the host IP in kubeconfig
+				sed -i "s/0\.0\.0\.0/$HOST_IP/g" $KUBECONFIG
+				
+				# Show the updated server address
+				echo "Kubernetes API server: $(grep server $KUBECONFIG | head -1)"
+				
 				kubectl version --client
 				kubectl get nodes
 				
