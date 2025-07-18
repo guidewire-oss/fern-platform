@@ -1,0 +1,58 @@
+# This file defines who should review code in different parts of the repository
+# Order matters - the last matching pattern takes precedence
+
+# Default owners for everything in the repository
+* @anoop2811 @bsekar
+
+# Domain-specific ownership
+# Auth domain - security sensitive
+/internal/domains/auth/ @anoop2811 @bsekar
+/pkg/middleware/auth.go @anoop2811 @bsekar
+
+# Analytics domain
+/internal/domains/analytics/ @anoop2811 @bsekar
+
+# Testing domain
+/internal/domains/testing/ @anoop2811 @bsekar
+
+# Projects and Tags domains
+/internal/domains/projects/ @anoop2811 @bsekar
+/internal/domains/tags/ @anoop2811 @bsekar
+
+# GraphQL API changes need careful review
+/internal/reporter/graphql/ @anoop2811 @bsekar
+/internal/graphql/ @anoop2811 @bsekar
+*.graphql @anoop2811 @bsekar
+
+# Infrastructure, deployment and CI/CD
+/deployments/ @anoop2811 @bsekar
+/ci/ @anoop2811 @bsekar
+/.github/ @anoop2811
+Dockerfile @anoop2811
+docker-compose*.yml @anoop2811 @bsekar
+
+# Database migrations and models
+/migrations/ @anoop2811 @bsekar
+/pkg/database/ @anoop2811 @bsekar
+
+# Configuration and security-sensitive files
+/pkg/config/ @anoop2811 @bsekar
+go.mod @anoop2811
+go.sum @anoop2811
+.golangci.yml @anoop2811
+
+# Documentation
+*.md @anoop2811 @bsekar
+/docs/ @anoop2811 @bsekar
+LICENSE @anoop2811
+
+# Frontend
+/web/ @anoop2811 @bsekar
+
+# Scripts and tooling
+/scripts/ @anoop2811
+Makefile @anoop2811
+
+# Kubernetes and deployment configurations
+*.yaml @anoop2811 @bsekar
+*.yml @anoop2811 @bsekar
