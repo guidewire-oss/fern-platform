@@ -353,14 +353,18 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 	// Mount kubeconfig if provided
 	if kubeconfig != nil {
 		container = container.
-			WithMountedFile("/root/.kube/config", kubeconfig).
+			WithMountedFile("/tmp/kubeconfig.orig", kubeconfig).
 			WithEnvVariable("KUBECONFIG", "/root/.kube/config")
 	}
 	
 	return container.
 		WithExec([]string{"sh", "-c", `
-			if [ -n "$KUBECONFIG" ] && [ -f "$KUBECONFIG" ]; then
+			if [ -f "/tmp/kubeconfig.orig" ]; then
 				echo "=== Using existing Kubernetes cluster from GitHub Actions ==="
+				
+				# Copy kubeconfig to writable location
+				mkdir -p /root/.kube
+				cp /tmp/kubeconfig.orig /root/.kube/config
 				
 				# Fix kubeconfig to work inside container
 				# In GitHub Actions, k3d exposes the API on the host network
@@ -371,10 +375,10 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 				echo "Host IP detected: $HOST_IP"
 				
 				# Replace 0.0.0.0 with the host IP in kubeconfig
-				sed -i "s/0\.0\.0\.0/$HOST_IP/g" $KUBECONFIG
+				sed -i "s/0\.0\.0\.0/$HOST_IP/g" /root/.kube/config
 				
 				# Show the updated server address
-				echo "Kubernetes API server: $(grep server $KUBECONFIG | head -1)"
+				echo "Kubernetes API server: $(grep server /root/.kube/config | head -1)"
 				
 				kubectl version --client
 				kubectl get nodes
