@@ -251,11 +251,17 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 	k3dContainer := dag.Container().
 		From("rancher/k3d:5.3.0-dind").
 		WithExec([]string{"apk", "add", "--no-cache", "bash", "make", "go", "nodejs", "npm", "curl", "wget", "ca-certificates"}).
-		// Install kubectl using wget with a specific version to avoid SSL issues
-		WithExec([]string{"wget", "-O", "/usr/local/bin/kubectl", "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"}).
+		// Update ca-certificates to fix SSL issues
+		WithExec([]string{"update-ca-certificates"}).
+		// Install kubectl using wget with a specific version
+		WithExec([]string{"wget", "--no-check-certificate", "-O", "/usr/local/bin/kubectl", "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"}).
 		WithExec([]string{"chmod", "+x", "/usr/local/bin/kubectl"}).
-		// Install vela CLI
-		WithExec([]string{"sh", "-c", "curl -fsSl https://static.kubevela.net/script/install.sh | bash"}).
+		// Install vela CLI directly from GitHub releases
+		WithExec([]string{"wget", "--no-check-certificate", "-O", "/tmp/vela.tar.gz", "https://github.com/kubevela/kubevela/releases/download/v1.9.7/vela-v1.9.7-linux-amd64.tar.gz"}).
+		WithExec([]string{"tar", "-xzf", "/tmp/vela.tar.gz", "-C", "/usr/local/bin/", "linux-amd64/vela"}).
+		WithExec([]string{"mv", "/usr/local/bin/linux-amd64/vela", "/usr/local/bin/vela"}).
+		WithExec([]string{"chmod", "+x", "/usr/local/bin/vela"}).
+		WithExec([]string{"rm", "-rf", "/tmp/vela.tar.gz", "/usr/local/bin/linux-amd64"}).
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace").
 		WithEntrypoint([]string{"dockerd-entrypoint.sh"})
