@@ -322,14 +322,33 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 		image = "fern-platform:test"
 	}
 	
-	// Use pre-built base image from GitHub Container Registry (much faster)
-	// Falls back to building locally if the image is not available
-	container := dag.Container().
-		From("ghcr.io/guidewire-oss/fern-platform-acceptance-test:latest").
-		WithMountedDirectory("/workspace", source).
-		WithWorkdir("/workspace").
-		// Pass the image reference to the deployment
-		WithEnvVariable("FERN_IMAGE", image)
+	// Try to use pre-built base image from GitHub Container Registry (much faster)
+	// If not available, build from Dockerfile
+	var container *dagger.Container
+	
+	// Try the pre-built image first
+	prebuiltImage := dag.Container().From("ghcr.io/guidewire-oss/fern-platform-acceptance-test:latest")
+	
+	// Test if we can pull the image by running a simple command
+	_, err := prebuiltImage.WithExec([]string{"echo", "test"}).Stdout(ctx)
+	if err == nil {
+		// Image is available, use it
+		container = prebuiltImage.
+			WithMountedDirectory("/workspace", source).
+			WithWorkdir("/workspace").
+			WithEnvVariable("FERN_IMAGE", image)
+	} else {
+		// Fallback: build from Dockerfile
+		fmt.Printf("Pre-built image not available, building from Dockerfile...\n")
+		baseImage := dag.Container().
+			Build(source.Directory("ci"), dagger.ContainerBuildOpts{
+				Dockerfile: "Dockerfile.acceptance-test",
+			})
+		container = baseImage.
+			WithMountedDirectory("/workspace", source).
+			WithWorkdir("/workspace").
+			WithEnvVariable("FERN_IMAGE", image)
+	}
 	
 	// Mount kubeconfig if provided
 	if kubeconfig != nil {
