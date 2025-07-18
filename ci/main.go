@@ -66,6 +66,8 @@ func (m *Ci) AcceptanceTest(
 	// +optional
 	// +default="localhost:5000"
 	registry string,
+	// +optional
+	kubeconfig *dagger.File,
 ) (string, error) {
 	// Build and push image if not provided
 	if image == "" {
@@ -87,7 +89,7 @@ func (m *Ci) AcceptanceTest(
 			image = "fern-platform:test"
 		}
 	}
-	return m.runAcceptanceTests(ctx, source, image)
+	return m.runAcceptanceTests(ctx, source, image, kubeconfig)
 }
 
 // AcceptanceTestPlaywright runs Playwright-based acceptance tests
@@ -310,7 +312,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 }
 
 // Helper function to run acceptance tests
-func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, image string) (string, error) {
+func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, image string, kubeconfig *dagger.File) (string, error) {
 	// This function supports two modes:
 	// 1. When KUBECONFIG is set (e.g., from GitHub Actions with k3d already running)
 	// 2. Local development with full k3d setup
@@ -322,7 +324,7 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 	
 	// Check if we're in GitHub Actions with external k3d
 	// Use Ubuntu-based image for better Playwright support
-	return dag.Container().
+	container := dag.Container().
 		From("golang:1.23-bookworm").
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace").
@@ -341,7 +343,16 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 		// Pass the image reference to the deployment
 		WithEnvVariable("FERN_IMAGE", image).
 		// Set up PATH to include Go bin
-		WithEnvVariable("PATH", "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
+		WithEnvVariable("PATH", "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	
+	// Mount kubeconfig if provided
+	if kubeconfig != nil {
+		container = container.
+			WithMountedFile("/root/.kube/config", kubeconfig).
+			WithEnvVariable("KUBECONFIG", "/root/.kube/config")
+	}
+	
+	return container.
 		WithExec([]string{"sh", "-c", `
 			if [ -n "$KUBECONFIG" ] && [ -f "$KUBECONFIG" ]; then
 				echo "=== Using existing Kubernetes cluster from GitHub Actions ==="

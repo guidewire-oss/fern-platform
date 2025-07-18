@@ -112,7 +112,7 @@ jobs:
         version: "0.16.3"
         verb: call
         module: ./ci
-        args: acceptance-test --source . --registry k3d-fern-registry:5000
+        args: acceptance-test --source . --registry k3d-fern-registry:5000 --kubeconfig $HOME/.kube/config
 
   all-checks:
     runs-on: ubuntu-latest
