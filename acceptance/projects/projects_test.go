@@ -10,6 +10,28 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
+// Helper matchers for Playwright
+func BeVisible() OmegaMatcher {
+	return WithTransform(func(locator playwright.Locator) bool {
+		visible, _ := locator.IsVisible()
+		return visible
+	}, BeTrue())
+}
+
+func BeDisabled() OmegaMatcher {
+	return WithTransform(func(locator playwright.Locator) bool {
+		disabled, _ := locator.IsDisabled()
+		return disabled
+	}, BeTrue())
+}
+
+func BeEnabled() OmegaMatcher {
+	return WithTransform(func(locator playwright.Locator) bool {
+		enabled, _ := locator.IsEnabled()
+		return enabled
+	}, BeTrue())
+}
+
 var _ = Describe("UC-04: Project Management", func() {
 	var (
 		browser playwright.Browser
@@ -121,7 +143,7 @@ var _ = Describe("UC-04: Project Management", func() {
 
 			It("should cancel deletion when cancel button is clicked", func() {
 				// Count initial projects
-				initialCount := page.Locator("tr").Count()
+				initialCount, _ := page.Locator("tr").Count()
 				
 				// Find a project with delete button
 				projectCard := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
@@ -140,10 +162,10 @@ var _ = Describe("UC-04: Project Management", func() {
 				modal := page.Locator("div").Filter(playwright.LocatorFilterOptions{
 					HasText: "Delete Project",
 				})
-				Expect(modal).Not(To(BeVisible()))
+				Expect(modal).NotTo(BeVisible())
 				
 				// Verify project still exists
-				finalCount := page.Locator("tr").Count()
+				finalCount, _ := page.Locator("tr").Count()
 				Expect(finalCount).To(Equal(initialCount))
 			})
 
@@ -155,7 +177,7 @@ var _ = Describe("UC-04: Project Management", func() {
 				projectName := fmt.Sprintf("Test Project %d", time.Now().Unix())
 				page.Fill("input[placeholder='My Project']", projectName)
 				page.Fill("textarea", "Test project for deletion")
-				page.SelectOption("select", "fern") // Select team
+				page.SelectOption("select", playwright.SelectOptionValues{Values: &[]string{"fern"}}) // Select team
 				page.Click("button:has-text('Create Project')")
 				
 				// Wait for project to be created
@@ -183,9 +205,10 @@ var _ = Describe("UC-04: Project Management", func() {
 				
 				// Verify project is gone
 				Eventually(func() bool {
-					projectExists := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
+					count, _ := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
 						HasText: projectName,
-					}).Count() > 0
+					}).Count()
+					projectExists := count > 0
 					return !projectExists
 				}, 10*time.Second).Should(BeTrue())
 			})
@@ -225,7 +248,7 @@ var _ = Describe("UC-04: Project Management", func() {
 				
 				// Verify no delete button is visible
 				deleteBtn := projectCard.Locator("button:has-text('🗑️')")
-				Expect(deleteBtn).Not(To(BeVisible())
+				Expect(deleteBtn).NotTo(BeVisible())
 				
 				// Verify "View only" text is shown
 				Expect(projectCard.Locator("text=View only")).To(BeVisible())

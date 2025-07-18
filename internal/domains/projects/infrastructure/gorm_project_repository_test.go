@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/projects/infrastructure"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,12 +33,12 @@ func TestGormProjectRepository_Delete_CascadeDelete(t *testing.T) {
 		
 		repo := infrastructure.NewGormProjectRepository(gormDB)
 		ctx := context.Background()
-		projectID := domain.ID(123)
+		projectID := uint(123)
 		
-		// Expect soft delete query
+		// Expect hard delete query (using Unscoped)
 		mock.ExpectBegin()
-		mock.ExpectExec(`UPDATE "project_details" SET "deleted_at"=.* WHERE "project_details"."id" = .* AND "project_details"."deleted_at" IS NULL`).
-			WithArgs(sqlmock.AnyArg(), projectID).
+		mock.ExpectExec(`DELETE FROM "project_details" WHERE "project_details"."id" = .*`).
+			WithArgs(projectID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectCommit()
 		

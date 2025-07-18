@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joho/godotenv"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/playwright-community/playwright-go"
@@ -33,9 +32,6 @@ var (
 )
 
 func init() {
-	// Load .env file if it exists
-	godotenv.Load("../.env")
-	
 	// Parse command line flags
 	flag.StringVar(&baseURL, "base-url", getEnvOrDefault("FERN_BASE_URL", "http://localhost:8080"), "Base URL for the application")
 	flag.StringVar(&username, "username", getEnvOrDefault("FERN_USERNAME", "admin@fern.com"), "Username for authentication")
@@ -69,22 +65,8 @@ var _ = BeforeSuite(func() {
 	
 	// Set context options
 	contextOptions = playwright.BrowserNewContextOptions{
-		BaseURL:         &baseURL,
-		IgnoreHTTPSErrors: playwright.Bool(true),
+		BaseURL: playwright.String(baseURL),
 	}
-	
-	// Configure video recording if enabled
-	if recordVideo {
-		// Create video directory if it doesn't exist
-		err = os.MkdirAll(videoDir, 0755)
-		Expect(err).NotTo(HaveOccurred())
-		
-		contextOptions.RecordVideoDir = &videoDir
-		contextOptions.RecordVideoSize = &playwright.Size{Width: 1280, Height: 720}
-	}
-	
-	// Set default timeout
-	contextOptions.Timeout = &defaultTimeout
 	
 	log.Printf("Test configuration:")
 	log.Printf("  Base URL: %s", baseURL)
