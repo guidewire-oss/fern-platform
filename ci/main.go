@@ -250,7 +250,10 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 	// Create a k3d container with Docker-in-Docker
 	k3dContainer := dag.Container().
 		From("rancher/k3d:5.3.0-dind").
-		WithExec([]string{"apk", "add", "--no-cache", "bash", "make", "go", "nodejs", "npm", "curl", "kubectl"}).
+		WithExec([]string{"apk", "add", "--no-cache", "bash", "make", "go", "nodejs", "npm", "curl", "wget", "ca-certificates"}).
+		// Install kubectl using wget with a specific version to avoid SSL issues
+		WithExec([]string{"wget", "-O", "/usr/local/bin/kubectl", "https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl"}).
+		WithExec([]string{"chmod", "+x", "/usr/local/bin/kubectl"}).
 		// Install vela CLI
 		WithExec([]string{"sh", "-c", "curl -fsSl https://static.kubevela.net/script/install.sh | bash"}).
 		WithMountedDirectory("/workspace", source).
