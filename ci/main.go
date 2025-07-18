@@ -249,7 +249,7 @@ func (m *Ci) runSecurityScan(ctx context.Context, source *dagger.Directory) (str
 func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, image string) (string, error) {
 	// Create a k3d container with Docker-in-Docker
 	k3dContainer := dag.Container().
-		From("rancher/k3d:5.6.0-dind").
+		From("rancher/k3d:5.3.0-dind").
 		WithExec([]string{"apk", "add", "--no-cache", "bash", "make", "go", "nodejs", "npm", "curl"}).
 		// Install kubectl
 		WithExec([]string{"sh", "-c", "curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/"}).
