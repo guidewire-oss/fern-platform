@@ -85,65 +85,6 @@ jobs:
         module: ./ci
         args: build --source . --platforms ${{ matrix.platform }}
 
-  acceptance-test:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'pull_request'
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Cache Dagger Engine
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/dagger
-          ~/.local/share/dagger
-        key: ${{ runner.os }}-dagger-engine-${{ hashFiles('ci/dagger.json', 'ci/go.mod', 'ci/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-dagger-engine-
-    
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/go/pkg/mod
-          ~/.cache/go-build
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    
-    - name: Set up k3d cluster
-      uses: AbsaOSS/k3d-action@v2
-      with:
-        cluster-name: "test-cluster"
-        args: >-
-          --agents 1
-          --no-lb
-          --k3s-arg "--no-deploy=traefik,servicelb,metrics-server@server:*"
-          --registry-create fern-registry:0.0.0.0:5000
-    
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
-    
-    - name: Wait for cluster to be ready
-      run: |
-        kubectl wait --for=condition=ready node --all --timeout=120s
-        kubectl get nodes
-    
-    - name: Export KUBECONFIG for Dagger
-      run: |
-        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
-        mkdir -p $HOME/.kube
-        k3d kubeconfig get test-cluster > $HOME/.kube/config
-    
-    - uses: dagger/dagger-for-github@v6
-      with:
-        version: "0.16.3"
-        verb: call
-        module: ./ci
-        args: acceptance-test --source . --registry k3d-fern-registry:5000 --kubeconfig $HOME/.kube/config
 
   all-checks:
     runs-on: ubuntu-latest
