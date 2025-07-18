@@ -1,0 +1,40 @@
+# Base image with all tools pre-installed for acceptance tests
+FROM golang:1.23-bookworm
+
+# Install system packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    make \
+    bash \
+    docker.io \
+    wget \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install kubectl
+RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
+# Install vela CLI
+RUN wget -O /tmp/vela.tar.gz https://github.com/kubevela/kubevela/releases/download/v1.9.7/vela-v1.9.7-linux-amd64.tar.gz \
+    && tar -xzf /tmp/vela.tar.gz -C /tmp \
+    && mv /tmp/linux-amd64/vela /usr/local/bin/vela \
+    && chmod +x /usr/local/bin/vela \
+    && rm -rf /tmp/vela.tar.gz /tmp/linux-amd64
+
+# Install ginkgo
+RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+
+# Set up PATH
+ENV PATH="/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Pre-create directories
+RUN mkdir -p /go/pkg/mod /root/.cache/go-build
+
+# Set Go env for better caching
+ENV GOCACHE=/root/.cache/go-build
+ENV GOMODCACHE=/go/pkg/mod
+
+WORKDIR /workspace
