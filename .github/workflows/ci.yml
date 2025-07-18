@@ -67,6 +67,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    
     - uses: dagger/dagger-for-github@v6
       with:
         version: "0.16.3"
@@ -80,6 +91,26 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Cache Dagger Engine
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/dagger
+          ~/.local/share/dagger
+        key: ${{ runner.os }}-dagger-engine-${{ hashFiles('ci/dagger.json', 'ci/go.mod', 'ci/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-dagger-engine-
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
     
     - name: Set up k3d cluster
       uses: AbsaOSS/k3d-action@v2

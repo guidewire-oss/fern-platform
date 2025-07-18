@@ -322,28 +322,14 @@ func (m *Ci) runAcceptanceTests(ctx context.Context, source *dagger.Directory, i
 		image = "fern-platform:test"
 	}
 	
-	// Check if we're in GitHub Actions with external k3d
-	// Use Ubuntu-based image for better Playwright support
+	// Use pre-built base image from GitHub Container Registry (much faster)
+	// Falls back to building locally if the image is not available
 	container := dag.Container().
-		From("golang:1.23-bookworm").
+		From("ghcr.io/guidewire-oss/fern-platform-acceptance-test:latest").
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace").
-		// Install required packages
-		WithExec([]string{"apt-get", "update"}).
-		WithExec([]string{"apt-get", "install", "-y", "curl", "git", "make", "bash", "docker.io", "wget"}).
-		// Install kubectl
-		WithExec([]string{"sh", "-c", "curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/"}).
-		// Install vela CLI
-		WithExec([]string{"wget", "-O", "/tmp/vela.tar.gz", "https://github.com/kubevela/kubevela/releases/download/v1.9.7/vela-v1.9.7-linux-amd64.tar.gz"}).
-		WithExec([]string{"tar", "-xzf", "/tmp/vela.tar.gz", "-C", "/tmp"}).
-		WithExec([]string{"mv", "/tmp/linux-amd64/vela", "/usr/local/bin/vela"}).
-		WithExec([]string{"chmod", "+x", "/usr/local/bin/vela"}).
-		// Install ginkgo for acceptance tests
-		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@latest"}).
 		// Pass the image reference to the deployment
-		WithEnvVariable("FERN_IMAGE", image).
-		// Set up PATH to include Go bin
-		WithEnvVariable("PATH", "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+		WithEnvVariable("FERN_IMAGE", image)
 	
 	// Mount kubeconfig if provided
 	if kubeconfig != nil {
