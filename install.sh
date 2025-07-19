@@ -70,6 +70,7 @@ download_and_verify() {
     local version=$1
     local platform=$2
     local temp_dir=$(mktemp -d)
+    local original_dir=$(pwd)
     
     cd "$temp_dir"
     
@@ -85,6 +86,7 @@ download_and_verify() {
     log_info "Downloading ${BINARY_NAME} ${version} for ${platform}..."
     if ! curl -sSfL -o "${archive_name}" "${download_url}"; then
         log_error "Failed to download ${archive_name}"
+        cd "$original_dir"
         rm -rf "$temp_dir"
         exit 1
     fi
@@ -111,6 +113,8 @@ download_and_verify() {
         tar -xzf "${archive_name}"
     fi
     
+    # Return to original directory before returning temp_dir path
+    cd "$original_dir"
     echo "$temp_dir"
 }
 
