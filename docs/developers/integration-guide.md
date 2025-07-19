@@ -183,20 +183,23 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Run tests
-          command: npm test -- --json > test-results.json
-      - run:
-          name: Report to Fern
-          when: always
+          name: Run tests and report
           command: |
+            # Run tests and capture exit code
+            npm test -- --json > test-results.json || TEST_EXIT_CODE=$?
+            
+            # Report to Fern Platform
             curl -X POST $FERN_URL/api/v1/test-runs \
               -H "Content-Type: application/json" \
               -d "{
                 \"projectId\": \"$FERN_PROJECT_ID\",
-                \"status\": \"$([[ $? -eq 0 ]] && echo 'passed' || echo 'failed')\",
+                \"status\": \"$([[ ${TEST_EXIT_CODE:-0} -eq 0 ]] && echo 'passed' || echo 'failed')\",
                 \"gitCommit\": \"$CIRCLE_SHA1\",
                 \"gitBranch\": \"$CIRCLE_BRANCH\"
               }"
+            
+            # Exit with original test exit code
+            exit ${TEST_EXIT_CODE:-0}
 ```
 
 ## Test Framework Integration
@@ -342,7 +345,7 @@ type TestResult struct {
     Error    string `json:"error,omitempty"`
 }
 
-func (r *FernReporter) Report(t *testing.T) {
+func (r *FernReporter) Report() error {
     testRun := map[string]interface{}{
         "projectId":    r.ProjectID,
         "status":       "passed", // Update based on results
@@ -354,7 +357,8 @@ func (r *FernReporter) Report(t *testing.T) {
     }
     
     data, _ := json.Marshal(testRun)
-    http.Post(r.URL+"/api/v1/test-runs", "application/json", bytes.NewBuffer(data))
+    _, err := http.Post(r.URL+"/api/v1/test-runs", "application/json", bytes.NewBuffer(data))
+    return err
 }
 ```
 
