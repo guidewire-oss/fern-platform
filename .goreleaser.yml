@@ -42,10 +42,10 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/guidewire-oss/fern-platform/pkg/config.Version={{.Version}}
-      - -X github.com/guidewire-oss/fern-platform/pkg/config.Commit={{.Commit}}
-      - -X github.com/guidewire-oss/fern-platform/pkg/config.Date={{.Date}}
-      - -X github.com/guidewire-oss/fern-platform/pkg/config.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.Date={{.Date}}
+      - -X main.BuiltBy=goreleaser
 
 archives:
   - id: fern-platform
