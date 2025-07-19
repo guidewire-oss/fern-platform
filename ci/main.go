@@ -291,7 +291,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
-		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@latest"}).
+		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@v2.19.0"}).
 		// Download dependencies
 		WithExec([]string{"go", "mod", "download"}).
 		// Set test environment variables
@@ -912,7 +912,7 @@ func (m *Ci) AcceptanceTestSimple(
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
-		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@latest"}).
+		WithExec([]string{"go", "install", "github.com/onsi/ginkgo/v2/ginkgo@v2.19.0"}).
 		// Configure test environment
 		WithEnvVariable("FERN_BASE_URL", "http://app:8080").
 		WithEnvVariable("FERN_USERNAME", "fern-user@fern.com").

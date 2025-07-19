@@ -148,9 +148,9 @@ func (r *GormProjectRepository) Update(ctx context.Context, project *domain.Proj
 	return nil
 }
 
-// Delete deletes a project
+// Delete permanently deletes a project (hard delete)
 func (r *GormProjectRepository) Delete(ctx context.Context, id uint) error {
-	if err := r.db.WithContext(ctx).Delete(&database.ProjectDetails{}, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Unscoped().Delete(&database.ProjectDetails{}, id).Error; err != nil {
 		return fmt.Errorf("failed to delete project: %w", err)
 	}
 	return nil

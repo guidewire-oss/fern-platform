@@ -5536,6 +5536,8 @@
             const [error, setError] = useState(null);
             const [showCreateModal, setShowCreateModal] = useState(false);
             const [editingProject, setEditingProject] = useState(null);
+            const [deletingProject, setDeletingProject] = useState(null);
+            const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
             useEffect(() => {
                 fetchProjects();
@@ -5593,19 +5595,32 @@
                 }
             };
 
-            const handleDeleteProject = async (projectId) => {
+            const handleDeleteProject = async (projectId, projectName) => {
                 console.log('Delete project called with ID:', projectId);
-                if (!confirm('Are you sure you want to delete this project?')) {
+                const project = projects.find(p => p.id === projectId);
+                if (project) {
+                    setDeletingProject(project);
+                    setDeleteConfirmInput('');
+                }
+            };
+
+            const confirmDeleteProject = async () => {
+                if (!deletingProject) return;
+                
+                if (deleteConfirmInput !== deletingProject.name) {
+                    alert('Project name does not match. Please type the exact project name.');
                     return;
                 }
                 
                 try {
-                    console.log('Calling DELETE_PROJECT mutation with ID:', projectId);
-                    console.log('Full mutation variables:', { id: projectId });
+                    console.log('Calling DELETE_PROJECT mutation with ID:', deletingProject.id);
+                    console.log('Full mutation variables:', { id: deletingProject.id });
                     const result = await graphqlClient.mutation(GRAPHQL_QUERIES.DELETE_PROJECT, {
-                        id: projectId
+                        id: deletingProject.id
                     });
                     console.log('Delete result:', result);
+                    setDeletingProject(null);
+                    setDeleteConfirmInput('');
                     fetchProjects();
                 } catch (err) {
                     console.error('Error deleting project:', err);
@@ -5961,6 +5976,164 @@
                                 setEditingProject(null);
                             }}
                         />
+                    )}
+
+                    {/* Delete Confirmation Modal */}
+                    {deletingProject && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-primary)',
+                                borderRadius: 'var(--radius-xl)',
+                                padding: '2rem',
+                                maxWidth: '500px',
+                                width: '90%',
+                                boxShadow: 'var(--shadow-xl)',
+                                border: '2px solid var(--error)'
+                            }}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    marginBottom: '1.5rem',
+                                    color: 'var(--error)'
+                                }}>
+                                    <span style={{fontSize: '2rem', marginRight: '1rem'}}>⚠️</span>
+                                    <h3 style={{margin: 0, fontSize: '1.5rem', fontWeight: '700'}}>
+                                        Delete Project
+                                    </h3>
+                                </div>
+                                
+                                <div style={{marginBottom: '1.5rem'}}>
+                                    <p style={{
+                                        marginBottom: '1rem',
+                                        color: 'var(--text-primary)',
+                                        lineHeight: '1.6'
+                                    }}>
+                                        You are about to permanently delete the project <strong>{deletingProject.name}</strong>.
+                                    </p>
+                                    <div style={{
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--border-light)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: '1rem',
+                                        marginBottom: '1rem'
+                                    }}>
+                                        <p style={{margin: '0 0 0.5rem 0', fontWeight: '600', color: 'var(--error)'}}>
+                                            This action will permanently delete:
+                                        </p>
+                                        <ul style={{margin: '0', paddingLeft: '1.5rem', color: 'var(--text-secondary)'}}>
+                                            <li>The project configuration</li>
+                                            <li>All test runs associated with this project</li>
+                                            <li>All test suites and specifications</li>
+                                            <li>All historical test data</li>
+                                        </ul>
+                                    </div>
+                                    <p style={{
+                                        margin: '0',
+                                        color: 'var(--text-secondary)',
+                                        fontStyle: 'italic',
+                                        fontSize: '0.875rem'
+                                    }}>
+                                        This action cannot be undone.
+                                    </p>
+                                </div>
+
+                                <div style={{marginBottom: '1.5rem'}}>
+                                    <label style={{
+                                        display: 'block',
+                                        marginBottom: '0.5rem',
+                                        fontWeight: '500',
+                                        color: 'var(--text-primary)'
+                                    }}>
+                                        To confirm deletion, type the project name: <strong style={{color: 'var(--error)'}}>{deletingProject.name}</strong>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={deleteConfirmInput}
+                                        onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                                        placeholder="Type project name to confirm"
+                                        autoFocus
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            border: '2px solid var(--error)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-secondary)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '1rem'
+                                        }}
+                                    />
+                                </div>
+
+                                <div style={{
+                                    display: 'flex',
+                                    gap: '1rem',
+                                    justifyContent: 'flex-end'
+                                }}>
+                                    <button
+                                        onClick={() => {
+                                            setDeletingProject(null);
+                                            setDeleteConfirmInput('');
+                                        }}
+                                        style={{
+                                            padding: '0.75rem 1.5rem',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-secondary)',
+                                            color: 'var(--text-primary)',
+                                            cursor: 'pointer',
+                                            fontWeight: '600',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.target.style.background = 'var(--bg-elevated)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.target.style.background = 'var(--bg-secondary)';
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={confirmDeleteProject}
+                                        disabled={deleteConfirmInput !== deletingProject.name}
+                                        style={{
+                                            padding: '0.75rem 1.5rem',
+                                            border: 'none',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: deleteConfirmInput === deletingProject.name ? 'var(--error)' : 'var(--text-tertiary)',
+                                            color: 'white',
+                                            cursor: deleteConfirmInput === deletingProject.name ? 'pointer' : 'not-allowed',
+                                            fontWeight: '600',
+                                            transition: 'all 0.2s ease',
+                                            opacity: deleteConfirmInput === deletingProject.name ? 1 : 0.5
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (deleteConfirmInput === deletingProject.name) {
+                                                e.target.style.background = '#c53030';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (deleteConfirmInput === deletingProject.name) {
+                                                e.target.style.background = 'var(--error)';
+                                            }
+                                        }}
+                                    >
+                                        Delete Project
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
             );
