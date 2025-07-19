@@ -159,9 +159,9 @@ docker-run: ## Run Docker container
 # Development tools
 install-tools: ## Install development tools
 	@echo "🔧 Installing development tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install github.com/cosmtrek/air@latest
-	go install github.com/vektra/mockery/v2@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
+	go install github.com/cosmtrek/air@v1.52.0
+	go install github.com/vektra/mockery/v2@v2.43.2
 	@echo "✅ Development tools installed"
 
 # Generate code
