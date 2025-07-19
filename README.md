@@ -2,18 +2,37 @@
   <img src="https://github.com/guidewire-oss/fern-platform/blob/main/docs/images/logo-color.png" alt="Fern Platform" width="200"/>
   
   # 🌿 Fern Platform
+  
+  <!-- Note: Some badges require initial setup:
+       - OpenSSF Best Practices: Register at https://www.bestpractices.dev/
+       - Codecov: Set up at https://codecov.io/ and add CODECOV_TOKEN secret
+       - Docker Hub: Update pulls badge if using different registry
+  -->
 
   **Transform your test chaos into intelligent insights with AI-powered test analysis**
 
   *Stop drowning in test data. Start understanding what your tests are telling you.*
 
-  [![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)](https://golang.org)
-  [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-  [![Development Status](https://img.shields.io/badge/status-active%20development-orange.svg)](#-project-status)
+  [![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square&logo=go)](https://golang.org)
+  [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/guidewire-oss/fern-platform?style=flat-square)](https://goreportcard.com/report/github.com/guidewire-oss/fern-platform)
+  [![codecov](https://codecov.io/gh/guidewire-oss/fern-platform/branch/main/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/guidewire-oss/fern-platform)
+  
+  [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/guidewire-oss/fern-platform/badge)](https://securityscorecards.dev/viewer/?uri=github.com/guidewire-oss/fern-platform)
+  [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9999/badge)](https://www.bestpractices.dev/en/projects/9999)
+  [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+  
+  [![CI Status](https://img.shields.io/github/actions/workflow/status/guidewire-oss/fern-platform/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/guidewire-oss/fern-platform/actions/workflows/ci.yml)
+  [![Release](https://img.shields.io/github/v/release/guidewire-oss/fern-platform?style=flat-square&logo=github)](https://github.com/guidewire-oss/fern-platform/releases)
+  [![Docker Pulls](https://img.shields.io/docker/pulls/guidewire/fern-platform?style=flat-square&logo=docker)](https://hub.docker.com/r/guidewire/fern-platform)
+  [![Dependency Status](https://img.shields.io/librariesio/github/guidewire-oss/fern-platform?style=flat-square)](https://libraries.io/github/guidewire-oss/fern-platform)
+  
+  [![Development Status](https://img.shields.io/badge/status-active%20development-orange.svg?style=flat-square)](#-project-status)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
   [![GitHub Stars](https://img.shields.io/github/stars/guidewire-oss/fern-platform?style=social)](https://github.com/guidewire-oss/fern-platform/stargazers)
 
   <p align="center">
-    <a href="#-quick-start">🚀 Quick Start</a> •
+    <a href="docs/developers/quick-start.md">🚀 Quick Start</a> •
     <a href="docs/workflows/README.md">📖 How to Use</a> •
     <a href="docs/README.md">📚 Documentation</a> •
     <a href="docs/product/overview.md">🎯 Why Fern?</a> •
