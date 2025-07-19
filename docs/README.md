@@ -71,17 +71,17 @@ Welcome to the Fern Platform documentation! This guide will help you navigate ou
 1. Read [Integration Guide](./developers/integration-guide.md)
 2. Explore [API Reference](./developers/api-reference.md)
 3. Learn about [GraphQL API](./graphql-api.md)
-4. Check [SDK Examples](./developers/sdk/)
+4. Review [Integration Examples](./developers/integration-guide.md#test-framework-integration)
 
 ### **Production Deployment**
 1. Review [Architecture](./ARCHITECTURE.md)
 2. Follow [Kubernetes Guide](./installation/local-k3d.md)
-3. Configure [OAuth](./configuration/oauth-setup.md)
-4. Set up [Permissions](./configuration/permissions.md)
+3. Configure [OAuth](./configuration/oauth.md)
+4. Set up [Permissions](./configuration/scope-based-permissions.md)
 
 ## 🔍 Can't Find What You Need?
 
-- Check our [Troubleshooting Guide](./troubleshooting/)
+- Check our [Troubleshooting Guide](./troubleshooting/README.md)
 - Browse [All Documentation](./all-docs.md)
 - Ask in [GitHub Discussions](https://github.com/guidewire-oss/fern-platform/discussions)
 - Report issues in [GitHub Issues](https://github.com/guidewire-oss/fern-platform/issues)
