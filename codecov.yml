@@ -1,0 +1,43 @@
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  precision: 2
+  round: down
+  range: "50...90"
+  
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        paths:
+          - "internal/"
+          - "pkg/"
+        
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "**/*_test.go"
+  - "**/mocks/**"
+  - "**/generated/**"
+  - "vendor/**"
+  - "ci/**"
+  - "scripts/**"
+  - "docs/**"

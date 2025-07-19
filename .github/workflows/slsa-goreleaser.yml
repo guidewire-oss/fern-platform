@@ -1,0 +1,65 @@
+name: SLSA go releaser
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions: read-all
+
+jobs:
+  args:
+    runs-on: ubuntu-latest
+    outputs:
+      commit-date: ${{ steps.ldflags.outputs.commit-date }}
+      commit: ${{ steps.ldflags.outputs.commit }}
+      version: ${{ steps.ldflags.outputs.version }}
+      tree-state: ${{ steps.ldflags.outputs.tree-state }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: ldflags
+        run: |
+          echo "commit-date=$(git log --date=iso8601-strict -1 --pretty=%ct)" >> "$GITHUB_OUTPUT"
+          echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$(git describe --tags --always --dirty | cut -c2-)" >> "$GITHUB_OUTPUT"
+          echo "tree-state=$(if git diff --quiet; then echo "clean"; else echo "dirty"; fi)" >> "$GITHUB_OUTPUT"
+
+  build:
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    needs: args
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v1.10.0
+    with:
+      go-version: 1.23
+      evaluated-envs: "COMMIT_DATE:${{needs.args.outputs.commit-date}}, COMMIT:${{needs.args.outputs.commit}}, VERSION:${{needs.args.outputs.version}}, TREE_STATE:${{needs.args.outputs.tree-state}}"
+      config-file: .slsa-goreleaser.yml
+
+  verification:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: read-all
+    steps:
+      - name: Install SLSA verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.5.1
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.go-binary-name }}
+      
+      - name: Download provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.go-binary-name }}.intoto.jsonl
+      
+      - name: Verify SLSA provenance
+        run: |
+          slsa-verifier verify-artifact \
+            --provenance-path ${{ needs.build.outputs.go-binary-name }}.intoto.jsonl \
+            --source-uri github.com/${{ github.repository }} \
+            ${{ needs.build.outputs.go-binary-name }}

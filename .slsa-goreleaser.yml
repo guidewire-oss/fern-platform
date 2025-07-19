@@ -1,0 +1,30 @@
+# SLSA GoReleaser configuration
+# Used by slsa-github-generator for reproducible builds
+
+version: 1
+
+env:
+  - CGO_ENABLED=0
+
+flags:
+  - -trimpath
+  - -tags=netgo
+
+goos:
+  - linux
+  - darwin
+  - windows
+
+goarch:
+  - amd64
+  - arm64
+  - 386
+
+binary: fern-platform-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
+
+ldflags:
+  - "-s -w"
+  - "-X github.com/guidewire-oss/fern-platform/pkg/config.Version={{ .Env.VERSION }}"
+  - "-X github.com/guidewire-oss/fern-platform/pkg/config.Commit={{ .Env.COMMIT }}"
+  - "-X github.com/guidewire-oss/fern-platform/pkg/config.CommitDate={{ .Env.COMMIT_DATE }}"
+  - "-X github.com/guidewire-oss/fern-platform/pkg/config.TreeState={{ .Env.TREE_STATE }}"

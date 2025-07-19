@@ -5,9 +5,56 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write # needed for signing with cosign
+
 jobs:
-  publish:
+  goreleaser:
     runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        check-latest: true
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Install syft
+      uses: anchore/sbom-action/download-syft@v0
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COSIGN_EXPERIMENTAL: 1
+
+  # Keep the existing Dagger publish for additional container registry support
+  publish-additional-registries:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DOCKER_REGISTRY != '' }}
     steps:
     - uses: actions/checkout@v4
     
@@ -29,23 +76,3 @@ jobs:
       env:
         DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
-    - name: Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-        body: |
-          ## Docker Images
-          
-          Multi-platform images available:
-          - `${{ secrets.DOCKER_REGISTRY }}:${{ steps.version.outputs.VERSION }}`
-          - `${{ secrets.DOCKER_REGISTRY }}:latest`
-          
-          Supported platforms:
-          - linux/amd64
-          - linux/arm64
