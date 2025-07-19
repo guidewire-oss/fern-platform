@@ -1,0 +1,29 @@
+[Unit]
+Description=Fern Platform - Unified Test Intelligence Platform
+Documentation=https://github.com/guidewire-oss/fern-platform
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=fern-platform
+Group=fern-platform
+ExecStart=/usr/bin/fern-platform
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fern-platform
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fern-platform /var/log/fern-platform
+
+# Environment
+Environment="FERN_CONFIG=/etc/fern-platform/config.yaml"
+Environment="FERN_ENV=production"
+
+[Install]
+WantedBy=multi-user.target

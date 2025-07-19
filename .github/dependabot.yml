@@ -1,0 +1,117 @@
+version: 2
+updates:
+  # Go modules
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "anoop2811"
+      - "bsekar"
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  # Go modules for acceptance tests
+  - package-ecosystem: "gomod"
+    directory: "/acceptance"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "anoop2811"
+      - "bsekar"
+    labels:
+      - "dependencies"
+      - "go"
+      - "tests"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Go modules for CI
+  - package-ecosystem: "gomod"
+    directory: "/ci"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "anoop2811"
+    labels:
+      - "dependencies"
+      - "go"
+      - "ci"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # JavaScript dependencies
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "anoop2811"
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "frontend"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      js-dependencies:
+        patterns:
+          - "*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "anoop2811"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "ci"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Docker
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "anoop2811"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore"
+      include: "scope"

@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: Fern Platform
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - name: "Guidewire OSS Team"
+    email: fern-platform@guidewire.com
+repository-code: "https://github.com/guidewire-oss/fern-platform"
+url: "https://github.com/guidewire-oss/fern-platform"
+abstract: "A unified test intelligence platform that consolidates test results from multiple testing frameworks and provides AI-powered insights through interactive visualizations."
+keywords:
+  - test-intelligence
+  - test-analytics
+  - continuous-integration
+  - test-reporting
+  - developer-tools
+license: Apache-2.0
+version: 0.1.0
+date-released: 2025-07-19

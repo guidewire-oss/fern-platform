@@ -1,0 +1,286 @@
+# GoReleaser configuration for Fern Platform
+# Documentation: https://goreleaser.com
+
+version: 2
+
+project_name: fern-platform
+
+# Generate SLSA provenance
+slsa:
+  enabled: true
+  attestation:
+    enabled: true
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: fern-platform
+    main: ./cmd/fern-platform
+    binary: fern-platform
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.Date={{.Date}}
+      - -X main.BuiltBy=goreleaser
+
+archives:
+  - id: fern-platform
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - docs/developers/quick-start.md
+      - deployments/docker-compose.yml
+      - deployments/fern-platform-kubevela.yaml
+      - config/config.yaml
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+    documents:
+      - "${artifact}.spdx.sbom.json"
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+  - artifacts: archive
+    documents:
+      - "${artifact}.cyclonedx.sbom.json"
+    args: ["${artifact}", "--output", "cyclonedx-json=${document}"]
+
+signs:
+  - cmd: cosign
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - '--yes'
+    artifacts: checksum
+    output: true
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - 'sign'
+      - '${artifact}'
+      - '--yes'
+    artifacts: manifests
+    output: true
+
+dockers:
+  - image_templates:
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-amd64'
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+      - "--label=org.opencontainers.image.description=Unified test intelligence platform"
+
+  - image_templates:
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-arm64'
+    use: buildx
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+      - "--label=org.opencontainers.image.description=Unified test intelligence platform"
+
+docker_manifests:
+  - name_template: 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}'
+    image_templates:
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-arm64'
+  
+  - name_template: 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest'
+    image_templates:
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-amd64'
+      - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-arm64'
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Code Refactoring'
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: 'CI/CD'
+      regexp: '^.*?ci(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: guidewire-oss
+    name: fern-platform
+  
+  header: |
+    ## Fern Platform {{ .Version }}
+    
+    **Released**: {{ .Date }}
+    
+    Welcome to Fern Platform {{ .Version }}! This release includes various improvements and bug fixes.
+    
+  footer: |
+    ## Installation
+    
+    ### Docker
+    ```bash
+    docker pull ghcr.io/guidewire-oss/fern-platform:{{ .Version }}
+    ```
+    
+    ### Binary Installation
+    ```bash
+    # Linux/macOS
+    curl -sSfL https://github.com/guidewire-oss/fern-platform/releases/download/{{ .Tag }}/fern-platform_{{ .Version }}_$(uname -s)_$(uname -m).tar.gz | tar xz
+    sudo mv fern-platform /usr/local/bin/
+    
+    # Or use the installation script
+    curl -sSfL https://raw.githubusercontent.com/guidewire-oss/fern-platform/main/install.sh | bash
+    ```
+    
+    ### Kubernetes
+    ```bash
+    kubectl apply -f https://github.com/guidewire-oss/fern-platform/releases/download/{{ .Tag }}/fern-platform-kubevela.yaml
+    ```
+    
+    ## Verifying Signatures
+    
+    All artifacts are signed with cosign. To verify:
+    ```bash
+    cosign verify-blob \
+      --certificate checksums.txt.pem \
+      --signature checksums.txt.sig \
+      checksums.txt
+    ```
+    
+    ## Documentation
+    
+    - [Quick Start Guide](https://github.com/guidewire-oss/fern-platform/blob/main/docs/developers/quick-start.md)
+    - [Full Documentation](https://github.com/guidewire-oss/fern-platform/tree/main/docs)
+    
+    **Full Changelog**: https://github.com/guidewire-oss/fern-platform/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+  name_template: "v{{.Version}}"
+  
+  extra_files:
+    - glob: ./deployments/fern-platform-kubevela.yaml
+    - glob: ./deployments/docker-compose.yml
+
+nfpms:
+  - id: fern-platform
+    package_name: fern-platform
+    vendor: Guidewire
+    homepage: https://github.com/guidewire-oss/fern-platform
+    maintainer: Fern Platform Team <fern-platform@guidewire.com>
+    description: Unified test intelligence platform
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    meta: false
+    contents:
+      - src: ./config/config.yaml
+        dst: /etc/fern-platform/config.yaml
+        type: config
+      - src: ./deployments/systemd/fern-platform.service
+        dst: /etc/systemd/system/fern-platform.service
+        type: config
+    scripts:
+      postinstall: ./scripts/postinstall.sh
+      preremove: ./scripts/preremove.sh
+
+brews:
+  - repository:
+      owner: guidewire-oss
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    folder: Formula
+    homepage: https://github.com/guidewire-oss/fern-platform
+    description: Unified test intelligence platform
+    license: Apache-2.0
+    test: |
+      system "#{bin}/fern-platform", "--version"
+    install: |
+      bin.install "fern-platform"
+    
+announce:
+  discord:
+    enabled: false
+  slack:
+    enabled: false
+  twitter:
+    enabled: false

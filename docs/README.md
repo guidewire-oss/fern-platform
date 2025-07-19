@@ -1,124 +1,100 @@
 # Fern Platform Documentation
 
-<div align="center">
-  <img src="https://github.com/guidewire-oss/fern-platform/blob/main/docs/images/logo-color.png" alt="Fern Platform" width="200"/>
-  
-  **A unified platform for test reporting, analysis, and AI-powered insights**
-</div>
-
-## 📚 Documentation Navigation
-
-Choose your path based on your role and goals:
-
-### 🌟 **New to Fern Platform?**
-- [**🚀 User Workflows Guide**](workflows/README.md) - Complete guide to using Fern Platform effectively
-- [**Quick Start Guide**](developers/quick-start.md) - Get running in 15 minutes
-- [**Product Overview**](product/overview.md) - What Fern Platform does and business value
-
-### 🎯 **For Product Managers & Stakeholders**
-- [**Product Overview**](product/overview.md) - What Fern Platform does and business value
-- [**User Workflows**](workflows/README.md) - How teams use Fern Platform day-to-day
-- [**UI Enhancements**](UI_ENHANCEMENTS.md) - Modern dashboard and visualization features
-- [**Architecture Overview**](ARCHITECTURE.md) - High-level system design
-
-### 🛠️ **For Developers & Operators**
-- [**Developer Guide**](developers/README.md) - Complete developer documentation hub
-- [**Quick Start Guide**](developers/quick-start.md) - Get running in 15 minutes
-- [**Local k3d Setup**](installation/local-k3d.md) - Complete local Kubernetes setup
-- [**REST API Reference**](developers/api-reference.md) - REST endpoints documentation
-- [**GraphQL API**](graphql-api.md) - GraphQL schema and queries
-- [**OAuth Configuration**](configuration/oauth.md) - Authentication setup
-- [**Authorization System**](configuration/scope-based-permissions.md) - Hybrid group & scope-based permissions
-- [**Test Users Guide**](configuration/test-users.md) - Default users and login credentials
-
-### 🏗️ **For Platform Engineers & Architects**
-- [**Architecture Document**](ARCHITECTURE.md) - System design and technical decisions
-- [**Architecture Analysis & Recommendations**](architecture/analysis-and-recommendations.md) - Comprehensive best practices review
-- [**RFCs**](rfc/) - Technical proposals and future plans
-  - [Platform Consolidation](rfc/rfc-001-platform-consolidation-and-architecture-evolution.md)
-  - [LLM Integration](rfc/rfc-002-llm-provider-integration-and-ai-intelligence-architecture.md)
-  - [Requirements Traceability](rfc/rfc-003-requirements-traceability-and-test-coverage-intelligence.md)
-
-### 🚀 **For Site Reliability Engineers**
-- [**Local k3d Installation**](installation/local-k3d.md) - Kubernetes deployment guide
-- [**Networking & DNS**](developers/networking-and-dns.md) - DNS and network configuration
-- [**Troubleshooting Guide**](installation/local-k3d.md#troubleshooting) - Common issues and solutions
-
----
+Welcome to the Fern Platform documentation! This guide will help you navigate our comprehensive documentation based on your needs.
 
 ## 🚀 Quick Navigation
 
-| I want to... | Go to |
-|---------------|-------|
-| **Learn how to use Fern Platform** | [User Workflows Guide](workflows/README.md) |
-| **Understand what Fern Platform does** | [Product Overview](product/overview.md) |
-| **Get started quickly (< 15 min)** | [Quick Start Guide](developers/quick-start.md) |
-| **Set up local Kubernetes** | [Local k3d Setup](installation/local-k3d.md) |
-| **Deploy to production** | [Local k3d Setup](installation/local-k3d.md) |
-| **Configure authentication** | [OAuth Configuration](configuration/oauth.md) |
-| **Set up authorization & permissions** | [Authorization System](configuration/scope-based-permissions.md) |
-| **Understand the architecture** | [Architecture Document](ARCHITECTURE.md) |
-| **Troubleshoot issues** | [Troubleshooting Guide](installation/local-k3d.md#troubleshooting) |
+### I want to...
+
+#### **Get Started Quickly**
+- 📖 [**15-Minute Quick Start Guide**](./developers/quick-start.md) - Get Fern running locally in 15 minutes
+- 🎯 [**Product Overview**](./product/overview.md) - Understand what Fern Platform does
+- 🔄 [**Workflows Guide**](./workflows/README.md) - Visual guide to using Fern effectively
+
+#### **Use Fern Platform**
+- 📊 [**UI Features Guide**](./user-guide/ui-features.md) - Explore the modern UI and visualizations
+- 🔍 [**Use Cases**](./use-cases/) - Step-by-step guides for common scenarios:
+  - [Debugging Test Failures](./use-cases/debugging-test-failures.md)
+  - [Finding Flaky Tests](./use-cases/finding-flaky-tests.md)
+  - [Performance Monitoring](./use-cases/performance-monitoring.md)
+- ⚙️ [**Configuration Guide**](./configuration/) - OAuth, permissions, and settings
+
+#### **Integrate with My CI/CD**
+- 🔌 [**Integration Guide**](./developers/integration-guide.md) - Connect Fern to your pipeline
+- 📡 [**REST API Reference**](./developers/api-reference.md) - Complete API documentation
+- 📈 [**GraphQL API**](./graphql-api.md) - Advanced querying capabilities
+
+#### **Deploy to Production**
+- 🚢 [**Kubernetes Deployment**](./installation/local-k3d.md) - Production-ready K8s setup
+- 🔐 [**Security Best Practices**](../SECURITY.md) - Secure your deployment
+- 👥 [**User Management**](./configuration/test-users.md) - Set up teams and permissions
+
+#### **Contribute to Fern**
+- 🏗️ [**Architecture Overview**](./ARCHITECTURE.md) - Understand the system design
+- 🧩 [**Domain Guide**](../internal/domains/README.md) - Domain-driven design explained
+- 🤝 [**Contributing Guide**](../CONTRIBUTING.md) - How to contribute
+- 🔮 [**Future Plans (RFCs)**](./rfc/) - See what's coming next
+
+## 📚 Documentation Structure
+
+### **For Users**
+- **[Product Documentation](./product/)** - Business value and features
+- **[Workflows](./workflows/)** - How to use Fern effectively
+- **[Use Cases](./use-cases/)** - Real-world scenarios with solutions
+- **[UI Guide](./user-guide/ui-features.md)** - Modern interface features
+
+### **For Developers**
+- **[Developer Guide](./developers/)** - Technical integration and APIs
+- **[Architecture](./ARCHITECTURE.md)** - System design and patterns
+- **[GraphQL API](./graphql-api.md)** - Advanced data querying
+- **[Domain Models](../internal/domains/)** - Business logic organization
+
+### **For Operations**
+- **[Installation](./installation/)** - Deployment guides
+- **[Configuration](./configuration/)** - System configuration
+- **[Security](../SECURITY.md)** - Security policies and practices
+
+### **For Contributors**
+- **[Contributing](../CONTRIBUTING.md)** - Contribution guidelines
+- **[RFCs](./rfc/)** - Request for Comments on future features
+- **[Architecture Decisions](./architecture/)** - Technical decisions and rationale
+
+## 🎯 Common Paths
+
+### **New User Journey**
+1. Start with [Product Overview](./product/overview.md)
+2. Follow the [15-Minute Quick Start](./developers/quick-start.md)
+3. Explore [Workflows](./workflows/README.md)
+4. Try [Use Cases](./use-cases/)
+
+### **Developer Integration**
+1. Read [Integration Guide](./developers/integration-guide.md)
+2. Explore [API Reference](./developers/api-reference.md)
+3. Learn about [GraphQL API](./graphql-api.md)
+4. Review [Integration Examples](./developers/integration-guide.md#test-framework-integration)
+
+### **Production Deployment**
+1. Review [Architecture](./ARCHITECTURE.md)
+2. Follow [Kubernetes Guide](./installation/local-k3d.md)
+3. Configure [OAuth](./configuration/oauth.md)
+4. Set up [Permissions](./configuration/scope-based-permissions.md)
+
+## 🔍 Can't Find What You Need?
+
+- Check our [Troubleshooting Guide](./troubleshooting/README.md)
+- Browse [All Documentation](./all-docs.md)
+- Ask in [GitHub Discussions](https://github.com/guidewire-oss/fern-platform/discussions)
+- Report issues in [GitHub Issues](https://github.com/guidewire-oss/fern-platform/issues)
+
+## 📈 Documentation Standards
+
+Our documentation follows these principles:
+- **Accurate**: Always reflects current code state
+- **Practical**: Includes real examples and use cases
+- **Visual**: Uses diagrams and screenshots where helpful
+- **Accessible**: Written for various technical levels
+- **Maintained**: Regularly updated with each release
 
 ---
 
-## 📖 Document Structure
-
-```
-docs/
-├── workflows/            # User journey guides ⭐ NEW
-│   └── README.md         # Complete workflow guide
-├── product/              # Business & product information
-│   ├── overview.md       # What is Fern Platform
-│   ├── capabilities.md   # Features and admin functions
-│   └── deployment-options.md
-├── installation/         # Installation guides
-│   ├── local-k3d.md      # Local Kubernetes setup
-│   └── production.md     # Production deployment
-├── developers/           # Developer-focused guides
-│   ├── README.md         # Developer documentation hub
-│   ├── quick-start.md    # 15-minute setup
-│   ├── api-reference.md  # REST API reference
-│   └── networking-and-dns.md
-├── architecture/         # Architecture documentation
-│   └── analysis-and-recommendations.md # Best practices analysis
-├── configuration/        # Configuration guides
-│   ├── oauth.md          # OAuth setup
-│   ├── scope-based-permissions.md # Authorization system
-│   ├── scope-examples.md # Authorization examples
-│   ├── test-users.md     # Test users and credentials
-│   ├── user-permissions.md # User permission setup
-│   └── environment.md    # Environment variables
-├── graphql-api.md       # GraphQL API documentation
-├── ARCHITECTURE.md      # System architecture
-├── UI_ENHANCEMENTS.md   # UI features documentation
-└── rfc/                  # Technical RFCs
-    └── ...
-```
-
----
-
-## 🔄 Migration from Old Docs
-
-The documentation has been reorganized for clarity. Here's where to find content:
-
-| Old Location | New Location |
-|--------------|--------------|
-| `README.md` (getting started) | [Quick Start Guide](developers/quick-start.md) |
-| `DEPLOYMENT.md` | [Deployment Overview](../DEPLOYMENT.md) |
-| `docs/k3d-deployment-guide.md` | [Local k3d Setup](installation/local-k3d.md) |
-| `docs/OAuth-Setup-and-Testing.md` | [OAuth Configuration](configuration/oauth.md) |
-| `docs/ARCHITECTURE.md` | [Architecture](ARCHITECTURE.md) |
-| `docs/UI_ENHANCEMENTS.md` | [UI Enhancements](UI_ENHANCEMENTS.md) |
-
----
-
-## 💡 Contributing to Documentation
-
-- **Found an issue?** Open an [issue](../../issues) with the `documentation` label
-- **Want to improve content?** See our [Contributing Guide](../CONTRIBUTING.md)
-- **Need something not covered?** Start a [discussion](../../discussions)
-
----
-
-*Last updated: June 2025*
+*Last updated: Documentation reflects Fern Platform v0.1.0*
