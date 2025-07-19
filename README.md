@@ -12,7 +12,7 @@ A unified test intelligence platform that transforms fragmented test data into a
 
 Fern Platform aggregates test results from any CI/CD pipeline and testing framework (Jest, pytest, JUnit, etc.) into a centralized dashboard. It automatically detects flaky tests, tracks performance trends, and provides the visibility engineering teams need to maintain healthy test suites.
 
-Think of it as a specialized analytics platform for your tests - like Datadog or Grafana, but purpose-built for test intelligence.
+Think of it as a specialized analytics platform for your tests - like Datadog or Grafana, but purpose-built for test intelligence. **We're on a mission to make test failures predictable and preventable through AI-powered insights.**
 
 <img src="docs/images/test-summaries.png" alt="Fern Platform Dashboard" width="800"/>
 
@@ -163,15 +163,38 @@ Fern Platform uses domain-driven design with a hexagonal architecture:
                     └────────────────────────┘
 ```
 
+## The Vision: Where We're Heading
+
+While Fern Platform already provides powerful test analytics, we're building towards something bigger: **an AI-powered test intelligence system that predicts failures before they happen**.
+
+### 🚀 Coming Soon
+
+**AI-Powered Intelligence** (In Development)
+- Automatic root cause analysis for failures
+- Predictive test failure detection
+- Smart test selection for faster CI/CD
+- Natural language queries: "Why did the auth tests fail last week?"
+
+**Enhanced Integrations** (Q1 2025)
+- Native plugins for Jest, pytest, Go, JUnit
+- GitHub Actions & GitLab CI apps
+- Slack/Teams notifications with insights
+- JIRA auto-ticket creation for failures
+
+**Real-Time Features** (Q2 2025)
+- Live test execution monitoring
+- WebSocket subscriptions for dashboards
+- Streaming logs from CI/CD pipelines
+
+See our [RFCs](docs/rfc/) for detailed technical proposals and join the [discussion](https://github.com/guidewire-oss/fern-platform/discussions).
+
 ## Project Status
 
-Fern Platform is under active development. Core features are stable and used in production by several teams.
+Fern Platform is under active development with core features stable and used in production.
 
-**Stable**: Test ingestion, flaky detection, OAuth, web dashboard  
-**In Progress**: AI-powered insights, webhook integrations  
-**Planned**: Real-time subscriptions, native CI/CD plugins
-
-See our [roadmap](https://github.com/guidewire-oss/fern-platform/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) for details.
+**Ready Now**: Test aggregation • Flaky detection • Performance tracking • OAuth • REST/GraphQL APIs  
+**In Progress**: AI insights • Webhook integrations • Enhanced visualizations  
+**Exploring**: ML-based test optimization • Distributed tracing for tests
 
 ## Contributing
 
