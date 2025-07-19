@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/guidewire-oss/fern-platform?style=flat-square)](https://goreportcard.com/report/github.com/guidewire-oss/fern-platform)
-[![codecov](https://codecov.io/gh/guidewire-oss/fern-platform/branch/main/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/guidewire-oss/fern-platform)
+[![codecov](https://codecov.io/gh/guidewire-oss/fern-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/guidewire-oss/fern-platform)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/guidewire-oss/fern-platform/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/guidewire-oss/fern-platform/actions/workflows/ci.yml)
 
 A unified test intelligence platform that transforms fragmented test data into actionable insights.

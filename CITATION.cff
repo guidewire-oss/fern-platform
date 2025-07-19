@@ -3,7 +3,7 @@ title: Fern Platform
 message: "If you use this software, please cite it as below."
 type: software
 authors:
-  - family-names: "Guidewire OSS Team"
+  - name: "Guidewire OSS Team"
     email: fern-platform@guidewire.com
 repository-code: "https://github.com/guidewire-oss/fern-platform"
 url: "https://github.com/guidewire-oss/fern-platform"

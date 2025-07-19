@@ -176,6 +176,14 @@ main() {
     log_info "Platform: ${platform}"
     log_info "Version: ${version}"
     
+    # Check for unzip on Windows
+    if [[ "$platform" == "Windows"* ]]; then
+        if ! command -v unzip >/dev/null 2>&1; then
+            log_error "Required tool not found: unzip (needed for Windows installations)"
+            exit 1
+        fi
+    fi
+    
     # Download and extract
     local temp_dir=$(download_and_verify "$version" "$platform")
     
