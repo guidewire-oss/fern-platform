@@ -164,7 +164,15 @@ install_binary() {
     
     # Install the binary
     log_info "Installing ${BINARY_NAME} to ${install_path}..."
-    ${sudo_cmd} install -m 755 "${temp_dir}/${BINARY_NAME}" "$install_path"
+    
+    # Use install command if available, otherwise fallback to cp
+    if command -v install >/dev/null 2>&1; then
+        ${sudo_cmd} install -m 755 "${temp_dir}/${BINARY_NAME}" "$install_path"
+    else
+        # Fallback for systems without install command
+        ${sudo_cmd} cp "${temp_dir}/${BINARY_NAME}" "$install_path"
+        ${sudo_cmd} chmod 755 "$install_path"
+    fi
     
     # Clean up
     rm -rf "$temp_dir"
@@ -198,12 +206,37 @@ main() {
     log_info "Installing Fern Platform..."
     
     # Check for required tools
-    for tool in curl tar; do
+    local required_tools="curl tar grep cut"
+    local missing_tools=""
+    
+    for tool in $required_tools; do
         if ! command -v "$tool" >/dev/null 2>&1; then
-            log_error "Required tool not found: $tool"
-            exit 1
+            missing_tools="$missing_tools $tool"
         fi
     done
+    
+    # Check for install command (required for binary installation)
+    if ! command -v install >/dev/null 2>&1; then
+        # On macOS, install is typically available
+        # On Linux, it's part of coreutils
+        # On Windows/MinGW, we might need to handle differently
+        if [[ "$(uname -s)" != "Darwin" ]] && [[ "$(uname -s)" != "Linux" ]]; then
+            log_warning "install command not found, will use fallback method"
+        else
+            missing_tools="$missing_tools install"
+        fi
+    fi
+    
+    # Check for checksum tools (at least one is needed)
+    if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+        log_warning "Neither sha256sum nor shasum found - checksum verification will be skipped"
+    fi
+    
+    if [[ -n "$missing_tools" ]]; then
+        log_error "Required tools not found:$missing_tools"
+        log_error "Please install the missing tools and try again"
+        exit 1
+    fi
     
     # Get platform and version
     local platform=$(detect_platform)
