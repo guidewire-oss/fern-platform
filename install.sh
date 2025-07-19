@@ -6,7 +6,7 @@
 # Usage: curl -sSfL https://raw.githubusercontent.com/guidewire-oss/fern-platform/main/install.sh | bash
 #
 
-set -e
+set -euo pipefail
 
 # Configuration
 GITHUB_REPO="guidewire-oss/fern-platform"
