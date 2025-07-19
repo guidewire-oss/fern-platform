@@ -176,8 +176,8 @@ POST /api/v1/projects/{projectId}/flaky-config
 # Example: GitHub Actions
 - name: Check for flaky tests
   run: |
-    FLAKY_COUNT=$(curl -s $FERN_URL/api/v1/analytics/flaky-tests/count?projectId=$PROJECT_ID | jq '.active')
-    if [ $FLAKY_COUNT -gt 5 ]; then
+    FLAKY_COUNT=$(curl -s "$FERN_URL/api/v1/analytics/flaky-tests/count?projectId=$PROJECT_ID" | jq '.active')
+    if [ "$FLAKY_COUNT" -gt 5 ]; then
       echo "::warning::Project has $FLAKY_COUNT active flaky tests"
     fi
 ```

@@ -398,8 +398,12 @@ func (r *FernReporter) Report() error {
         "gitBranch":    os.Getenv("GIT_BRANCH"),
     }
     
-    data, _ := json.Marshal(testRun)
-    _, err := http.Post(r.URL+"/api/v1/test-runs", "application/json", bytes.NewBuffer(data))
+    data, err := json.Marshal(testRun)
+    if err != nil {
+        return err
+    }
+    
+    _, err = http.Post(r.URL+"/api/v1/test-runs", "application/json", bytes.NewBuffer(data))
     return err
 }
 ```
