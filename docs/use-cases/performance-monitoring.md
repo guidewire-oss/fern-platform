@@ -202,6 +202,12 @@ Set up alerts for performance regression:
     CURRENT=$(curl -s $FERN_URL/api/v1/projects/$PROJECT_ID/performance | jq '.averageDuration')
     BASELINE=$(curl -s $FERN_URL/api/v1/projects/$PROJECT_ID/performance?days=7 | jq '.averageDuration')
     
+    # Check for division by zero
+    if [ "$BASELINE" -eq 0 ]; then
+      echo "::warning::No baseline performance data available"
+      exit 0
+    fi
+    
     INCREASE=$(( ($CURRENT - $BASELINE) * 100 / $BASELINE ))
     if [ $INCREASE -gt 20 ]; then
       echo "::error::Test performance degraded by ${INCREASE}%"
