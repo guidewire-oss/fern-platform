@@ -118,62 +118,62 @@ func TestProjectService_DeleteProject(t *testing.T) {
 		mockRepo := new(MockProjectRepository)
 		mockPermRepo := new(MockProjectPermissionRepository)
 		service := application.NewProjectService(mockRepo, mockPermRepo)
-		
+
 		projectID := domain.ProjectID("test-project-123")
 		project, _ := domain.NewProject(projectID, "Test Project", "test-team")
 		project.SetID(1)
-		
+
 		// Set up expectations
 		mockRepo.On("FindByProjectID", ctx, projectID).Return(project, nil)
 		mockRepo.On("Delete", ctx, uint(1)).Return(nil)
-		
+
 		// Act
 		err := service.DeleteProject(ctx, projectID)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		mockRepo.AssertExpectations(t)
 	})
-	
+
 	t.Run("should return error when project not found", func(t *testing.T) {
 		// Arrange
 		ctx := context.Background()
 		mockRepo := new(MockProjectRepository)
 		mockPermRepo := new(MockProjectPermissionRepository)
 		service := application.NewProjectService(mockRepo, mockPermRepo)
-		
+
 		projectID := domain.ProjectID("non-existent-project")
-		
+
 		// Set up expectations
 		mockRepo.On("FindByProjectID", ctx, projectID).Return(nil, assert.AnError)
-		
+
 		// Act
 		err := service.DeleteProject(ctx, projectID)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get project")
 		mockRepo.AssertExpectations(t)
 	})
-	
+
 	t.Run("should return error when delete fails", func(t *testing.T) {
 		// Arrange
 		ctx := context.Background()
 		mockRepo := new(MockProjectRepository)
 		mockPermRepo := new(MockProjectPermissionRepository)
 		service := application.NewProjectService(mockRepo, mockPermRepo)
-		
+
 		projectID := domain.ProjectID("test-project-123")
 		project, _ := domain.NewProject(projectID, "Test Project", "test-team")
 		project.SetID(1)
-		
+
 		// Set up expectations
 		mockRepo.On("FindByProjectID", ctx, projectID).Return(project, nil)
 		mockRepo.On("Delete", ctx, uint(1)).Return(assert.AnError)
-		
+
 		// Act
 		err := service.DeleteProject(ctx, projectID)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to delete project")
@@ -188,20 +188,20 @@ func TestProjectService_CreateProject(t *testing.T) {
 		mockRepo := new(MockProjectRepository)
 		mockPermRepo := new(MockProjectPermissionRepository)
 		service := application.NewProjectService(mockRepo, mockPermRepo)
-		
+
 		projectID := domain.ProjectID("test-project-123")
 		name := "Test Project"
 		team := domain.Team("fern")
 		creatorUserID := "user123"
-		
+
 		// Set up expectations
 		mockRepo.On("ExistsByProjectID", ctx, projectID).Return(false, nil)
 		mockRepo.On("Save", ctx, mock.AnythingOfType("*domain.Project")).Return(nil)
 		mockPermRepo.On("Save", ctx, mock.AnythingOfType("*domain.ProjectPermission")).Return(nil)
-		
+
 		// Act
 		project, err := service.CreateProject(ctx, projectID, name, team, creatorUserID)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		assert.NotNil(t, project)
@@ -210,25 +210,25 @@ func TestProjectService_CreateProject(t *testing.T) {
 		mockRepo.AssertExpectations(t)
 		mockPermRepo.AssertExpectations(t)
 	})
-	
+
 	t.Run("should return error when project already exists", func(t *testing.T) {
 		// Arrange
 		ctx := context.Background()
 		mockRepo := new(MockProjectRepository)
 		mockPermRepo := new(MockProjectPermissionRepository)
 		service := application.NewProjectService(mockRepo, mockPermRepo)
-		
+
 		projectID := domain.ProjectID("test-project-123")
 		name := "Test Project"
 		team := domain.Team("fern")
 		creatorUserID := "user123"
-		
+
 		// Set up expectations
 		mockRepo.On("ExistsByProjectID", ctx, projectID).Return(true, nil)
-		
+
 		// Act
 		project, err := service.CreateProject(ctx, projectID, name, team, creatorUserID)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, project)
