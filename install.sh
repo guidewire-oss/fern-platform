@@ -95,12 +95,39 @@ download_and_verify() {
     log_info "Downloading checksums..."
     curl -sSfL -o "checksums.txt" "https://github.com/${GITHUB_REPO}/releases/download/${version}/checksums.txt"
     
+    # Try to verify checksums signature with cosign if available
+    if command -v cosign >/dev/null 2>&1; then
+        log_info "Downloading checksum signature for verification..."
+        if curl -sSfL -o "checksums.txt.sig" "https://github.com/${GITHUB_REPO}/releases/download/${version}/checksums.txt.sig" 2>/dev/null && \
+           curl -sSfL -o "checksums.txt.pem" "https://github.com/${GITHUB_REPO}/releases/download/${version}/checksums.txt.pem" 2>/dev/null; then
+            log_info "Verifying checksum signature with cosign..."
+            if cosign verify-blob \
+                --certificate checksums.txt.pem \
+                --signature checksums.txt.sig \
+                --certificate-identity-regexp "https://github.com/${GITHUB_REPO}/.github/workflows/.*.yml@refs/tags/${version}" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                checksums.txt >/dev/null 2>&1; then
+                log_info "Checksum signature verified successfully"
+            else
+                log_error "Checksum signature verification failed!"
+                cd "$original_dir"
+                rm -rf "$temp_dir"
+                exit 1
+            fi
+        else
+            log_warning "Checksum signature files not found, proceeding without signature verification"
+        fi
+    else
+        log_warning "cosign not found, skipping checksum signature verification"
+        log_warning "For enhanced security, install cosign: https://docs.sigstore.dev/cosign/installation"
+    fi
+    
     # Verify checksum
-    log_info "Verifying checksum..."
+    log_info "Verifying file checksum..."
     if command -v sha256sum >/dev/null 2>&1; then
-        grep "${archive_name}" checksums.txt | sha256sum -c -
+        grep -F "${archive_name}" checksums.txt | sha256sum -c -
     elif command -v shasum >/dev/null 2>&1; then
-        grep "${archive_name}" checksums.txt | shasum -a 256 -c -
+        grep -F "${archive_name}" checksums.txt | shasum -a 256 -c -
     else
         log_warning "Cannot verify checksum: sha256sum or shasum not found"
     fi

@@ -134,8 +134,11 @@ curl http://fern-platform.local:8080/api/v1/test-runs?projectId=YOUR_PROJECT_ID
 
 **3. Check Database**
 ```bash
+# Get PostgreSQL pod name
+POSTGRES_POD=$(kubectl get pods -n fern-platform -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+
 # Connect to PostgreSQL
-kubectl exec -it -n fern-platform deployment/postgres -- psql -U postgres fern_platform
+kubectl exec -it -n fern-platform $POSTGRES_POD -- psql -U postgres fern_platform
 
 # Check data
 SELECT COUNT(*) FROM test_runs;
@@ -163,8 +166,11 @@ kubectl edit deployment fern-platform -n fern-platform
 
 **2. Database Performance**
 ```bash
+# Get PostgreSQL pod name
+POSTGRES_POD=$(kubectl get pods -n fern-platform -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+
 # Check slow queries
-kubectl exec -it -n fern-platform deployment/postgres -- psql -U postgres fern_platform -c "SELECT * FROM pg_stat_statements ORDER BY total_time DESC LIMIT 10;"
+kubectl exec -it -n fern-platform $POSTGRES_POD -- psql -U postgres fern_platform -c "SELECT * FROM pg_stat_statements ORDER BY total_time DESC LIMIT 10;"
 
 # Add indexes if needed (check migrations/)
 ```
@@ -174,8 +180,11 @@ kubectl exec -it -n fern-platform deployment/postgres -- psql -U postgres fern_p
 # Check Redis
 kubectl logs -n fern-platform deployment/redis
 
+# Get Redis pod name
+REDIS_POD=$(kubectl get pods -n fern-platform -l app=redis -o jsonpath='{.items[0].metadata.name}')
+
 # Clear cache if corrupted
-kubectl exec -it -n fern-platform deployment/redis -- redis-cli FLUSHALL
+kubectl exec -it -n fern-platform $REDIS_POD -- redis-cli FLUSHALL
 ```
 
 ### 🔴 API Errors
@@ -265,8 +274,11 @@ curl http://fern-platform.local:8080/health/detailed
 # Scale down application
 kubectl scale deployment fern-platform -n fern-platform --replicas=0
 
+# Get PostgreSQL pod name
+POSTGRES_POD=$(kubectl get pods -n fern-platform -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+
 # Connect to PostgreSQL
-kubectl exec -it -n fern-platform deployment/postgres -- psql -U postgres
+kubectl exec -it -n fern-platform $POSTGRES_POD -- psql -U postgres
 
 # Drop and recreate database
 DROP DATABASE fern_platform;

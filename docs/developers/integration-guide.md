@@ -179,7 +179,7 @@ version: 2.1
 jobs:
   test:
     docker:
-      - image: circleci/node:14
+      - image: circleci/node:18
     steps:
       - checkout
       - run:
@@ -209,6 +209,10 @@ jobs:
 Create a custom reporter (`fern-reporter.js`):
 
 ```javascript
+// For Node < 18, you may need to install node-fetch:
+// npm install --save-dev node-fetch
+const https = require('https');
+
 class FernReporter {
   constructor(globalConfig, options) {
     this.fernUrl = process.env.FERN_URL;
@@ -228,10 +232,31 @@ class FernReporter {
       suites: this.formatSuites(results.testResults)
     };
 
-    await fetch(`${this.fernUrl}/api/v1/test-runs`, {
+    // Use native https module for compatibility
+    const data = JSON.stringify(testRun);
+    const url = new URL(`${this.fernUrl}/api/v1/test-runs`);
+    
+    const options = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testRun)
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': data.length
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => resolve(body));
+      });
+      
+      req.on('error', reject);
+      req.write(data);
+      req.end();
     });
   }
 
@@ -346,12 +371,29 @@ type TestResult struct {
 }
 
 func (r *FernReporter) Report() error {
+    // Calculate actual test counts
+    passedCount := 0
+    failedCount := 0
+    for _, result := range r.Results {
+        if result.Status == "passed" {
+            passedCount++
+        } else if result.Status == "failed" {
+            failedCount++
+        }
+    }
+    
+    // Determine overall status based on failures
+    status := "passed"
+    if failedCount > 0 {
+        status = "failed"
+    }
+    
     testRun := map[string]interface{}{
         "projectId":    r.ProjectID,
-        "status":       "passed", // Update based on results
+        "status":       status,
         "duration":     time.Since(r.StartTime).Milliseconds(),
-        "passedTests":  len(r.Results),
-        "failedTests":  0,
+        "passedTests":  passedCount,
+        "failedTests":  failedCount,
         "gitCommit":    os.Getenv("GIT_COMMIT"),
         "gitBranch":    os.Getenv("GIT_BRANCH"),
     }

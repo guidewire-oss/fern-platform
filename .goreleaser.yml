@@ -76,8 +76,11 @@ sboms:
   - artifacts: archive
     documents:
       - "${artifact}.spdx.sbom.json"
+    args: ["${artifact}", "--output", "spdx-json=${document}"]
+  - artifacts: archive
+    documents:
       - "${artifact}.cyclonedx.sbom.json"
-    args: ["$artifact", "--output", "spdx-json=${document}", "--output", "cyclonedx-json=${document}"]
+    args: ["${artifact}", "--output", "cyclonedx-json=${document}"]
 
 signs:
   - cmd: cosign
