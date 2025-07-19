@@ -2,6 +2,11 @@
 
 Fern Platform provides both REST and GraphQL APIs for integration with CI/CD systems, custom tools, and third-party applications.
 
+> 📌 **Recommended Approach**: Use our [official client libraries](./integration-guide.md) for your test framework instead of calling the API directly. This documentation is for:
+> - Developers building client libraries for new test frameworks/languages
+> - Teams needing custom integrations beyond standard test reporting
+> - Contributors wanting to understand the API for creating new clients
+
 ## Overview
 
 The platform offers two API styles:
@@ -10,6 +15,15 @@ The platform offers two API styles:
 2. **GraphQL API** - Modern query language for efficient data fetching
 
 Both APIs use the same authentication mechanism (OAuth 2.0) and are designed to work together.
+
+### Official Client Libraries
+
+Before using the raw API, check if we have a client for your framework:
+
+- **JavaScript/Jest**: [@guidewire/fern-jest-client](https://github.com/guidewire-oss/fern-jest-client)
+- **Java/JUnit**: [fern-junit-client](https://github.com/guidewire-oss/fern-junit-client)
+- **Go/Ginkgo**: [fern-ginkgo-client](https://github.com/guidewire-oss/fern-ginkgo-client)
+- **Gradle Plugin**: [fern-junit-gradle-plugin](https://github.com/guidewire-oss/fern-junit-gradle-plugin)
 
 ## Authentication
 
@@ -103,7 +117,7 @@ Returns a single project by ID.
 POST /api/v1/projects
 ```
 
-Creates a new project.
+Creates a new project. **Requires manager or admin privileges.**
 
 **Request Body:**
 ```json

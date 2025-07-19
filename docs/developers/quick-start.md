@@ -230,54 +230,46 @@ curl http://fern-platform.local:8080/health
 - **Test Runs**: Detailed test execution data
 - **Admin Panel** (admin users only): User and project management
 
-### 2. Send Your First Test Data (10 minutes)
+### 2. Create a Project (5 minutes)
+Have your team manager:
+1. Log in with manager privileges
+2. Navigate to **Projects** → **Create New Project**
+3. Share the project ID with your team
+
+### 3. Install a Client Library (5 minutes)
+Choose the client for your test framework:
+
+#### JavaScript/Jest
 ```bash
-# Example: Submit a test run via API
-curl -X POST http://fern-platform.local:8080/api/v1/test-runs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectId": "my-project",
-    "status": "passed",
-    "duration": 1234,
-    "gitCommit": "abc123",
-    "gitBranch": "main"
-  }'
-
-# See it appear in the dashboard!
+npm install --save-dev @guidewire/fern-jest-client
 ```
 
-### 3. Integrate with Your CI/CD (20 minutes)
-Choose your integration method:
-
-#### GitHub Actions
-```yaml
-- name: Report test results
-  uses: guidewire-oss/fern-ginkgo-action@v1
-  with:
-    fern-url: http://fern-platform.local:8080
-    project-id: my-project
+#### Java/JUnit
+```xml
+<dependency>
+    <groupId>com.guidewire.fern</groupId>
+    <artifactId>fern-junit-client</artifactId>
+    <version>1.0.0</version>
+</dependency>
 ```
 
-#### Jenkins Pipeline
-```groovy
-post {
-  always {
-    sh 'fern-junit-client submit results.xml --url=http://fern-platform.local:8080'
-  }
-}
-```
-
-#### Generic cURL
+#### Go/Ginkgo
 ```bash
-# Submit JUnit XML results
-curl -X POST http://fern-platform.local:8080/api/v1/test-runs/junit \
-  -F "file=@test-results.xml" \
-  -F "projectId=my-project"
+go get github.com/guidewire-oss/fern-ginkgo-client
 ```
 
-**[📖 Complete integration guide →](../developers/api-reference.md)**
+### 4. Configure and Run Tests (10 minutes)
+Set your environment variables:
+```bash
+export FERN_URL=http://fern-platform.local:8080
+export FERN_PROJECT_ID=your-project-id
+```
 
-### 4. Prepare for AI Features (Coming Soon)
+Run your tests as usual - results will automatically appear in Fern Platform!
+
+**[📖 Complete integration guide →](./integration-guide.md)**
+
+### 5. Prepare for AI Features (Coming Soon)
 The platform is designed with AI integration in mind, but these features are not yet implemented:
 
 **Planned AI capabilities:**

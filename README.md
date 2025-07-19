@@ -57,22 +57,30 @@ Access the platform at `http://fern-platform.local:8080`
 
 ### Basic Usage
 
-Submit test results from your CI/CD pipeline:
+1. **Manager creates a project** in the Fern Platform UI
+2. **Developers install a client library** for their test framework:
+
+#### Official Client Libraries
+
+- **Go/Ginkgo**: [fern-ginkgo-client](https://github.com/guidewire-oss/fern-ginkgo-client)
+- **Java/JUnit**: [fern-junit-client](https://github.com/guidewire-oss/fern-junit-client) and [Gradle plugin](https://github.com/guidewire-oss/fern-junit-gradle-plugin)
+- **JavaScript/Jest**: [fern-jest-client](https://github.com/guidewire-oss/fern-jest-client)
+
+#### Build Your Own Client
+
+Missing your framework? Create your own client library! See our [client development guide](docs/developers/integration-guide.md#building-your-own-client-library) to:
+- Build clients for Python, Ruby, PHP, .NET, or any other language
+- Integrate with pytest, RSpec, PHPUnit, NUnit, or any test framework
+- Contribute back to the community
+
+3. **Configure with your project ID**:
 
 ```bash
-# Report a test run
-curl -X POST http://fern-platform.local:8080/api/v1/test-runs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectId": "my-project",
-    "status": "passed",
-    "duration": 45000,
-    "passedTests": 150,
-    "failedTests": 2,
-    "gitCommit": "abc123",
-    "gitBranch": "main"
-  }'
+export FERN_PROJECT_ID=my-project
+export FERN_URL=http://fern-platform.local:8080
 ```
+
+Test results are automatically sent to Fern Platform!
 
 View results in the dashboard or query via GraphQL:
 
@@ -118,24 +126,42 @@ See our [use case guides](docs/use-cases/) for detailed examples.
 
 ## Integration Examples
 
-### GitHub Actions
-
-```yaml
-- name: Run tests and report to Fern
-  run: |
-    npm test -- --json > results.json
-    curl -X POST ${{ secrets.FERN_URL }}/api/v1/test-runs \
-      -H "Content-Type: application/json" \
-      -d @results.json
-```
-
-### Jest Reporter
+### JavaScript/Jest
 
 ```javascript
 // jest.config.js
 module.exports = {
-  reporters: ['default', '<rootDir>/fern-reporter.js']
+  reporters: [
+    'default',
+    ['@guidewire/fern-jest-client', {
+      url: process.env.FERN_URL,
+      projectId: process.env.FERN_PROJECT_ID
+    }]
+  ]
 };
+```
+
+### Java/JUnit with Gradle
+
+```gradle
+plugins {
+  id 'com.guidewire.fern' version '1.0.0'
+}
+
+fern {
+  url = System.getenv('FERN_URL')
+  projectId = System.getenv('FERN_PROJECT_ID')
+}
+```
+
+### Go/Ginkgo
+
+```go
+import "github.com/guidewire-oss/fern-ginkgo-client/reporter"
+
+var _ = ginkgo.BeforeSuite(func() {
+  ginkgo.RunSpecs(t, "My Suite", reporter.NewFernReporter())
+})
 ```
 
 See [integration guide](docs/developers/integration-guide.md) for more examples.
@@ -201,10 +227,15 @@ Fern Platform is under active development with core features stable and used in 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 Areas where we need help:
+- **Client libraries** for new test frameworks (pytest, RSpec, PHPUnit, etc.)
 - Test framework integrations
 - UI/UX improvements
 - Documentation
 - Bug fixes
+
+### Creating Client Libraries
+
+Building a client for your favorite test framework? Check our [client development guide](docs/developers/integration-guide.md#building-your-own-client-library) and join our growing ecosystem!
 
 ## Community
 

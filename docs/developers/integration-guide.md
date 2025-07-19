@@ -1,77 +1,128 @@
 # CI/CD Integration Guide
 
-**Connect your continuous integration pipeline to Fern Platform for automatic test reporting**
+**Connect your test framework to Fern Platform for automatic test reporting**
 
-> 📌 **Integration Method**: Fern Platform uses a REST API for all integrations. Native CI/CD plugins and webhooks are planned for future releases.
+> 📌 **Recommended Method**: Use our official client libraries for seamless integration with your test framework.
 
 ## Overview
 
-Fern Platform integrates with any CI/CD system that can make HTTP requests. Your test runner sends results to Fern's REST API after each test run.
+Fern Platform provides client libraries for major test frameworks that automatically report test results. For custom frameworks or advanced use cases, you can also use our REST API directly.
 
 ## Integration Architecture
 
 ```
-┌─────────────┐     HTTP POST      ┌──────────────┐
-│   CI/CD     │ -----------------> │     Fern     │
-│  Pipeline   │   Test Results     │   Platform   │
-└─────────────┘                    └──────────────┘
-     ↑                                    ↓
-     │                              ┌──────────────┐
-     └── Test Framework             │  Dashboard   │
-         (Jest, pytest, etc.)       │ & Analytics  │
-                                    └──────────────┘
+┌─────────────┐     Client Library     ┌──────────────┐
+│   Test      │ -------------------> │     Fern     │
+│  Framework  │   Automatic Upload   │   Platform   │
+└─────────────┘                      └──────────────┘
+     ↑                                      ↓
+     │                                ┌──────────────┐
+     └── Fern Client Libraries        │  Dashboard   │
+         (Jest, JUnit, Ginkgo)        │ & Analytics  │
+                                      └──────────────┘
 ```
+
+## Official Client Libraries
+
+### Available Now
+
+- **Go/Ginkgo**: [fern-ginkgo-client](https://github.com/guidewire-oss/fern-ginkgo-client)
+- **Java/JUnit**: [fern-junit-client](https://github.com/guidewire-oss/fern-junit-client)
+- **Gradle Plugin**: [fern-junit-gradle-plugin](https://github.com/guidewire-oss/fern-junit-gradle-plugin)
+- **JavaScript/Jest**: [fern-jest-client](https://github.com/guidewire-oss/fern-jest-client)
+
+### Coming Soon
+
+- Python/pytest
+- Ruby/RSpec
+- .NET/NUnit
+
+For other frameworks, you can use the REST API directly or create your own client library.
 
 ## Quick Start
 
-### 1. Get Your Project ID
+### Prerequisites
 
-First, register your project in Fern Platform:
+**Your team manager must first create a project:**
+1. Log in to Fern Platform with manager privileges
+2. Navigate to **Projects** → **Create New Project**
+3. Share the project ID with your development team
 
+### 1. Install a Client Library
+
+Choose the appropriate client for your test framework:
+
+#### JavaScript/Jest
 ```bash
-# Via API
-curl -X POST http://fern-platform.local:8080/api/v1/projects \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "name": "my-project",
-    "description": "My awesome project"
-  }'
+npm install --save-dev @guidewire/fern-jest-client
+```
 
-# Response
-{
-  "id": "proj_abc123",
-  "name": "my-project"
-}
+#### Java/JUnit
+```xml
+<dependency>
+    <groupId>com.guidewire.fern</groupId>
+    <artifactId>fern-junit-client</artifactId>
+    <version>1.0.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+#### Go/Ginkgo
+```bash
+go get github.com/guidewire-oss/fern-ginkgo-client
 ```
 
 ### 2. Set Environment Variables
 
 ```bash
 export FERN_URL=http://fern-platform.local:8080
-export FERN_PROJECT_ID=proj_abc123
-export FERN_API_TOKEN=your-api-token  # If authentication is enabled
+export FERN_PROJECT_ID=proj_abc123  # Get this from your manager
 ```
 
-### 3. Send Test Results
+### 3. Configure Your Test Framework
 
-After your tests run, send the results:
+#### Jest Configuration
 
-```bash
-# Basic test run submission
-curl -X POST $FERN_URL/api/v1/test-runs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectId": "'$FERN_PROJECT_ID'",
-    "status": "passed",
-    "duration": 125000,
-    "passedTests": 95,
-    "failedTests": 0,
-    "skippedTests": 5,
-    "gitCommit": "'$GIT_COMMIT'",
-    "gitBranch": "'$GIT_BRANCH'"
-  }'
+```javascript
+// jest.config.js
+module.exports = {
+  reporters: [
+    'default',
+    ['@guidewire/fern-jest-client', {
+      url: process.env.FERN_URL,
+      projectId: process.env.FERN_PROJECT_ID
+    }]
+  ]
+};
 ```
+
+#### JUnit Configuration
+
+```java
+// Add to your test runner
+@RunWith(FernJUnitRunner.class)
+@FernConfig(
+    url = "${FERN_URL}",
+    projectId = "${FERN_PROJECT_ID}"
+)
+public class MyTestSuite {
+    // Your tests
+}
+```
+
+#### Ginkgo Configuration
+
+```go
+import "github.com/guidewire-oss/fern-ginkgo-client/reporter"
+
+func TestMySuite(t *testing.T) {
+    RegisterFailHandler(Fail)
+    RunSpecsWithDefaultAndCustomReporters(t, "My Suite",
+        []Reporter{reporter.NewFernReporter()})
+}
+```
+
+Your test results will now be automatically sent to Fern Platform!
 
 ## Integration by CI/CD Platform
 
@@ -202,211 +253,258 @@ jobs:
             exit ${TEST_EXIT_CODE:-0}
 ```
 
-## Test Framework Integration
+## Using Client Libraries
+
+We strongly recommend using our official client libraries for seamless integration:
 
 ### Jest (JavaScript)
 
-Create a custom reporter (`fern-reporter.js`):
-
-```javascript
-// For Node < 18, you may need to install node-fetch:
-// npm install --save-dev node-fetch
-const https = require('https');
-
-class FernReporter {
-  constructor(globalConfig, options) {
-    this.fernUrl = process.env.FERN_URL;
-    this.projectId = process.env.FERN_PROJECT_ID;
-  }
-
-  async onRunComplete(contexts, results) {
-    const testRun = {
-      projectId: this.projectId,
-      status: results.numFailedTests === 0 ? 'passed' : 'failed',
-      duration: Date.now() - results.startTime,
-      passedTests: results.numPassedTests,
-      failedTests: results.numFailedTests,
-      skippedTests: results.numPendingTests,
-      gitCommit: process.env.GIT_COMMIT || 'unknown',
-      gitBranch: process.env.GIT_BRANCH || 'unknown',
-      suites: this.formatSuites(results.testResults)
-    };
-
-    // Use native https module for compatibility
-    const data = JSON.stringify(testRun);
-    const url = new URL(`${this.fernUrl}/api/v1/test-runs`);
-    
-    const options = {
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': data.length
-      }
-    };
-
-    return new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let body = '';
-        res.on('data', (chunk) => body += chunk);
-        res.on('end', () => resolve(body));
-      });
-      
-      req.on('error', reject);
-      req.write(data);
-      req.end();
-    });
-  }
-
-  formatSuites(testResults) {
-    return testResults.map(suite => ({
-      name: suite.testFilePath,
-      duration: suite.perfStats.runtime,
-      specs: suite.testResults.map(test => ({
-        name: test.title,
-        status: test.status,
-        duration: test.duration,
-        error: test.failureMessages?.[0],
-        stackTrace: test.failureDetails?.[0]?.stack
-      }))
-    }));
-  }
-}
-
-module.exports = FernReporter;
+Install the client:
+```bash
+npm install --save-dev @guidewire/fern-jest-client
 ```
 
-Use in `jest.config.js`:
+Configure in `jest.config.js`:
 ```javascript
 module.exports = {
-  reporters: ['default', '<rootDir>/fern-reporter.js']
+  reporters: [
+    'default',
+    ['@guidewire/fern-jest-client', {
+      url: process.env.FERN_URL,
+      projectId: process.env.FERN_PROJECT_ID
+    }]
+  ]
 };
 ```
 
-### pytest (Python)
+### JUnit (Java)
 
-Create a pytest plugin (`pytest_fern.py`):
-
-```python
-import pytest
-import requests
-import os
-import time
-from datetime import datetime
-
-class FernPlugin:
-    def __init__(self):
-        self.fern_url = os.environ.get('FERN_URL')
-        self.project_id = os.environ.get('FERN_PROJECT_ID')
-        self.start_time = None
-        self.test_results = []
-
-    def pytest_sessionstart(self):
-        self.start_time = time.time()
-
-    def pytest_runtest_logreport(self, report):
-        if report.when == 'call':
-            self.test_results.append({
-                'name': report.nodeid,
-                'status': 'passed' if report.passed else 'failed',
-                'duration': report.duration * 1000,  # Convert to ms
-                'error': str(report.longrepr) if report.failed else None
-            })
-
-    def pytest_sessionfinish(self, exitstatus):
-        duration = (time.time() - self.start_time) * 1000
-        
-        test_run = {
-            'projectId': self.project_id,
-            'status': 'passed' if exitstatus == 0 else 'failed',
-            'duration': duration,
-            'passedTests': len([t for t in self.test_results if t['status'] == 'passed']),
-            'failedTests': len([t for t in self.test_results if t['status'] == 'failed']),
-            'gitCommit': os.environ.get('GIT_COMMIT', 'unknown'),
-            'gitBranch': os.environ.get('GIT_BRANCH', 'unknown'),
-            'suites': [{
-                'name': 'pytest',
-                'duration': duration,
-                'specs': self.test_results
-            }]
-        }
-        
-        requests.post(
-            f"{self.fern_url}/api/v1/test-runs",
-            json=test_run
-        )
-
-def pytest_configure(config):
-    config.pluginmanager.register(FernPlugin(), 'fern')
+Add to your `pom.xml`:
+```xml
+<dependency>
+    <groupId>com.guidewire.fern</groupId>
+    <artifactId>fern-junit-client</artifactId>
+    <version>1.0.0</version>
+    <scope>test</scope>
+</dependency>
 ```
 
-### Go testing
+Or for Gradle projects, use our plugin:
+```gradle
+plugins {
+  id 'com.guidewire.fern' version '1.0.0'
+}
 
+fern {
+  url = System.getenv('FERN_URL')
+  projectId = System.getenv('FERN_PROJECT_ID')
+}
+```
+
+### Ginkgo (Go)
+
+Install the client:
+```bash
+go get github.com/guidewire-oss/fern-ginkgo-client
+```
+
+Use in your test suite:
 ```go
-package main
+import "github.com/guidewire-oss/fern-ginkgo-client/reporter"
 
-import (
-    "bytes"
-    "encoding/json"
-    "net/http"
-    "os"
-    "testing"
-    "time"
-)
-
-type FernReporter struct {
-    URL       string
-    ProjectID string
-    StartTime time.Time
-    Results   []TestResult
-}
-
-type TestResult struct {
-    Name     string `json:"name"`
-    Status   string `json:"status"`
-    Duration int64  `json:"duration"`
-    Error    string `json:"error,omitempty"`
-}
-
-func (r *FernReporter) Report() error {
-    // Calculate actual test counts
-    passedCount := 0
-    failedCount := 0
-    for _, result := range r.Results {
-        if result.Status == "passed" {
-            passedCount++
-        } else if result.Status == "failed" {
-            failedCount++
-        }
-    }
-    
-    // Determine overall status based on failures
-    status := "passed"
-    if failedCount > 0 {
-        status = "failed"
-    }
-    
-    testRun := map[string]interface{}{
-        "projectId":    r.ProjectID,
-        "status":       status,
-        "duration":     time.Since(r.StartTime).Milliseconds(),
-        "passedTests":  passedCount,
-        "failedTests":  failedCount,
-        "gitCommit":    os.Getenv("GIT_COMMIT"),
-        "gitBranch":    os.Getenv("GIT_BRANCH"),
-    }
-    
-    data, err := json.Marshal(testRun)
-    if err != nil {
-        return err
-    }
-    
-    _, err = http.Post(r.URL+"/api/v1/test-runs", "application/json", bytes.NewBuffer(data))
-    return err
+func TestMySuite(t *testing.T) {
+    RegisterFailHandler(Fail)
+    RunSpecsWithDefaultAndCustomReporters(t, "My Suite",
+        []Reporter{reporter.NewFernReporter()})
 }
 ```
+
+### Other Frameworks
+
+For frameworks without official clients, you can:
+1. Create your own client library using our REST/GraphQL APIs
+2. Contribute your client library to the community
+3. Request official support by opening an issue
+
+## Building Your Own Client Library
+
+Want to create a client for a new test framework or language? Here's how:
+
+### Client Library Requirements
+
+A good Fern client library should:
+
+1. **Auto-detect Configuration** - Read from environment variables
+2. **Handle Test Lifecycle** - Hook into framework's test events
+3. **Batch Results** - Collect and send results efficiently
+4. **Error Handling** - Gracefully handle network/API failures
+5. **Zero Config** - Work with minimal setup
+
+### Implementation Guide
+
+#### 1. Configuration
+```javascript
+// Example: Reading configuration
+const config = {
+  url: process.env.FERN_URL || 'http://localhost:8080',
+  projectId: process.env.FERN_PROJECT_ID,
+  apiToken: process.env.FERN_API_TOKEN, // Optional
+  batchSize: 100, // Send results in batches
+  enabled: process.env.FERN_ENABLED !== 'false'
+};
+```
+
+#### 2. Test Result Collection
+```typescript
+interface TestResult {
+  name: string;
+  status: 'passed' | 'failed' | 'skipped';
+  duration: number; // milliseconds
+  error?: string;
+  stackTrace?: string;
+}
+
+interface TestSuite {
+  name: string;
+  specs: TestResult[];
+  duration: number;
+}
+```
+
+#### 3. API Integration
+Use either REST or GraphQL:
+
+**REST Example:**
+```python
+def send_results(test_run):
+    response = requests.post(
+        f"{config['url']}/api/v1/test-runs",
+        json={
+            'projectId': config['projectId'],
+            'status': test_run['status'],
+            'duration': test_run['duration'],
+            'passedTests': test_run['passed'],
+            'failedTests': test_run['failed'],
+            'suites': test_run['suites']
+        },
+        headers={'Authorization': f"Bearer {config['token']}"}
+    )
+    return response.json()
+```
+
+**GraphQL Example:**
+```javascript
+const mutation = `
+  mutation CreateTestRun($input: TestRunInput!) {
+    createTestRun(input: $input) {
+      id
+      status
+      createdAt
+    }
+  }
+`;
+
+const result = await graphqlClient.request(mutation, {
+  input: testRunData
+});
+```
+
+#### 4. Framework Integration Examples
+
+**Python/pytest:**
+```python
+# Hook into pytest's plugin system
+def pytest_runtest_makereport(item, call):
+    # Collect test results
+    
+def pytest_sessionfinish(session, exitstatus):
+    # Send all results to Fern
+```
+
+**Ruby/RSpec:**
+```ruby
+RSpec.configure do |config|
+  config.reporter.register_listener(
+    FernReporter.new,
+    :example_passed,
+    :example_failed,
+    :example_pending,
+    :stop
+  )
+end
+```
+
+**PHP/PHPUnit:**
+```php
+class FernTestListener implements TestListener {
+    public function endTest(Test $test, float $time): void {
+        // Collect result
+    }
+    
+    public function endTestSuite(TestSuite $suite): void {
+        // Send to Fern
+    }
+}
+```
+
+### Reference Implementations
+
+Study our existing clients for best practices:
+
+- **[Jest Client](https://github.com/guidewire-oss/fern-jest-client)** - Good example of hooking into reporter system
+- **[JUnit Client](https://github.com/guidewire-oss/fern-junit-client)** - Shows test listener pattern
+- **[Ginkgo Client](https://github.com/guidewire-oss/fern-ginkgo-client)** - Demonstrates Go's testing integration
+
+### Publishing Your Client
+
+1. **Naming Convention**: Use `fern-{framework}-client` or `{language}-fern-client`
+2. **Documentation**: Include clear setup instructions
+3. **Examples**: Provide working examples
+4. **Tests**: Test against multiple framework versions
+5. **Package Registry**: Publish to appropriate registry (npm, PyPI, RubyGems, etc.)
+
+### Contributing Back
+
+We welcome community contributions! To get your client listed as official:
+
+1. Open an issue describing your client
+2. Ensure it follows our patterns
+3. Add comprehensive tests
+4. Submit a PR to add it to our documentation
+
+## Custom Integration (REST API)
+
+If you need to create a custom integration, use our REST API directly:
+
+### Basic Test Run Submission
+
+```bash
+curl -X POST $FERN_URL/api/v1/test-runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "'$FERN_PROJECT_ID'",
+    "status": "passed",
+    "duration": 125000,
+    "passedTests": 95,
+    "failedTests": 0,
+    "skippedTests": 5,
+    "gitCommit": "'$GIT_COMMIT'",
+    "gitBranch": "'$GIT_BRANCH'"
+  }'
+```
+
+### Creating Your Own Client
+
+When building a custom client:
+1. Collect test results from your framework
+2. Transform to Fern's format
+3. Send via HTTP POST to `/api/v1/test-runs`
+4. Handle authentication if required
+
+See our existing clients for reference implementations:
+- [Jest Client Source](https://github.com/guidewire-oss/fern-jest-client)
+- [JUnit Client Source](https://github.com/guidewire-oss/fern-junit-client)
+- [Ginkgo Client Source](https://github.com/guidewire-oss/fern-ginkgo-client)
 
 ## Sending Detailed Test Data
 
