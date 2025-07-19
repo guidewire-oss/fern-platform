@@ -4,9 +4,6 @@
 
 > ⚠️ **Development Status**: Fern Platform is under active development. Core features are stable and production-ready, but expect regular updates and API evolution. [See project status](../../README.md#️-project-status) for details.
 
-<div align="center">
-  <img src="../images/quick-start-flow.png" alt="Quick Start Flow" width="600"/>
-</div>
 
 ## ⚡ Choose Your Path
 
