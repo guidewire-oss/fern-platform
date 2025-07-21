@@ -293,23 +293,45 @@ ginkgo -v \
 Once a project is created, development teams need to configure their test clients:
 
 ```javascript
-// Jest/Vitest Configuration
-export default {
+// Jest Configuration
+module.exports = {
   reporters: [
-    ['@fern-platform/jest-reporter', {
-      apiUrl: 'https://fern-platform.company.com',
-      projectId: '<project_id>', // From project details
-      apiKey: process.env.FERN_API_KEY // Optional, for CI/CD
+    'default',
+    ['@guidewire/fern-jest-client', {
+      url: process.env.FERN_URL || 'https://fern-platform.company.com',
+      projectId: '<project_id>' // Get this from your manager
     }]
   ]
 }
 ```
 
+```java
+// JUnit Configuration
+@RunWith(FernJUnitRunner.class)
+@FernConfig(
+    url = "${FERN_URL}",
+    projectId = "<project_id>" // Get this from your manager
+)
+public class MyTestSuite {
+    // Your tests
+}
+```
+
+```go
+// Ginkgo Configuration
+import "github.com/guidewire-oss/fern-ginkgo-client/reporter"
+
+func TestSuite(t *testing.T) {
+    RegisterFailHandler(Fail)
+    RunSpecsWithDefaultAndCustomReporters(t, "My Suite",
+        []Reporter{reporter.NewFernReporter()})
+}
+```
+
 ```yaml
-# CI/CD Pipeline Configuration
-env:
-  FERN_PROJECT_ID: '<project_id>'
-  FERN_API_URL: 'https://fern-platform.company.com'
+# Environment Configuration (all frameworks)
+export FERN_PROJECT_ID='<project_id>'  # Get this from your manager
+export FERN_URL='https://fern-platform.company.com'
 ```
 
 ## Security Considerations
