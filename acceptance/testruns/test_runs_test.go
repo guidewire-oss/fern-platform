@@ -209,14 +209,21 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", Label("e2e"), func() {
 					status := cells.Nth(2)
 					duration := cells.Nth(3)
 
-					Expect(suiteName).ToNot(BeNil())
-					Expect(testResults).ToNot(BeNil())
-					Expect(status).ToNot(BeNil())
-					Expect(duration).ToNot(BeNil())
+					// Check that cells have actual text content
+					// Note: We must check TextContent(), not just that the Locator is non-nil,
+					// because Locator objects are always non-nil even for empty cells
+					suiteNameText, _ := suiteName.TextContent()
+					testResultsText, _ := testResults.TextContent()
+					statusText, _ := status.TextContent()
+					durationText, _ := duration.TextContent()
+
+					Expect(strings.TrimSpace(suiteNameText)).NotTo(BeEmpty(), "Suite name should not be empty")
+					Expect(strings.TrimSpace(testResultsText)).NotTo(BeEmpty(), "Test results should not be empty")
+					Expect(strings.TrimSpace(statusText)).NotTo(BeEmpty(), "Status should not be empty")
+					Expect(strings.TrimSpace(durationText)).NotTo(BeEmpty(), "Duration should not be empty")
 
 					// Test results should be in format: total failed passed
-					resultsText, _ := testResults.TextContent()
-					matched, _ := regexp.MatchString(`^\d+\s+\d+\s+\d+$`, strings.TrimSpace(resultsText))
+					matched, _ := regexp.MatchString(`^\d+\s+\d+\s+\d+$`, strings.TrimSpace(testResultsText))
 					Expect(matched).To(BeTrue())
 				}
 			})

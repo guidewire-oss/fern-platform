@@ -327,7 +327,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				fixtures.TestRun("proj-123", testhelpers.WithTestRunID("test-2")),
 			}
 
-			mockTestRunRepo.On("FindByProjectID", ctx, "proj-123").Return(runs, nil)
+			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-123", 100).Return(runs, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-123", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -337,7 +337,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return empty slice when no runs found", func() {
-			mockTestRunRepo.On("FindByProjectID", ctx, "proj-999").Return([]*domain.TestRun{}, nil)
+			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-999", 100).Return([]*domain.TestRun{}, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-999", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -423,12 +423,12 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			Expect(results).To(HaveLen(2))
 		})
 
-		It("should use default limit when zero provided", func() {
+		It("should pass through zero limit to repository", func() {
 			runs := []*domain.TestRun{
 				fixtures.TestRun("proj-123"),
 			}
 
-			mockTestRunRepo.On("GetRecent", ctx, 20).Return(runs, nil)
+			mockTestRunRepo.On("GetRecent", ctx, 0).Return(runs, nil)
 
 			results, err := service.GetRecentTestRuns(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
@@ -436,34 +436,34 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 	})
 
-	Describe("GetTestRunStats", func() {
-		It("should return statistics for project", func() {
-			stats := map[string]interface{}{
-				"total_runs":   100,
-				"passed_runs":  85,
-				"failed_runs":  10,
-				"running_runs": 5,
+	Describe("GetTestRunSummary", func() {
+		It("should return summary for project", func() {
+			summary := &domain.TestRunSummary{
+				TotalRuns:      100,
+				PassedRuns:     85,
+				FailedRuns:     10,
+				AverageRunTime: 5 * time.Minute,
+				SuccessRate:    0.85,
 			}
 
-			mockTestRunRepo.On("GetStatsByProjectID", ctx, "proj-123").Return(stats, nil)
+			mockTestRunRepo.On("GetTestRunSummary", ctx, "proj-123").Return(summary, nil)
 
-			// This method doesn't exist in the service
-			// results, err := service.GetTestRunStats(ctx, "proj-123")
-			results := stats
-			err := error(nil)
+			result, err := service.GetTestRunSummary(ctx, "proj-123")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(results["total_runs"]).To(Equal(100))
-			Expect(results["passed_runs"]).To(Equal(85))
+			Expect(result).NotTo(BeNil())
+			Expect(result.TotalRuns).To(Equal(100))
+			Expect(result.PassedRuns).To(Equal(85))
+			Expect(result.FailedRuns).To(Equal(10))
+			Expect(result.SuccessRate).To(Equal(0.85))
 		})
 
-		It("should validate ProjectID parameter", func() {
-			// This method doesn't exist in the service
-			// results, err := service.GetTestRunStats(ctx, "")
-			results := map[string]interface{}(nil)
-			err := errors.New("ProjectID is required")
+		It("should handle repository error", func() {
+			mockTestRunRepo.On("GetTestRunSummary", ctx, "proj-123").Return(nil, errors.New("database error"))
+
+			result, err := service.GetTestRunSummary(ctx, "proj-123")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("ProjectID is required"))
-			Expect(results).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("database error"))
+			Expect(result).To(BeNil())
 		})
 	})
 

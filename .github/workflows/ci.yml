@@ -225,7 +225,9 @@ jobs:
         context: .
         platforms: ${{ matrix.platform }}
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: |
+          ${{ steps.meta.outputs.tags }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-${{ matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64' }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha,scope=${{ matrix.platform }}
         cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
@@ -275,9 +277,12 @@ jobs:
     
     - name: Create and push manifest
       run: |
-        for tag in ${{ steps.meta.outputs.tags }}; do
+        # Parse tags from metadata output (one per line)
+        echo "${{ steps.meta.outputs.tags }}" | while IFS= read -r tag; do
+          [ -z "$tag" ] && continue
+          echo "Creating manifest for tag: $tag"
           docker buildx imagetools create \
-            --tag $tag \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-arm64
+            --tag "$tag" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-amd64" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-arm64"
         done

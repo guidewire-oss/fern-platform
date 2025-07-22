@@ -23,12 +23,17 @@ func (m *Ci) ContainerEcho(stringArg string) string {
 }
 
 // GrepDir searches for a pattern in files within a directory
+// Returns matching lines if found, or empty string if no matches (does not error)
 func (m *Ci) GrepDir(directoryArg *dagger.Directory, pattern string) (string, error) {
 	ctx := context.Background()
+	// Using grep with || true ensures we don't fail when no matches are found
+	// The pattern is passed as a positional parameter to avoid shell injection
 	return dag.Container().
 		From("alpine:3.21").
 		WithMountedDirectory("/search", directoryArg).
-		WithExec([]string{"grep", "-r", pattern, "/search"}).
+		WithExec([]string{"sh", "-c", `
+			grep -r "$1" /search || true
+		`, "sh", pattern}).
 		Stdout(ctx)
 }
 
@@ -241,13 +246,14 @@ func (m *Ci) runLint(ctx context.Context, source *dagger.Directory) (string, err
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev"}).
 		WithEnvVariable("CGO_ENABLED", "1").
+		WithEnvVariable("PATH", "/go/bin:$PATH").
 		WithExec([]string{"go", "mod", "download"}).
-		// Install golangci-lint
-		WithExec([]string{"sh", "-c", "wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.64.5"})
+		// Install golangci-lint using go install (more secure than downloading scripts)
+		WithExec([]string{"go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5"})
 	
-	// Run golangci-lint
+	// Run golangci-lint (go install puts it in $GOPATH/bin which is in PATH)
 	_, err := container.
-		WithExec([]string{"./bin/golangci-lint", "run", "--timeout", "5m"}).
+		WithExec([]string{"golangci-lint", "run", "--timeout", "5m"}).
 		Stdout(ctx)
 	
 	if err != nil {
@@ -300,8 +306,26 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		From("mcr.microsoft.com/playwright:v1.54.1-focal").
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace/acceptance").
-		// Install Go
-		WithExec([]string{"sh", "-c", "curl -LO https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && tar -C /usr/local -xzf go1.24.4.linux-amd64.tar.gz"}).
+		// Install Go with checksum verification
+		WithExec([]string{"sh", "-c", `
+			set -e
+			GO_VERSION="1.24.4"
+			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
+			GO_URL="https://go.dev/dl/${GO_TARBALL}"
+			
+			# Download Go tarball
+			curl -LO "${GO_URL}"
+			
+			# Download and verify checksum
+			curl -LO "${GO_URL}.sha256"
+			sha256sum -c "${GO_TARBALL}.sha256"
+			
+			# Extract only if checksum is valid
+			tar -C /usr/local -xzf "${GO_TARBALL}"
+			
+			# Clean up
+			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
+		`}).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
@@ -934,8 +958,26 @@ func (m *Ci) AcceptanceTestSimple(
 		WithServiceBinding("postgres", postgresService).
 		WithServiceBinding("redis", redisService).
 		WithServiceBinding("app", appContainer).
-		// Install Go
-		WithExec([]string{"sh", "-c", "curl -LO https://go.dev/dl/go1.24.4.linux-amd64.tar.gz && tar -C /usr/local -xzf go1.24.4.linux-amd64.tar.gz"}).
+		// Install Go with checksum verification
+		WithExec([]string{"sh", "-c", `
+			set -e
+			GO_VERSION="1.24.4"
+			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
+			GO_URL="https://go.dev/dl/${GO_TARBALL}"
+			
+			# Download Go tarball
+			curl -LO "${GO_URL}"
+			
+			# Download and verify checksum
+			curl -LO "${GO_URL}.sha256"
+			sha256sum -c "${GO_TARBALL}.sha256"
+			
+			# Extract only if checksum is valid
+			tar -C /usr/local -xzf "${GO_TARBALL}"
+			
+			# Clean up
+			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
+		`}).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo

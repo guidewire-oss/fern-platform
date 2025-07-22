@@ -153,8 +153,11 @@ func (h *TagHandler) getTagUsageStats(c *gin.Context) {
 func (h *TagHandler) getPopularTags(c *gin.Context) {
 	limit := 10
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
+		} else if l <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be greater than 0"})
+			return
 		}
 	}
 

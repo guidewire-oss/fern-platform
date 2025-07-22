@@ -2,7 +2,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -68,7 +67,7 @@ func (h *ProjectHandler) createProject(c *gin.Context) {
 	}
 
 	// Update additional fields if provided
-	if input.Description != "" || input.Repository != "" || input.DefaultBranch != "" {
+	if input.Description != "" || input.Repository != "" || input.DefaultBranch != "" || input.Settings != nil {
 		updates := projectsApp.UpdateProjectRequest{}
 		if input.Description != "" {
 			updates.Description = &input.Description
@@ -78,6 +77,9 @@ func (h *ProjectHandler) createProject(c *gin.Context) {
 		}
 		if input.DefaultBranch != "" {
 			updates.DefaultBranch = &input.DefaultBranch
+		}
+		if input.Settings != nil {
+			updates.Settings = input.Settings
 		}
 
 		if err := h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates); err != nil {
@@ -158,6 +160,9 @@ func (h *ProjectHandler) updateProject(c *gin.Context) {
 	if input.Team != "" {
 		team := projectsDomain.Team(input.Team)
 		updates.Team = &team
+	}
+	if input.Settings != nil {
+		updates.Settings = input.Settings
 	}
 
 	// Update project
@@ -285,9 +290,6 @@ func (h *ProjectHandler) getProjectUsers(c *gin.Context) {
 func (h *ProjectHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 	snapshot := p.ToSnapshot()
 	
-	// Convert settings to JSON string for backward compatibility
-	settingsJSON, _ := json.Marshal(snapshot.Settings)
-	
 	return gin.H{
 		"id":            snapshot.ID,
 		"projectId":     string(snapshot.ProjectID),
@@ -297,7 +299,7 @@ func (h *ProjectHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 		"defaultBranch": snapshot.DefaultBranch,
 		"team":          string(snapshot.Team),
 		"isActive":      snapshot.IsActive,
-		"settings":      string(settingsJSON),
+		"settings":      snapshot.Settings, // Return settings as map, not string
 		"createdAt":     snapshot.CreatedAt,
 		"updatedAt":     snapshot.UpdatedAt,
 	}

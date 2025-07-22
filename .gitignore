@@ -14,6 +14,7 @@ cookies*.txt
 config/oauth-keycloak-example.yaml
 deployments/keycloak-endpoint.yaml
 DEPLOYMENT.md
+TIDYING.md
 
 # Log files
 *.log
@@ -21,7 +22,6 @@ deploy.log
 
 # Binary files
 bin/
-fern-platform
 
 # Environment-specific deployment files
 fern-platform-atmos-dev.yaml

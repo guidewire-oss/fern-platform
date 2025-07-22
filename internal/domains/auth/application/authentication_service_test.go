@@ -181,6 +181,8 @@ var _ = Describe("AuthenticationService", func() {
 					Return(nil, fmt.Errorf("user not found"))
 				mockUserRepo.On("Create", ctx, mock.AnythingOfType("*domain.User")).
 					Return(nil)
+				mockUserRepo.On("UpdateLastLogin", ctx, "oauth-user-123", mock.AnythingOfType("time.Time")).
+					Return(nil)
 				mockUserRepo.On("SetUserGroups", ctx, "oauth-user-123", []string{"group1", "group2"}).
 					Return(nil)
 				mockSessionRepo.On("Create", ctx, mock.AnythingOfType("*domain.Session")).
@@ -287,6 +289,8 @@ var _ = Describe("AuthenticationService", func() {
 				mockUserRepo.On("FindByIDOrEmail", ctx, "user-123", "user@example.com").
 					Return(nil, fmt.Errorf("not found"))
 				mockUserRepo.On("Create", ctx, mock.AnythingOfType("*domain.User")).
+					Return(nil)
+				mockUserRepo.On("UpdateLastLogin", ctx, "user-123", mock.AnythingOfType("time.Time")).
 					Return(nil)
 				mockUserRepo.On("SetUserGroups", ctx, "user-123", mock.Anything).
 					Return(nil)

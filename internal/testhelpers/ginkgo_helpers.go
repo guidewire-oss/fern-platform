@@ -186,3 +186,28 @@ func (htc *HTTPTestClient) AssertResponse(resp *http.Response, expectedStatus in
 		Expect(err).NotTo(HaveOccurred())
 	}
 }
+
+// PerformRequest performs a request against a gin router
+func PerformRequest(router *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {
+	var reqBody io.Reader
+	if body != nil {
+		jsonBytes, _ := json.Marshal(body)
+		reqBody = bytes.NewBuffer(jsonBytes)
+	}
+	
+	req, _ := http.NewRequest(method, path, reqBody)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+// PerformRequestWithRequest performs a request with a custom http.Request
+func PerformRequestWithRequest(router *gin.Engine, req *http.Request) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}

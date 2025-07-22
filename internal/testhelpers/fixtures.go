@@ -1,6 +1,7 @@
 package testhelpers
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
@@ -37,7 +38,12 @@ func (fb *FixtureBuilder) Project(opts ...ProjectOption) *domain.Project {
 		opt(config)
 	}
 
-	project, _ := domain.NewProject(config.projectID, config.name, config.team)
+	project, err := domain.NewProject(config.projectID, config.name, config.team)
+	if err != nil {
+		// Panic is appropriate here as this is a test fixture builder
+		// and a failure indicates a programming error in the test setup
+		panic(fmt.Sprintf("failed to create test project fixture: %v", err))
+	}
 	project.SetID(fb.nextID())
 	return project
 }
