@@ -155,6 +155,41 @@ var _ = Describe("DomainHandler Validation", func() {
 					ShouldPass:  false,
 					ErrorFields: []string{"offset"},
 				},
+				{
+					Name: "float64 limit (as from JSON unmarshalling)",
+					Input: map[string]interface{}{
+						"limit":  float64(10),
+						"offset": float64(0),
+					},
+					ShouldPass: true,
+				},
+				{
+					Name: "float64 negative limit",
+					Input: map[string]interface{}{
+						"limit":  float64(-1),
+						"offset": float64(0),
+					},
+					ShouldPass:  false,
+					ErrorFields: []string{"limit"},
+				},
+				{
+					Name: "float64 non-whole number limit",
+					Input: map[string]interface{}{
+						"limit":  float64(10.5),
+						"offset": float64(0),
+					},
+					ShouldPass:  false,
+					ErrorFields: []string{"limit"},
+				},
+				{
+					Name: "float64 non-whole number offset",
+					Input: map[string]interface{}{
+						"limit":  float64(10),
+						"offset": float64(5.7),
+					},
+					ShouldPass:  false,
+					ErrorFields: []string{"offset"},
+				},
 			}
 
 			testhelpers.RunValidationTests(validatePagination, testCases)
@@ -290,6 +325,10 @@ func validatePagination(input interface{}) error {
 		case int:
 			limit = v
 		case float64:
+			// Check if the float64 is a whole number
+			if v != float64(int(v)) {
+				return fmt.Errorf("limit must be a whole number")
+			}
 			limit = int(v)
 		default:
 			return fmt.Errorf("limit must be a number")
@@ -309,6 +348,10 @@ func validatePagination(input interface{}) error {
 		case int:
 			offset = v
 		case float64:
+			// Check if the float64 is a whole number
+			if v != float64(int(v)) {
+				return fmt.Errorf("offset must be a whole number")
+			}
 			offset = int(v)
 		default:
 			return fmt.Errorf("offset must be a number")
