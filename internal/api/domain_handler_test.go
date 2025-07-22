@@ -3,7 +3,6 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
@@ -16,11 +15,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
-// Test entry point
-func TestAPI(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "API Domain Handler Suite")
-}
+// Removed duplicate test entry point - using TestAPISuite from api_suite_test.go instead
 
 // MockAuthMiddleware provides a mock implementation of AuthMiddlewareAdapter
 type MockAuthMiddleware struct {

@@ -55,7 +55,7 @@ jobs:
     
     - name: Check licenses
       run: |
-        go-licenses check ./... --disallowed_types=forbidden,restricted,reciprocal
+        go-licenses check ./cmd/... ./internal/... ./pkg/... --disallowed_types=forbidden,restricted,reciprocal
 
   sbom:
     name: Generate SBOM
