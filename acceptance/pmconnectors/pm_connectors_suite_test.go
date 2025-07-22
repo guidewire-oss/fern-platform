@@ -31,7 +31,7 @@ var _ = BeforeSuite(func() {
 	// Get environment variables
 	baseURL = os.Getenv("FERN_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8080"
+		baseURL = "http://fern-platform.local:8080"
 	}
 
 	username = os.Getenv("FERN_USERNAME")

@@ -33,7 +33,7 @@ var (
 
 func init() {
 	// Parse command line flags
-	flag.StringVar(&baseURL, "base-url", getEnvOrDefault("FERN_BASE_URL", "http://localhost:8080"), "Base URL for the application")
+	flag.StringVar(&baseURL, "base-url", getEnvOrDefault("FERN_BASE_URL", "http://fern-platform.local:8080"), "Base URL for the application")
 	flag.StringVar(&username, "username", getEnvOrDefault("FERN_USERNAME", "admin@fern.com"), "Username for authentication")
 	flag.StringVar(&password, "password", getEnvOrDefault("FERN_PASSWORD", "test123"), "Password for authentication")
 	flag.StringVar(&teamName, "team", getEnvOrDefault("FERN_TEAM_NAME", "fern"), "Team name")
