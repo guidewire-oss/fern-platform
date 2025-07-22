@@ -1486,7 +1486,10 @@ func (h *DomainHandler) createFernProject(c *gin.Context) {
 		if input.DefaultBranch != "" {
 			updates.DefaultBranch = &input.DefaultBranch
 		}
-		h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates)
+		if err := h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: fmt.Sprintf("Failed to update project: %v", err)})
+			return
+		}
 	}
 
 	// Return Fern-compatible response
