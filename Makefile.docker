@@ -1,0 +1,34 @@
+# Fern Platform - Docker Makefile
+# Handles container building and operations using Dagger
+
+.PHONY: docker-build docker-run docker-scan docker-push
+
+# Docker operations
+docker-build: ## Build Docker image via Dagger 
+	@echo "🐳 Building Docker image via Dagger..."
+	cd ci && dagger call build --source=..
+	@echo "✅ Docker image built"
+
+docker-run: ## Run Docker container locally
+	@echo "🐳 Running Docker container..."
+	docker run -p 8080:8080 fern-platform:latest
+
+docker-scan: ## Security scan container via Dagger
+	@echo "🔍 Running security scan via Dagger..."
+	cd ci && dagger call security-scan --source=..
+	@echo "✅ Security scan completed"
+
+docker-push: ## Build and push container images via Dagger
+	@echo "🐳 Building and pushing images via Dagger..."
+	@if [ -z "$(REGISTRY)" ]; then \
+		echo "❌ REGISTRY environment variable required"; \
+		echo "Usage: make docker-push REGISTRY=your-registry.com/fern-platform"; \
+		exit 1; \
+	fi
+	cd ci && dagger call publish \
+		--source=.. \
+		--registry=$(REGISTRY) \
+		--tag=$(VERSION) \
+		--username=$(DOCKER_USERNAME) \
+		--password=env:DOCKER_PASSWORD
+	@echo "✅ Images pushed to $(REGISTRY)"

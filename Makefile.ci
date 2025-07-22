@@ -1,0 +1,45 @@
+# Fern Platform - CI/CD Makefile  
+# Handles CI/CD workflows using Dagger
+
+.PHONY: ci-all ci-test ci-build ci-acceptance setup-local
+
+# CI/CD workflows
+ci-all: ## Run complete CI pipeline via Dagger
+	@echo "🤖 Running complete CI pipeline via Dagger..."
+	cd ci && dagger call all --source=..
+	@echo "✅ CI pipeline completed"
+
+ci-test: ## Run CI test pipeline (lint + test + security scan)
+	@echo "🤖 Running CI test pipeline..."
+	@$(MAKE) -f Makefile.test lint
+	@$(MAKE) -f Makefile.test test-unit
+	@$(MAKE) -f Makefile.docker docker-scan
+	@echo "✅ CI test pipeline completed"
+
+ci-build: ## Run CI build pipeline 
+	@echo "🤖 Running CI build pipeline..."
+	@$(MAKE) -f Makefile.docker docker-build
+	@echo "✅ CI build pipeline completed"
+
+ci-acceptance: ## Run acceptance tests via Dagger (with k8s)
+	@echo "🤖 Running acceptance tests via Dagger..."
+	cd ci && dagger call acceptance-test --source=..
+	@echo "✅ Acceptance tests completed"
+
+# Local setup
+setup-local: ## Setup local development environment
+	@echo "🔧 Setting up local development environment..."
+	@$(MAKE) -f Makefile.core deps
+	@$(MAKE) -f Makefile.ci install-tools
+	@echo "✅ Local development environment ready"
+	@echo ""
+	@echo "Next steps:"
+	@echo "1. Run 'make deploy-all' for complete automated deployment"
+	@echo "2. Or run 'make dev' to start development mode"
+
+install-tools: ## Install development tools
+	@echo "🔧 Installing development tools..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+	go install github.com/air-verse/air@v1.62.0
+	go install github.com/vektra/mockery/v2@v2.65.0
+	@echo "✅ Development tools installed"
