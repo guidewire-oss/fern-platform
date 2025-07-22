@@ -90,15 +90,34 @@ func main() {
 	}
 
 	// Use the new domain-based API handler
-	domainHandler := api.NewDomainHandler(
-		testingService,
-		projectService,
-		tagService,
-		flakyDetectionService,
-		authMiddleware,
-		logger,
-	)
-	domainHandler.RegisterRoutes(router)
+	// Check environment variable to determine which handler version to use
+	useSplitHandlers := os.Getenv("FERN_USE_SPLIT_HANDLERS") == "true"
+	
+	if useSplitHandlers {
+		// Use the new split handler architecture
+		domainHandler := api.NewDomainHandlerV2(
+			testingService,
+			projectService,
+			tagService,
+			flakyDetectionService,
+			authMiddleware,
+			logger,
+		)
+		domainHandler.RegisterRoutes(router)
+		logger.WithService("fern-platform").Info("Using split handler architecture (V2)")
+	} else {
+		// Use the original monolithic handler for backward compatibility
+		domainHandler := api.NewDomainHandler(
+			testingService,
+			projectService,
+			tagService,
+			flakyDetectionService,
+			authMiddleware,
+			logger,
+		)
+		domainHandler.RegisterRoutes(router)
+		logger.WithService("fern-platform").Info("Using original monolithic handler")
+	}
 
 	// GraphQL routes with role group names from config
 	// Initialize GraphQL resolver with domain services
