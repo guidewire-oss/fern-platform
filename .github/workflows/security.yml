@@ -11,6 +11,16 @@ on:
 permissions:
   contents: read
   security-events: write
+  # Restrict other permissions
+  actions: none
+  checks: none
+  deployments: none
+  issues: none
+  packages: none
+  pages: none
+  pull-requests: none
+  repository-projects: none
+  statuses: none
 
 jobs:
   gosec:
@@ -20,7 +30,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
+      uses: securego/gosec@v2.21.4
       with:
         args: '-fmt sarif -out gosec-results.sarif ./...'
     
@@ -44,7 +54,7 @@ jobs:
       run: go list -json -deps ./... > deps.json
     
     - name: Run Nancy
-      uses: sonatype-nexus-community/nancy-github-action@main
+      uses: sonatype-nexus-community/nancy-github-action@v1.0.3
 
   license-check:
     name: License Compliance Check
@@ -71,7 +81,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Generate SBOM
-      uses: anchore/sbom-action@v0
+      uses: anchore/sbom-action@v0.17.9
       with:
         artifact-name: sbom-${{ github.sha }}.json
         format: spdx-json
@@ -91,6 +101,6 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Submit Dependency Snapshot
-      uses: actions/dependency-submission-action@v3
+      uses: actions/dependency-submission-action@v4
       with:
         go-version: '1.24'
