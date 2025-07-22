@@ -283,7 +283,18 @@ func validatePagination(input interface{}) error {
 		return fmt.Errorf("invalid input type")
 	}
 
-	if limit, ok := data["limit"].(int); ok {
+	// Handle both int and float64 since JSON unmarshals numbers as float64
+	if limitVal, exists := data["limit"]; exists {
+		var limit int
+		switch v := limitVal.(type) {
+		case int:
+			limit = v
+		case float64:
+			limit = int(v)
+		default:
+			return fmt.Errorf("limit must be a number")
+		}
+		
 		if limit < 0 {
 			return fmt.Errorf("limit must be non-negative")
 		}
@@ -292,7 +303,17 @@ func validatePagination(input interface{}) error {
 		}
 	}
 
-	if offset, ok := data["offset"].(int); ok {
+	if offsetVal, exists := data["offset"]; exists {
+		var offset int
+		switch v := offsetVal.(type) {
+		case int:
+			offset = v
+		case float64:
+			offset = int(v)
+		default:
+			return fmt.Errorf("offset must be a number")
+		}
+		
 		if offset < 0 {
 			return fmt.Errorf("offset must be non-negative")
 		}

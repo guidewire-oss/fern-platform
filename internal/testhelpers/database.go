@@ -61,16 +61,41 @@ func (td *TestDatabase) Cleanup() {
 }
 
 // Clear removes all data from tables
-func (td *TestDatabase) Clear() {
-	// Clear in reverse order of dependencies
-	td.DB.Exec("DELETE FROM test_run_tags")
-	td.DB.Exec("DELETE FROM spec_runs")
-	td.DB.Exec("DELETE FROM suite_runs")
-	td.DB.Exec("DELETE FROM test_runs")
-	td.DB.Exec("DELETE FROM project_permissions")
-	td.DB.Exec("DELETE FROM projects")
-	td.DB.Exec("DELETE FROM users")
-	td.DB.Exec("DELETE FROM tags")
+func (td *TestDatabase) Clear() error {
+	// Clear in reverse order of dependencies to avoid foreign key violations
+	tables := []string{
+		// First, clear join tables and dependent data
+		"test_run_tags",
+		"flaky_tests",
+		"spec_runs",
+		"suite_runs",
+		"test_runs",
+		
+		// Then clear project-related tables
+		"project_permissions",
+		"project_access",
+		"project_details", // Fixed: was "projects" (incorrect table name)
+		
+		// Then clear user-related tables
+		"user_preferences",
+		"user_sessions",
+		"user_scopes",
+		"user_groups",
+		"users",
+		
+		// Finally, clear standalone tables
+		"tags",
+	}
+	
+	for _, table := range tables {
+		if err := td.DB.Exec("DELETE FROM " + table).Error; err != nil {
+			// Log the error but continue clearing other tables
+			// Some tables might not exist in all test scenarios
+			fmt.Printf("Warning: failed to clear table %s: %v\n", table, err)
+		}
+	}
+	
+	return nil
 }
 
 

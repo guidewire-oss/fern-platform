@@ -45,8 +45,7 @@ func (h *AuthHandler) showLoginPage(c *gin.Context) {
 
 	// Serve the login page HTML
 	html := h.getLoginPageHTML(oauthURL)
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(200, html)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
 
 // getCurrentUser handles GET /auth/user

@@ -105,6 +105,13 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID domain.Pro
 		}
 	}
 
+	// Update settings
+	if updates.Settings != nil {
+		for key, value := range updates.Settings {
+			project.SetSetting(key, value)
+		}
+	}
+
 	// Save the updates
 	if err := s.projectRepo.Update(ctx, project); err != nil {
 		return fmt.Errorf("failed to save project updates: %w", err)
@@ -223,4 +230,5 @@ type UpdateProjectRequest struct {
 	Repository    *string
 	DefaultBranch *string
 	Team          *domain.Team
+	Settings      map[string]interface{}
 }

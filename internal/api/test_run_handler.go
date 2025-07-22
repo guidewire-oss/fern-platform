@@ -117,20 +117,24 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 	offset := 0
 
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
+		} else if l <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be greater than 0"})
+			return
 		}
 	}
 	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
+		} else if o < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "offset must be non-negative"})
+			return
 		}
 	}
 
-	// Get test runs from domain service
-	// TODO: Add offset support to GetProjectTestRuns
-	_ = offset
-	testRuns, err := h.testingService.GetProjectTestRuns(c.Request.Context(), projectID, limit)
+	// Get test runs from domain service with pagination
+	testRuns, totalCount, err := h.testingService.ListTestRuns(c.Request.Context(), projectID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -142,10 +146,12 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 		apiTestRuns[i] = h.convertTestRunToAPI(tr)
 	}
 
-	c.Header("X-Total-Count", strconv.Itoa(len(testRuns)))
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.JSON(http.StatusOK, gin.H{
-		"data":  apiTestRuns,
-		"total": len(testRuns),
+		"data":   apiTestRuns,
+		"total":  totalCount,
+		"limit":  limit,
+		"offset": offset,
 	})
 }
 
@@ -153,15 +159,15 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 func (h *TestRunHandler) countTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 
-	// Get count from domain service
-	testRuns, err := h.testingService.GetProjectTestRuns(c.Request.Context(), projectID, 0)
+	// Get count from domain service using ListTestRuns with limit 0 to get total count only
+	_, totalCount, err := h.testingService.ListTestRuns(c.Request.Context(), projectID, 0, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total": len(testRuns),
+		"total": totalCount,
 	})
 }
 
@@ -171,7 +177,7 @@ func (h *TestRunHandler) updateTestRunStatus(c *gin.Context) {
 
 	var input struct {
 		Status  string     `json:"status" binding:"required"`
-		EndTime *time.Time `json:"end_time,omitempty"`
+		EndTime *time.Time `json:"endTime,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -229,8 +235,11 @@ func (h *TestRunHandler) getRecentTestRuns(c *gin.Context) {
 	limit := 10 // default
 
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
+		} else if l <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be greater than 0"})
+			return
 		}
 	}
 
@@ -286,7 +295,7 @@ func (h *TestRunHandler) convertTestRunToAPI(tr *domain.TestRun) gin.H {
 	return gin.H{
 		"id":           tr.ID,
 		"projectId":    tr.ProjectID,
-		"runId":        tr.ID, // Use ID as runId for backward compatibility
+		"runId":        tr.RunID, // Use the external string identifier
 		"name":         tr.Name,
 		"branch":       tr.Branch,
 		"gitBranch":    tr.GitBranch,

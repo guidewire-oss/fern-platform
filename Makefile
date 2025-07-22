@@ -63,7 +63,7 @@ quick-start: ## Complete setup and deployment workflow
 	@echo "3. Build and deploy the application"
 	@echo "4. Run basic health checks"
 	@echo ""
-	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@printf "Continue? [y/N] " && read confirm && [ "$$confirm" = "y" ] || exit 1
 	@echo ""
 	@$(MAKE) setup-local
 	@$(MAKE) deploy-all
@@ -84,7 +84,7 @@ teardown: ## Clean up everything (cluster + local artifacts)
 	@echo "2. Clean up local build artifacts"
 	@echo "3. Remove generated files"
 	@echo ""
-	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@printf "Continue? [y/N] " && read confirm && [ "$$confirm" = "y" ] || exit 1
 	@echo ""
 	@$(MAKE) k8s-delete || true
 	@$(MAKE) k3d-delete || true

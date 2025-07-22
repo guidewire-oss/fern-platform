@@ -74,14 +74,21 @@ var _ = BeforeSuite(func() {
 	// Convert cookies to OptionalCookie format
 	optCookies := make([]playwright.OptionalCookie, len(cookies))
 	for i, cookie := range cookies {
+		// Create local copies to avoid pointer aliasing issues
+		domain := cookie.Domain
+		path := cookie.Path
+		expires := cookie.Expires
+		httpOnly := cookie.HttpOnly
+		secure := cookie.Secure
+		
 		optCookies[i] = playwright.OptionalCookie{
 			Name:     cookie.Name,
 			Value:    cookie.Value,
-			Domain:   &cookie.Domain,
-			Path:     &cookie.Path,
-			Expires:  &cookie.Expires,
-			HttpOnly: &cookie.HttpOnly,
-			Secure:   &cookie.Secure,
+			Domain:   &domain,
+			Path:     &path,
+			Expires:  &expires,
+			HttpOnly: &httpOnly,
+			Secure:   &secure,
 			SameSite: cookie.SameSite,
 		}
 	}

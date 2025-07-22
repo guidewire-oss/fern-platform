@@ -78,7 +78,11 @@ func (h *FernLegacyHandler) createFernProject(c *gin.Context) {
 		if input.DefaultBranch != "" {
 			updates.DefaultBranch = &input.DefaultBranch
 		}
-		h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates)
+		if err := h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates); err != nil {
+			h.logger.WithError(err).Error("Failed to update project")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update project"})
+			return
+		}
 	}
 
 	// Return Fern-compatible response
@@ -139,11 +143,10 @@ func (h *FernLegacyHandler) createFernTestReport(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("fern-ginkgo-client request received",
+	h.logger.Debug("fern-ginkgo-client request received",
 		"endpoint", c.Request.URL.Path,
 		"method", c.Request.Method,
-		"content-length", len(bodyBytes),
-		"body", string(bodyBytes))
+		"content-length", len(bodyBytes))
 
 	// Parse the structured input
 	var input struct {

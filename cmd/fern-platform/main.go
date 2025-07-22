@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/gin-gonic/gin"
@@ -91,7 +92,8 @@ func main() {
 
 	// Use the new domain-based API handler
 	// Check environment variable to determine which handler version to use
-	useSplitHandlers := os.Getenv("FERN_USE_SPLIT_HANDLERS") == "true"
+	// ParseBool accepts 1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False
+	useSplitHandlers, _ := strconv.ParseBool(os.Getenv("FERN_USE_SPLIT_HANDLERS"))
 	
 	if useSplitHandlers {
 		// Use the new split handler architecture

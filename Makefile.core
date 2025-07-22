@@ -13,7 +13,7 @@ GIT_COMMIT=$(shell git rev-parse HEAD)
 GO_BUILD_FLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
 
 # Core workflow targets
-.PHONY: deps build clean dev run
+.PHONY: deps build clean dev run info
 
 deps: ## Install dependencies
 	@echo "📦 Installing dependencies..."
