@@ -1,0 +1,180 @@
+# Fern Platform - Kubernetes Makefile
+# Handles k3d cluster and Kubernetes deployments
+
+.PHONY: k3d-create k3d-delete k3d-status k8s-deploy k8s-delete k8s-status deploy-all deploy-quick
+
+# K3D cluster management
+k3d-create: ## Create k3d cluster for fern-platform
+	@echo "🎯 Creating k3d cluster..."
+	k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2
+	@echo "✅ k3d cluster 'fern-platform' created"
+
+k3d-delete: ## Delete k3d cluster
+	@echo "🧹 Deleting k3d cluster..."
+	k3d cluster delete fern-platform
+	@echo "✅ k3d cluster deleted"
+
+k3d-status: ## Check k3d cluster status
+	@echo "📊 Checking k3d cluster status..."
+	kubectl cluster-info
+	kubectl get nodes
+
+# Kubernetes operations
+k8s-deploy: ## Deploy to Kubernetes using KubeVela
+	@echo "☸️ Deploying to Kubernetes..."
+	@echo "📁 Creating namespace if it doesn't exist..."
+	@kubectl create namespace fern-platform 2>/dev/null || true
+	@kubectl apply -f deployments/fern-platform-kubevela.yaml
+	@echo "✅ Deployed to Kubernetes"
+
+k8s-delete: ## Delete from Kubernetes
+	@echo "☸️ Deleting from Kubernetes..."
+	vela delete fern-platform -n fern-platform
+	@echo "✅ Deleted from Kubernetes"
+
+k8s-status: ## Check Kubernetes deployment status
+	@echo "☸️ Checking deployment status..."
+	@echo ""
+	@echo "📊 KubeVela Application Status:"
+	@vela status fern-platform -n fern-platform 2>/dev/null || echo "⚠️  No KubeVela application found"
+	@echo ""
+	@echo "🔍 Pods in fern-platform namespace:"
+	@kubectl get pods -n fern-platform
+	@echo ""
+	@echo "🌐 Services:"
+	@kubectl get svc -n fern-platform
+	@echo ""
+	@echo "🔀 Ingress:"
+	@kubectl get ingress -n fern-platform
+	@echo ""
+	@echo "🌐 Application is accessible at:"
+	@echo "   http://fern-platform.local:8080 (via Traefik ingress)"
+
+# Deployment automation
+deploy-all: ## Complete automated deployment (k3d + prerequisites + build + deploy)
+	@echo "🚀 Starting complete automated deployment of Fern Platform..."
+	@echo ""
+	@echo "This will:"
+	@echo "1. Check/create k3d cluster"
+	@echo "2. Install prerequisites (KubeVela, CNPG)"
+	@echo "3. Build Docker image via Dagger"
+	@echo "4. Deploy application with KubeVela"
+	@echo ""
+	@$(MAKE) -f Makefile.k8s check-or-create-cluster
+	@$(MAKE) -f Makefile.k8s check-and-install-prerequisites
+	@$(MAKE) -f Makefile.k8s build-and-load-image
+	@$(MAKE) -f Makefile.k8s deploy-and-verify
+	@echo ""
+	@echo "🎉 Fern Platform deployment completed successfully!"
+	@echo ""
+	@echo "⚠️  IMPORTANT: Add these entries to your /etc/hosts file:"
+	@echo "   127.0.0.1 fern-platform.local"
+	@echo "   127.0.0.1 keycloak"
+	@echo ""
+	@echo "🌐 Application is now accessible at: http://fern-platform.local:8080"
+
+deploy-quick: ## Quick deployment (assumes cluster and prerequisites exist)
+	@echo "🚀 Quick deployment (assumes cluster exists)..."
+	@$(MAKE) -f Makefile.k8s build-and-load-image
+	@$(MAKE) -f Makefile.k8s deploy-and-verify
+	@echo "🎉 Quick deployment completed!"
+
+# Internal helpers for deploy-all
+check-or-create-cluster: ## Check if k3d cluster exists, create if not
+	@echo "🔍 Checking k3d cluster status..."
+	@$(MAKE) -f Makefile.k8s check-hosts-file
+	@if k3d cluster list | grep -q "fern-platform.*running"; then \
+		echo "✅ k3d cluster 'fern-platform' already exists and is running"; \
+		kubectl cluster-info --context k3d-fern-platform > /dev/null 2>&1 || (echo "❌ Cluster not accessible, recreating..." && k3d cluster delete fern-platform && k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2); \
+	else \
+		echo "📦 Creating new k3d cluster 'fern-platform'..."; \
+		k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2; \
+		echo "✅ k3d cluster created successfully"; \
+	fi
+	@kubectl config use-context k3d-fern-platform
+	@sleep 10
+
+check-hosts-file: ## Check and setup /etc/hosts entries
+	@echo "🔍 Checking /etc/hosts configuration..."
+	@if ! grep -q "fern-platform.local" /etc/hosts; then \
+		echo "⚠️  Missing fern-platform.local in /etc/hosts"; \
+		echo ""; \
+		echo "Please add these entries to your /etc/hosts file:"; \
+		echo ""; \
+		echo "   sudo sh -c 'echo \"127.0.0.1 fern-platform.local\" >> /etc/hosts'"; \
+		echo "   sudo sh -c 'echo \"127.0.0.1 keycloak\" >> /etc/hosts'"; \
+		echo ""; \
+		read -p "Press Enter after adding the entries to continue..."; \
+	else \
+		echo "✅ /etc/hosts entries found"; \
+	fi
+
+check-and-install-prerequisites: ## Check and install KubeVela and CNPG if not present
+	@echo "🔍 Checking and installing prerequisites..."
+	@$(MAKE) -f Makefile.k8s check-install-kubevela
+	@$(MAKE) -f Makefile.k8s check-install-cnpg
+	@echo "✅ All prerequisites ready"
+
+check-install-kubevela: ## Check if KubeVela is installed, install if not
+	@echo "📦 Checking KubeVela installation..."
+	@if kubectl get deployment kubevela-vela-core -n vela-system > /dev/null 2>&1; then \
+		echo "✅ KubeVela already installed"; \
+	else \
+		echo "🔧 Installing KubeVela..."; \
+		if ! command -v vela &> /dev/null; then \
+			echo "📥 Installing KubeVela CLI..."; \
+			curl -fsSl https://kubevela.io/script/install.sh | bash; \
+		fi; \
+		echo "📦 Installing KubeVela operator..."; \
+		helm repo add kubevela https://kubevela.github.io/charts > /dev/null 2>&1 || true; \
+		helm repo update > /dev/null 2>&1; \
+		helm install --create-namespace -n vela-system kubevela kubevela/vela-core --wait --timeout=10m; \
+		echo "✅ KubeVela installed successfully"; \
+	fi
+
+check-install-cnpg: ## Check if CloudNativePG is installed, install if not
+	@echo "📦 Checking CloudNativePG installation..."
+	@if kubectl get deployment cnpg-controller-manager -n cnpg-system > /dev/null 2>&1; then \
+		echo "✅ CloudNativePG already installed"; \
+	else \
+		echo "🔧 Installing CloudNativePG..."; \
+		helm repo add cnpg https://cloudnative-pg.github.io/charts > /dev/null 2>&1 || true; \
+		helm repo update > /dev/null 2>&1; \
+		helm upgrade --install cnpg --namespace cnpg-system --create-namespace cnpg/cloudnative-pg --wait --timeout=10m; \
+		echo "✅ CloudNativePG installed successfully"; \
+	fi
+
+build-and-load-image: ## Build Docker image via Dagger and load into k3d cluster
+	@echo "🐳 Building and loading Docker image via Dagger..."
+	@echo "📦 Building and exporting image..."
+	@cd ci && dagger call export --source=.. --platform="linux/$(shell go env GOARCH)" export --path /tmp/fern-image.tar
+	@echo "📥 Loading image into k3d cluster..."
+	@k3d image import /tmp/fern-image.tar -c fern-platform
+	@rm -f /tmp/fern-image.tar
+	@echo "✅ Image loaded successfully"
+
+deploy-and-verify: ## Deploy application and verify it's running
+	@echo "☸️ Deploying Fern Platform application..."
+	@echo "📁 Creating namespace..."
+	@kubectl create namespace fern-platform > /dev/null 2>&1 || echo "✅ Namespace already exists"
+	@echo "🚀 Applying KubeVela application..."
+	@kubectl apply -f deployments/fern-platform-kubevela.yaml
+	@echo "⏳ Waiting for initial deployment (60s)..."
+	@sleep 60
+	@echo "▶️ Resuming workflow..."
+	@vela workflow resume fern-platform -n fern-platform > /dev/null 2>&1 || echo "⚠️ Workflow may already be running"
+	@echo "⏳ Waiting for deployment to be ready..."
+	@timeout=300; \
+	while [ $$timeout -gt 0 ]; do \
+		if kubectl get pods -n fern-platform | grep fern-platform | grep -q "Running"; then \
+			echo "✅ Application is running!"; \
+			break; \
+		fi; \
+		echo "⏳ Still waiting for pods to be ready... ($$timeout seconds remaining)"; \
+		sleep 10; \
+		timeout=$$((timeout-10)); \
+	done
+	@echo "📊 Final status check..."
+	@kubectl get pods -n fern-platform
+	@echo ""
+	@echo "🌐 Application is accessible at: http://fern-platform.local:8080"

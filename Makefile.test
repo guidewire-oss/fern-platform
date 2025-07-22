@@ -1,0 +1,43 @@
+# Fern Platform - Testing Makefile
+# Handles all testing workflows using Dagger where appropriate
+
+.PHONY: test test-unit test-acceptance test-playwright coverage fmt lint vet
+
+# Test targets
+test: test-unit ## Run unit tests (default)
+
+test-unit: ## Run unit tests (excluding e2e tests) 
+	@echo "🧪 Running unit tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover --coverprofile=coverage.out --label-filter="!e2e" ./...
+	@echo "✅ Unit tests completed"
+
+test-acceptance: ## Run acceptance tests (e2e labeled tests)
+	@echo "🧪 Running acceptance tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v --label-filter="e2e" ./...
+	@echo "✅ Acceptance tests completed"
+
+test-playwright: ## Run Playwright tests via Dagger (no k8s required)
+	@echo "🧪 Running Playwright tests via Dagger..."
+	cd ci && dagger call acceptance-test-playwright --source=..
+	@echo "✅ Playwright tests completed"
+
+coverage: test-unit ## Generate test coverage report
+	@echo "📊 Generating coverage report..."
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "✅ Coverage report generated: coverage.html"
+
+# Code quality
+fmt: ## Format Go code
+	@echo "🎨 Formatting Go code..."
+	go fmt ./...
+	@echo "✅ Code formatted"
+
+lint: ## Run Go linting via Dagger
+	@echo "🔍 Running linting via Dagger..."
+	cd ci && dagger call lint --source=..
+	@echo "✅ Linting completed"
+
+vet: ## Run Go vet
+	@echo "🔍 Running go vet..."
+	go vet ./...
+	@echo "✅ Go vet completed"
