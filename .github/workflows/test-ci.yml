@@ -37,7 +37,7 @@ jobs:
         cd ..
         
     - name: Run Dagger lint
-      uses: dagger/dagger-for-github@v7
+      uses: dagger/dagger-for-github@v8
       with:
         version: "0.16.3"
         verb: call
