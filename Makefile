@@ -11,7 +11,7 @@ GIT_COMMIT=$(shell git rev-parse HEAD)
 # Go build flags
 GO_BUILD_FLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
 
-.PHONY: help build build-linux test test-unit test-integration lint fmt clean dev run deps docker-build docker-run
+.PHONY: help build build-linux test test-unit test-integration test-acceptance test-all test-domain test-api test-auth lint fmt clean dev run deps docker-build docker-run
 
 help: ## Display this help message
 	@echo "🌿 Fern Platform Build System"
@@ -58,9 +58,9 @@ build-linux: deps ## Build for Linux (AMD64 and ARM64)
 
 test: test-unit ## Run all tests
 
-test-unit: ## Run unit tests
+test-unit: ## Run unit tests (excluding e2e tests)
 	@echo "🧪 Running unit tests..."
-	go test -v -race -coverprofile=coverage.out ./...
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover --coverprofile=coverage.out --label-filter="!e2e" ./...
 	@echo "✅ Unit tests completed"
 
 test-integration: ## Run integration tests (requires database)
@@ -68,10 +68,35 @@ test-integration: ## Run integration tests (requires database)
 	go test -v -tags=integration ./...
 	@echo "✅ Integration tests completed"
 
-test-acceptance: ## Run Go acceptance tests
+test-acceptance: ## Run acceptance tests (e2e labeled tests)
+	@echo "🧪 Running acceptance tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v --label-filter="e2e" ./...
+	@echo "✅ Acceptance tests completed"
+
+test-all: ## Run all tests (unit + e2e)
+	@echo "🧪 Running all tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover --coverprofile=coverage.out ./...
+	@echo "✅ All tests completed"
+
+test-domain: ## Run specific domain tests
+	@echo "🧪 Running domain tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover ./internal/domains/...
+	@echo "✅ Domain tests completed"
+
+test-api: ## Run API tests only
+	@echo "🧪 Running API tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover ./internal/api/...
+	@echo "✅ API tests completed"
+
+test-auth: ## Run auth domain tests
+	@echo "🧪 Running auth tests..."
+	go run github.com/onsi/ginkgo/v2/ginkgo -v -race --cover ./internal/domains/auth/...
+	@echo "✅ Auth tests completed"
+
+test-acceptance-go: ## Run Go acceptance tests (new framework)
 	@echo "🧪 Running Go acceptance tests..."
 	cd acceptance-go && make test
-	@echo "✅ Acceptance tests completed"
+	@echo "✅ Go acceptance tests completed"
 
 coverage: test-unit ## Generate test coverage report
 	@echo "📊 Generating coverage report..."

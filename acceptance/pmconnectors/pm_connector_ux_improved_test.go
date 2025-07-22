@@ -14,7 +14,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("PM Connector Improved UX Tests", func() {
+var _ = Describe("PM Connector Improved UX Tests", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -80,7 +80,7 @@ var _ = Describe("PM Connector Improved UX Tests", func() {
 		SaveTestVideo(page, ctx, browser, recordVideo)
 	})
 
-	Describe("UC-10-01: Improved PM Connectors List View", func() {
+	Describe("UC-10-01: Improved PM Connectors List View", Label("e2e"), func() {
 		It("should display connectors in a table view with health indicators", func() {
 			// Check for table view instead of cards
 			connectorsTable := page.Locator("table.pm-connectors-table, [data-testid='pm-connectors-table']")
@@ -162,7 +162,7 @@ var _ = Describe("PM Connector Improved UX Tests", func() {
 		})
 	})
 
-	Describe("UC-10-02: Slide-out Panel for Connector Creation", func() {
+	Describe("UC-10-02: Slide-out Panel for Connector Creation", Label("e2e"), func() {
 		It("should open a slide-out panel instead of modal", func() {
 			// Click Create Connection
 			createButton := page.Locator("button:has-text('Create Connection'), button:has-text('Add Connector')")
@@ -361,7 +361,7 @@ var _ = Describe("PM Connector Improved UX Tests", func() {
 		})
 	})
 
-	Describe("UC-10-03: Visual Field Mapping Interface", func() {
+	Describe("UC-10-03: Visual Field Mapping Interface", Label("e2e"), func() {
 		It("should provide drag-and-drop field mapping", func() {
 			// This test would need a connector to be created first
 			// Find or create a connector
@@ -446,7 +446,7 @@ var _ = Describe("PM Connector Improved UX Tests", func() {
 		})
 	})
 
-	Describe("UC-12-01: Non-blocking Connection Testing", func() {
+	Describe("UC-12-01: Non-blocking Connection Testing", Label("e2e"), func() {
 		It("should test connection without blocking the UI", func() {
 			// Find a connector
 			connectorRow := page.Locator("tbody tr").First()

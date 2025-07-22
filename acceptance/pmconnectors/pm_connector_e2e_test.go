@@ -14,7 +14,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("PM Connector End-to-End Tests", func() {
+var _ = Describe("PM Connector End-to-End Tests", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -136,7 +136,7 @@ var _ = Describe("PM Connector End-to-End Tests", func() {
 		}
 	})
 
-	Describe("Complete PM Connector and Project Linking Flow", func() {
+	Describe("Complete PM Connector and Project Linking Flow", Label("e2e"), func() {
 		It("should create connector, link to project, configure mappings, and sync with mock JIRA", func() {
 			// Step 1: Create a PM Connector
 			fmt.Println("Step 1: Creating PM Connector...")

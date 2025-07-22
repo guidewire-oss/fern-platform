@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+	
+	"dagger/ci/internal/dagger"
 )
 
 // AcceptanceTestAdvanced provides more control over acceptance testing
@@ -18,7 +20,7 @@ type AcceptanceTestAdvanced struct {
 func (m *Ci) RunWithK3d(
 	ctx context.Context,
 	// +required
-	source *Directory,
+	source *dagger.Directory,
 	// +optional
 	// +default="test-cluster"
 	clusterName string,
@@ -66,13 +68,11 @@ func (m *Ci) RunWithK3d(
 			"--host=tcp://0.0.0.0:2375",
 			"--host=unix:///var/run/docker.sock",
 			"--storage-driver=overlay2",
-		}, ContainerWithExecOpts{
-			InsecureRootCapabilities: true,
 		}).
 		AsService()
 
 	// Load the application image into Docker
-	imageArchive := appImage.Export(ctx)
+	imageArchive := appImage.AsTarball()
 	
 	// Run the acceptance tests
 	result, err := testRunner.
@@ -80,8 +80,7 @@ func (m *Ci) RunWithK3d(
 		WithEnvVariable("DOCKER_HOST", "tcp://docker:2375").
 		WithFile("/tmp/app-image.tar", imageArchive).
 		// Create test script
-		WithNewFile("/workspace/run-acceptance-tests.sh", ContainerWithNewFileOpts{
-			Contents: fmt.Sprintf(`#!/bin/bash
+		WithNewFile("/workspace/run-acceptance-tests.sh", fmt.Sprintf(`#!/bin/bash
 set -e
 
 echo "Waiting for Docker daemon..."
@@ -293,9 +292,7 @@ fi
 
 # Cleanup
 kill $PF_PID || true
-`, clusterName, clusterName, namespace, namespace, namespace, namespace, namespace, namespace, namespace, namespace),
-			Permissions: 0755,
-		}).
+`, clusterName, clusterName, namespace, namespace, namespace, namespace, namespace, namespace, namespace, namespace)).
 		WithExec([]string{"bash", "/workspace/run-acceptance-tests.sh"}).
 		Stdout(ctx)
 

@@ -15,11 +15,12 @@ Each package has its own test suite and can be run independently.
 
 ## Prerequisites
 
-1. Go 1.21 or higher
+1. Go 1.22 or higher
 2. Ginkgo CLI: `go install github.com/onsi/ginkgo/v2/ginkgo@latest`
-3. Fern Platform running at the configured URL
-4. Test data loaded via `scripts/insert-test-data.sh`
-5. Valid test user credentials
+3. Playwright browsers: `go run github.com/playwright-community/playwright-go/cmd/playwright@v0.4802.0 install --with-deps chromium`
+4. Fern Platform running at the configured URL
+5. Test data loaded via `scripts/insert-test-data.sh`
+6. Valid test user credentials
 
 ## Running Tests
 
@@ -183,6 +184,29 @@ make deps  # This will install Chromium
 - Check selectors match actual HTML
 - Add appropriate waits for dynamic content
 - Use multiple selector strategies
+
+### Browser crashes (TargetClosedError)
+The test suite automatically applies platform-specific browser configurations:
+
+- **macOS**: Uses `--single-process` flag to resolve TLS certificate issues
+- **Docker/CI**: Uses additional stability flags for containerized environments
+- **Custom flags**: Set `PLAYWRIGHT_CHROMIUM_ARGS` environment variable
+
+For Docker environments, ensure container is run with:
+```bash
+docker run --ipc=host --cap-add=SYS_ADMIN your-test-image
+```
+
+To debug browser launch issues:
+```bash
+DEBUG=1 make test  # Shows browser launch arguments
+```
+
+To override browser arguments:
+```bash
+export PLAYWRIGHT_CHROMIUM_ARGS="--disable-gpu --disable-software-rasterizer"
+make test
+```
 
 ## Contributing
 

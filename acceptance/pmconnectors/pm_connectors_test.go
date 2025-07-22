@@ -13,7 +13,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("UC-10: PM Connectors Management", func() {
+var _ = Describe("UC-10: PM Connectors Management", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -119,7 +119,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		}
 	})
 
-	Describe("UC-10-01: PM Connector List", func() {
+	Describe("UC-10-01: PM Connector List", Label("e2e"), func() {
 		Context("Accessing PM connectors page", func() {
 			It("should show PM connectors menu item for admin users", func() {
 				// Navigate to base URL first to ensure proper app initialization
@@ -194,7 +194,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-02: Create PM Connector", func() {
+	Describe("UC-10-02: Create PM Connector", Label("e2e"), func() {
 		Context("JIRA connector creation", func() {
 			It("should create a new JIRA connector", func() {
 				// Navigate to base URL first
@@ -298,7 +298,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-03: Configure Field Mappings", func() {
+	Describe("UC-10-03: Configure Field Mappings", Label("e2e"), func() {
 		Context("Visual field mapping interface", func() {
 			It("should allow configuring field mappings visually", func() {
 				// Assume we have a connector created
@@ -378,7 +378,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-04: Test Connection", func() {
+	Describe("UC-10-04: Test Connection", Label("e2e"), func() {
 		Context("Connection health check", func() {
 			It("should test connection and show health status", func() {
 				// Navigate to connector details
@@ -416,7 +416,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-05: Sync Configuration", func() {
+	Describe("UC-10-05: Sync Configuration", Label("e2e"), func() {
 		Context("Configure sync schedule", func() {
 			It("should allow configuring sync intervals", func() {
 				// Navigate to connector details
@@ -460,7 +460,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-06: Manual Sync", func() {
+	Describe("UC-10-06: Manual Sync", Label("e2e"), func() {
 		Context("Trigger manual synchronization", func() {
 			It("should allow manual sync of requirements", func() {
 				// Navigate to connector details
@@ -508,7 +508,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-07: View Sync History", func() {
+	Describe("UC-10-07: View Sync History", Label("e2e"), func() {
 		Context("Sync logs and history", func() {
 			It("should show sync history with details", func() {
 				// Navigate to connector details
@@ -539,7 +539,7 @@ var _ = Describe("UC-10: PM Connectors Management", func() {
 		})
 	})
 
-	Describe("UC-10-08: Security and Permissions", func() {
+	Describe("UC-10-08: Security and Permissions", Label("e2e"), func() {
 		Context("Role-based access control", func() {
 			It("should restrict PM connector management to admin users", func() {
 				// This test would require logging in as a non-admin user

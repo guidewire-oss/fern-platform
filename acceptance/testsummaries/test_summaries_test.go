@@ -14,7 +14,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("UC-02: Test Summaries and Visualization", func() {
+var _ = Describe("UC-02: Test Summaries and Visualization", Label("e2e"), func() {
 	var (
 		ctx     playwright.BrowserContext
 		page    playwright.Page
@@ -134,7 +134,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		}
 	})
 
-	Describe("UC-02-01: View Test Summary Dashboard", func() {
+	Describe("UC-02-01: View Test Summary Dashboard", Label("e2e"), func() {
 		Context("Team member views team projects", func() {
 			It("should show only projects from user's team", func() {
 				// Get all project cards - using .card class based on debug output
@@ -208,7 +208,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		})
 	})
 
-	Describe("UC-02-02: Toggle Between Card and Treemap Views", func() {
+	Describe("UC-02-02: Toggle Between Card and Treemap Views", Label("e2e"), func() {
 		Context("View toggle disabled when no projects", func() {
 			It("should disable view toggle when no projects exist", func() {
 				projectCards := page.Locator(".card")
@@ -336,7 +336,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		})
 	})
 
-	Describe("UC-02-03: Interact with Treemap Visualization", func() {
+	Describe("UC-02-03: Interact with Treemap Visualization", Label("e2e"), func() {
 		BeforeEach(func() {
 			// Skip if no projects
 			projectCards := page.Locator(".card")
@@ -405,7 +405,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		})
 	})
 
-	Describe("UC-02-04: View Test History", func() {
+	Describe("UC-02-04: View Test History", Label("e2e"), func() {
 		Context("Access test history", func() {
 			It("should show test history when clicking View Test History", func() {
 				// Find first project card
@@ -443,7 +443,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		})
 	})
 
-	Describe("UC-02-05: Mark Projects as Favorites", func() {
+	Describe("UC-02-05: Mark Projects as Favorites", Label("e2e"), func() {
 		Context("Mark project as favorite", func() {
 			It("should toggle favorite star and persist state", func() {
 				// Wait for page to load
@@ -536,7 +536,7 @@ var _ = Describe("UC-02: Test Summaries and Visualization", func() {
 		})
 	})
 
-	Describe("UC-02-06: Time Range Filtering", func() {
+	Describe("UC-02-06: Time Range Filtering", Label("e2e"), func() {
 		Context("Default time range", func() {
 			It("should show 7 days as default", func() {
 				// Find time range selector - debug showed 'select' elements exist

@@ -13,7 +13,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
+var _ = Describe("UC-03: Test Runs and Drill-Down", Label("e2e"), func() {
 	var (
 		ctx  playwright.BrowserContext
 		page playwright.Page
@@ -34,7 +34,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		}
 	})
 
-	Describe("UC-03-01: View Test Runs List", func() {
+	Describe("UC-03-01: View Test Runs List", Label("e2e"), func() {
 		Context("Team member views team test runs", func() {
 			It("should show only test runs from user's team projects", func() {
 				// Get test run rows
@@ -47,7 +47,8 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 				if count == 0 {
 					// Check for empty state
 					emptyState := page.Locator("text=/No test runs found/")
-					Expect(emptyState).To(HaveCount(1))
+					emptyCount, _ := emptyState.Count()
+					Expect(emptyCount).To(Equal(1))
 				} else {
 					// Verify columns in correct order
 					firstRow := testRuns.First()
@@ -65,13 +66,21 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 					startedCell := cells.Nth(6)
 
 					// Each cell should have content
-					Expect(projectCell).Not(To(BeEmpty()))
-					Expect(runIdCell).Not(To(BeEmpty()))
-					Expect(branchCell).Not(To(BeEmpty()))
-					Expect(testResultsCell).Not(To(BeEmpty()))
-					Expect(statusCell).Not(To(BeEmpty()))
-					Expect(durationCell).Not(To(BeEmpty()))
-					Expect(startedCell).Not(To(BeEmpty()))
+					projectText, _ := projectCell.TextContent()
+					runIdText, _ := runIdCell.TextContent()
+					branchText, _ := branchCell.TextContent()
+					testResultsText, _ := testResultsCell.TextContent()
+					statusText, _ := statusCell.TextContent()
+					durationText, _ := durationCell.TextContent()
+					startedText, _ := startedCell.TextContent()
+					
+					Expect(projectText).NotTo(BeEmpty())
+					Expect(runIdText).NotTo(BeEmpty())
+					Expect(branchText).NotTo(BeEmpty())
+					Expect(testResultsText).NotTo(BeEmpty())
+					Expect(statusText).NotTo(BeEmpty())
+					Expect(durationText).NotTo(BeEmpty())
+					Expect(startedText).NotTo(BeEmpty())
 				}
 			})
 		})
@@ -145,7 +154,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		})
 	})
 
-	Describe("UC-03-02: Navigate to Test Suite Details", func() {
+	Describe("UC-03-02: Navigate to Test Suite Details", Label("e2e"), func() {
 		Context("Click test run to view suites", func() {
 			It("should navigate to suite details when clicking test run", func() {
 				testRuns := page.Locator("table tbody tr, .test-run-row, [data-testid='test-run-row']")
@@ -200,10 +209,10 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 					status := cells.Nth(2)
 					duration := cells.Nth(3)
 
-					Expect(suiteName).Not(To(BeEmpty()))
-					Expect(testResults).Not(To(BeEmpty()))
-					Expect(status).Not(To(BeEmpty()))
-					Expect(duration).Not(To(BeEmpty()))
+					Expect(suiteName).ToNot(BeNil())
+					Expect(testResults).ToNot(BeNil())
+					Expect(status).ToNot(BeNil())
+					Expect(duration).ToNot(BeNil())
 
 					// Test results should be in format: total failed passed
 					resultsText, _ := testResults.TextContent()
@@ -240,7 +249,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		})
 	})
 
-	Describe("UC-03-03: Navigate to Test Spec Details", func() {
+	Describe("UC-03-03: Navigate to Test Spec Details", Label("e2e"), func() {
 		Context("Click suite to view specs", func() {
 			It("should navigate to spec details when clicking suite", func() {
 				// First navigate to a test run
@@ -308,7 +317,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		})
 	})
 
-	Describe("UC-03-04: Multi-Level Navigation", func() {
+	Describe("UC-03-04: Multi-Level Navigation", Label("e2e"), func() {
 		Context("Navigate from runs to suites to specs", func() {
 			It("should maintain navigation context through all levels", func() {
 				testRuns := page.Locator("table tbody tr, .test-run-row, [data-testid='test-run-row']")
@@ -378,7 +387,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		})
 	})
 
-	Describe("UC-03-05: Access Control at Each Level", func() {
+	Describe("UC-03-05: Access Control at Each Level", Label("e2e"), func() {
 		Context("Cannot access other team's test run", func() {
 			It("should show error when accessing unauthorized test run", func() {
 				// Try to access a test run ID that doesn't belong to user's team
@@ -396,7 +405,7 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 		})
 	})
 
-	Describe("UC-03-06: Empty States and Error Handling", func() {
+	Describe("UC-03-06: Empty States and Error Handling", Label("e2e"), func() {
 		Context("No test runs available", func() {
 			It("should show helpful empty state message", func() {
 				testRuns := page.Locator("table tbody tr, .test-run-row, [data-testid='test-run-row']")
@@ -404,7 +413,8 @@ var _ = Describe("UC-03: Test Runs and Drill-Down", func() {
 
 				if count == 0 {
 					emptyState := page.Locator("text=/No test runs found|Run your tests/")
-					Expect(emptyState).To(HaveCount(1))
+					emptyCount, _ := emptyState.Count()
+					Expect(emptyCount).To(Equal(1))
 				}
 			})
 		})

@@ -11,7 +11,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("Simple PM Connector Test", func() {
+var _ = Describe("Simple PM Connector Test", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext

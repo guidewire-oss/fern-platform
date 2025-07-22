@@ -17,6 +17,20 @@ import (
 
 type Ci struct{}
 
+// ContainerEcho is a simple echo function for testing
+func (m *Ci) ContainerEcho(stringArg string) string {
+	return stringArg
+}
+
+// GrepDir searches for a pattern in files within a directory
+func (m *Ci) GrepDir(directoryArg *dagger.Directory, pattern string) (string, error) {
+	ctx := context.Background()
+	return dag.Container().
+		From("alpine:3.19").
+		WithMountedDirectory("/search", directoryArg).
+		WithExec([]string{"grep", "-r", pattern, "/search"}).
+		Stdout(ctx)
+}
 
 // Build builds the Go application
 func (m *Ci) Build(
