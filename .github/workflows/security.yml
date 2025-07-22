@@ -80,6 +80,10 @@ jobs:
   dependency-track:
     name: Track Dependencies
     runs-on: ubuntu-latest
+    # Add required permissions for dependency submission
+    permissions:
+      contents: write  # Required to submit dependencies
+      security-events: write  # Required for dependency submission API
     steps:
     - uses: actions/checkout@v4
     
