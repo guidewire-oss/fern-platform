@@ -22,17 +22,17 @@ jobs:
     name: Lint Code
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v5.2.0
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
     
     - name: Download dependencies
       run: go mod download
     
-    - uses: dagger/dagger-for-github@v6.14.0
+    - uses: dagger/dagger-for-github@v7
       with:
         version: ${{ env.DAGGER_VERSION }}
         verb: call
@@ -43,17 +43,17 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v5.2.0
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
     
     - name: Download dependencies
       run: go mod download
     
-    - uses: dagger/dagger-for-github@v6.14.0
+    - uses: dagger/dagger-for-github@v7
       with:
         version: ${{ env.DAGGER_VERSION }}
         verb: call
@@ -65,7 +65,7 @@ jobs:
         go test -race -coverprofile=coverage.txt -covermode=atomic ./...
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4.6.0
+      uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./coverage.txt
@@ -77,9 +77,9 @@ jobs:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
-    - uses: dagger/dagger-for-github@v6.14.0
+    - uses: dagger/dagger-for-github@v7
       with:
         version: ${{ env.DAGGER_VERSION }}
         verb: call
@@ -90,10 +90,10 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v5.2.0
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
     
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     - uses: actions/dependency-review-action@v4.6.0
       with:
         fail-on-severity: moderate
@@ -120,20 +120,20 @@ jobs:
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3.8.0
+      uses: docker/setup-buildx-action@v3
     
     - name: Cache Docker layers
-      uses: actions/cache@v4.2.0
+      uses: actions/cache@v4
       with:
         path: /tmp/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-buildx-
     
-    - uses: dagger/dagger-for-github@v6.14.0
+    - uses: dagger/dagger-for-github@v7
       with:
         version: ${{ env.DAGGER_VERSION }}
         verb: call
@@ -146,9 +146,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
-    - uses: dagger/dagger-for-github@v6.14.0
+    - uses: dagger/dagger-for-github@v7
       with:
         version: ${{ env.DAGGER_VERSION }}
         verb: call
@@ -175,20 +175,20 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4.2.2
+    - uses: actions/checkout@v4
     
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3.2.0
+      uses: docker/setup-qemu-action@v3
       with:
         platforms: linux/amd64,linux/arm64
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3.8.0
+      uses: docker/setup-buildx-action@v3
       with:
         driver-opts: network=host
     
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3.3.0
+      uses: docker/login-action@v3.4.0
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -203,7 +203,7 @@ jobs:
     
     - name: Extract metadata
       id: meta
-      uses: docker/metadata-action@v5.6.1
+      uses: docker/metadata-action@v5
       with:
         images: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -220,7 +220,7 @@ jobs:
     
     - name: Build and push by platform
       id: build
-      uses: docker/build-push-action@v5.2.0
+      uses: docker/build-push-action@v6
       with:
         context: .
         platforms: ${{ matrix.platform }}
@@ -235,7 +235,7 @@ jobs:
         sbom: true
     
     - name: Generate SLSA attestation
-      uses: actions/attest-build-provenance@v2.1.0
+      uses: actions/attest-build-provenance@v2
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         subject-digest: ${{ steps.build.outputs.digest }}
@@ -253,10 +253,10 @@ jobs:
       packages: write
     steps:
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3.8.0
+      uses: docker/setup-buildx-action@v3
     
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3.3.0
+      uses: docker/login-action@v3.4.0
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -264,7 +264,7 @@ jobs:
     
     - name: Extract metadata
       id: meta
-      uses: docker/metadata-action@v5.6.1
+      uses: docker/metadata-action@v5
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
