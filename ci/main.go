@@ -192,7 +192,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 	
 	// Base builder stage
 	builder := dag.Container().
-		From("golang:1.24-alpine").
+		From("golang:1.24.5-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make"}).
@@ -220,10 +220,10 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 // Helper function to run tests
 func (m *Ci) runTests(ctx context.Context, source *dagger.Directory) (string, error) {
 	output, err := dag.Container().
-		From("golang:1.24-alpine").
+		From("golang:1.24.5-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
-		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev"}).
+		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
 		WithEnvVariable("CGO_ENABLED", "1").
 		WithExec([]string{"go", "mod", "download"}).
 		WithExec([]string{"go", "test", "-v", "-race", "-coverprofile=coverage.out", "./..."}).
@@ -241,12 +241,12 @@ func (m *Ci) runLint(ctx context.Context, source *dagger.Directory) (string, err
 	// Use golang base image and install golangci-lint
 	// This ensures we have the right Go version and modules
 	container := dag.Container().
-		From("golang:1.24-alpine").
+		From("golang:1.24.5-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
-		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev"}).
+		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
 		WithEnvVariable("CGO_ENABLED", "1").
-		WithEnvVariable("PATH", "/go/bin:$PATH").
+		WithEnvVariable("PATH", "/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithExec([]string{"go", "mod", "download"}).
 		// Install golangci-lint using go install (more secure than downloading scripts)
 		WithExec([]string{"go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5"})
@@ -309,7 +309,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		// Install Go with checksum verification
 		WithExec([]string{"sh", "-c", `
 			set -e
-			GO_VERSION="1.24.4"
+			GO_VERSION="1.24.5"
 			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
 			GO_URL="https://go.dev/dl/${GO_TARBALL}"
 			
@@ -961,7 +961,7 @@ func (m *Ci) AcceptanceTestSimple(
 		// Install Go with checksum verification
 		WithExec([]string{"sh", "-c", `
 			set -e
-			GO_VERSION="1.24.4"
+			GO_VERSION="1.24.5"
 			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
 			GO_URL="https://go.dev/dl/${GO_TARBALL}"
 			
