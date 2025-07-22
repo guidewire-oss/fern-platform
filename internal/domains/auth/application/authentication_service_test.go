@@ -314,17 +314,31 @@ var _ = Describe("AuthenticationService", func() {
 				IsActive:  true,
 			}
 
+			activeUser := &domain.User{
+				UserID:    "user-123",
+				Email:     "user@example.com",
+				Name:      "Test User",
+				Status:    domain.StatusActive,
+				Role:      domain.RoleUser,
+				CreatedAt: time.Now().Add(-24 * time.Hour),
+			}
+
 			mockSessionRepo.On("FindActiveByID", ctx, "valid-session-123").
 				Return(activeSession, nil)
 			mockSessionRepo.On("UpdateActivity", ctx, "valid-session-123").
 				Return(nil)
+			mockUserRepo.On("FindByID", ctx, "user-123").
+				Return(activeUser, nil)
 
 			validatedSession, err := authService.ValidateSession(ctx, "valid-session-123")
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(validatedSession).To(Equal(activeSession))
+			Expect(validatedSession).NotTo(BeNil())
+			Expect(validatedSession.SessionID).To(Equal("valid-session-123"))
+			Expect(validatedSession.User).To(Equal(activeUser))
 
 			mockSessionRepo.AssertExpectations(GinkgoT())
+			mockUserRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should handle non-existent session", func() {
@@ -372,11 +386,11 @@ var _ = Describe("AuthenticationService", func() {
 	})
 
 	Describe("Role Determination", func() {
-		It("should assign admin role based on admin flag", func() {
+		It("should assign admin role based on admin group", func() {
 			adminInfo := application.UserInfo{
 				Sub:    "admin-user",
 				Email:  "admin@example.com",
-				Roles:  []string{"admin"},
+				Groups: []string{"admin"},
 			}
 
 			tokenInfo := application.TokenInfo{ExpiresIn: 3600}
@@ -386,7 +400,9 @@ var _ = Describe("AuthenticationService", func() {
 			mockUserRepo.On("Create", ctx, mock.MatchedBy(func(u *domain.User) bool {
 				return u.Role == domain.RoleAdmin
 			})).Return(nil)
-			mockUserRepo.On("SetUserGroups", ctx, "admin-user", mock.Anything).
+			mockUserRepo.On("UpdateLastLogin", ctx, "admin-user", mock.AnythingOfType("time.Time")).
+				Return(nil)
+			mockUserRepo.On("SetUserGroups", ctx, "admin-user", []string{"admin"}).
 				Return(nil)
 			mockSessionRepo.On("Create", ctx, mock.Anything).Return(nil)
 
@@ -394,6 +410,9 @@ var _ = Describe("AuthenticationService", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.User.Role).To(Equal(domain.RoleAdmin))
+
+			mockUserRepo.AssertExpectations(GinkgoT())
+			mockSessionRepo.AssertExpectations(GinkgoT())
 		})
 	})
 })
