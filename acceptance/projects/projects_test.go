@@ -32,7 +32,7 @@ func BeEnabled() OmegaMatcher {
 	}, BeTrue())
 }
 
-var _ = Describe("UC-04: Project Management", func() {
+var _ = Describe("UC-04: Project Management", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -54,7 +54,7 @@ var _ = Describe("UC-04: Project Management", func() {
 		browser.Close()
 	})
 
-	Describe("UC-04-03: Delete Project with Cascade Delete", func() {
+	Describe("UC-04-03: Delete Project with Cascade Delete", Label("e2e"), func() {
 		Context("As a project administrator", func() {
 			BeforeEach(func() {
 				// Login as admin

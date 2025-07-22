@@ -71,7 +71,21 @@ var _ = BeforeSuite(func() {
 	// Save cookies for reuse
 	cookies, err := ctx.Cookies()
 	Expect(err).NotTo(HaveOccurred())
-	saveCookies(cookies)
+	// Convert cookies to OptionalCookie format
+	optCookies := make([]playwright.OptionalCookie, len(cookies))
+	for i, cookie := range cookies {
+		optCookies[i] = playwright.OptionalCookie{
+			Name:     cookie.Name,
+			Value:    cookie.Value,
+			Domain:   &cookie.Domain,
+			Path:     &cookie.Path,
+			Expires:  &cookie.Expires,
+			HttpOnly: &cookie.HttpOnly,
+			Secure:   &cookie.Secure,
+			SameSite: cookie.SameSite,
+		}
+	}
+	saveCookies(optCookies)
 
 	ctx.Close()
 })

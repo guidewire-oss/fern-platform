@@ -13,7 +13,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("UC-00: Authentication", func() {
+var _ = Describe("UC-00: Authentication", Label("acceptance", "auth", "e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -56,9 +56,22 @@ var _ = Describe("UC-00: Authentication", func() {
 				fmt.Printf("Recovered from panic in AfterEach: %v\n", r)
 			}
 
-			// Ensure browser is closed
+			// Force cleanup in correct order
+			// 1. Close page first
+			if page != nil {
+				_ = page.Close()
+				page = nil
+			}
+
+			// 2. Close context
+			if ctx != nil {
+				_ = ctx.Close()
+				ctx = nil
+			}
+
+			// 3. Close browser last
 			if browser != nil {
-				browser.Close()
+				_ = browser.Close()
 				browser = nil
 			}
 		}()
@@ -116,7 +129,7 @@ var _ = Describe("UC-00: Authentication", func() {
 		}
 	})
 
-	Describe("UC-00-01: User Login", func() {
+	Describe("UC-00-01: User Login", Label("e2e"), func() {
 		Context("Accessing platform redirects to login", func() {
 			It("should redirect unauthenticated users to login page", func() {
 				_, err := page.Goto(baseURL)
@@ -258,7 +271,7 @@ var _ = Describe("UC-00: Authentication", func() {
 		})
 	})
 
-	Describe("UC-00-02: User Logout", func() {
+	Describe("UC-00-02: User Logout", Label("e2e"), func() {
 		BeforeEach(func() {
 			// Login first
 			auth.Login()
@@ -313,7 +326,7 @@ var _ = Describe("UC-00: Authentication", func() {
 		})
 	})
 
-	Describe("UC-00-03: Session Management", func() {
+	Describe("UC-00-03: Session Management", Label("e2e"), func() {
 		BeforeEach(func() {
 			auth.Login()
 		})
@@ -352,7 +365,7 @@ var _ = Describe("UC-00: Authentication", func() {
 		})
 	})
 
-	Describe("UC-00-04: Authentication Error Handling", func() {
+	Describe("UC-00-04: Authentication Error Handling", Label("e2e"), func() {
 		Context("Account not found in any team", func() {
 			It("should show appropriate error for users without team", func() {
 				// This would require a test user without team assignment

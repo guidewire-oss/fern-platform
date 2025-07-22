@@ -11,7 +11,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
-var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func() {
+var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
 		ctx     playwright.BrowserContext
@@ -65,7 +65,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		}
 	})
 
-	Describe("UC-11-01: Create Mock JIRA Connector", func() {
+	Describe("UC-11-01: Create Mock JIRA Connector", Label("e2e"), func() {
 		It("should create a connector to the mock JIRA instance", func() {
 			// Navigate to PM connectors
 			_, err := page.Goto(baseURL + "/pm-connectors")
@@ -183,7 +183,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		})
 	})
 
-	Describe("UC-11-02: Link Connector to Project", func() {
+	Describe("UC-11-02: Link Connector to Project", Label("e2e"), func() {
 		It("should link the PM connector to an existing project", func() {
 			// First, navigate to projects
 			_, err := page.Goto(baseURL)
@@ -285,7 +285,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		})
 	})
 
-	Describe("UC-11-03: Configure Field Mappings", func() {
+	Describe("UC-11-03: Configure Field Mappings", Label("e2e"), func() {
 		It("should configure field mappings for the PM link", func() {
 			// Navigate back to the project
 			_, err := page.Goto(baseURL)
@@ -378,7 +378,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		})
 	})
 
-	Describe("UC-11-04: Verify Field Mapping Persistence", func() {
+	Describe("UC-11-04: Verify Field Mapping Persistence", Label("e2e"), func() {
 		It("should persist field mappings after save", func() {
 			// Navigate back to the project
 			_, err := page.Goto(baseURL)
@@ -422,7 +422,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		})
 	})
 
-	Describe("UC-11-05: Activate PM Link", func() {
+	Describe("UC-11-05: Activate PM Link", Label("e2e"), func() {
 		It("should activate the PM link after configuration", func() {
 			// Continue from previous test or navigate to project PM Tools
 
@@ -445,7 +445,7 @@ var _ = Describe("UC-11: PM Connector Project Linking and Field Mapping", func()
 		})
 	})
 
-	Describe("UC-11-06: Test Error Scenarios", func() {
+	Describe("UC-11-06: Test Error Scenarios", Label("e2e"), func() {
 		It("should handle invalid project ID gracefully", func() {
 			// Create a new connection with invalid project ID
 			addConnectionButton := page.Locator("button:has-text('Add Connection')")
