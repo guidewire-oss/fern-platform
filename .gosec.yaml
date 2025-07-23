@@ -1,0 +1,9 @@
+# GoSec configuration
+# Exclude the ci directory as it contains Dagger-generated code
+excludes:
+  - ci/
+  - acceptance/
+
+# Optionally exclude specific rules globally
+# rules:
+#   - G115  # integer overflow - can exclude if needed
