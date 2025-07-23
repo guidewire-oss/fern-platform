@@ -25,6 +25,13 @@ func NewTestServiceAdapter(service *application.TestRunService, logger *logging.
 	}
 }
 
+// sendJSON is a helper method to send JSON responses with error handling
+func (a *TestServiceAdapter) sendJSON(c *gin.Context, status int, data interface{}) {
+	if err := c.JSON(status, data); err != nil {
+		a.logger.WithError(err).Error("Failed to send JSON response")
+	}
+}
+
 // CreateTestRun handles POST /api/v1/test-runs
 func (a *TestServiceAdapter) CreateTestRun() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -66,7 +73,7 @@ func (a *TestServiceAdapter) GetTestRun() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := parseUintParam(c.Param("id"))
 		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid test run ID"})
+			a.sendJSON(c, 400, gin.H{"error": "Invalid test run ID"})
 			return
 		}
 
@@ -146,6 +153,11 @@ func (a *TestServiceAdapter) GetProjectTestRuns() gin.HandlerFunc {
 		limit := 50 // default
 		if limitStr := c.Query("limit"); limitStr != "" {
 			if l, err := parseUintParam(limitStr); err == nil {
+				// Check for integer overflow before conversion
+				if l > uint(^int(0)>>1) {
+					c.JSON(400, gin.H{"error": "Limit value too large"})
+					return
+				}
 				limit = int(l)
 			}
 		}
