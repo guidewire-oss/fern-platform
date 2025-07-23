@@ -68,8 +68,10 @@ jobs:
   dependency-track:
     name: Track Dependencies
     runs-on: ubuntu-latest
-    # Skip for PRs from forks as they don't have write permissions
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    # Skip for PRs from forks and for repositories that don't have dependency graph enabled
+    if: |
+      github.repository == 'guidewire-oss/fern-platform' && 
+      (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     # Add required permissions for dependency submission
     permissions:
       contents: write  # Required to submit dependencies
