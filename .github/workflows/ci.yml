@@ -198,12 +198,11 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}  # Use PAT if available, fallback to GITHUB_TOKEN
     
-    # Uncomment when Docker Hub credentials are available
-    # - name: Log in to Docker Hub
-    #   uses: docker/login-action@v3.3.0
-    #   with:
-    #     username: ${{ secrets.DOCKER_USERNAME }}
-    #     password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3.4.0
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
     
     - name: Extract metadata
       id: meta
@@ -211,8 +210,7 @@ jobs:
       with:
         images: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Uncomment when Docker Hub credentials are available
-          # docker.io/${{ secrets.DOCKER_USERNAME }}/fern-platform
+          docker.io/guidewireoss/fern-platform
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -266,11 +264,19 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}  # Use PAT if available, fallback to GITHUB_TOKEN
     
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3.4.0
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          docker.io/guidewireoss/fern-platform
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -281,10 +287,20 @@ jobs:
     
     - name: Create and push manifest
       run: |
-        # Parse tags from metadata output (one per line)
-        echo "${{ steps.meta.outputs.tags }}" | while IFS= read -r tag; do
+        # Create manifests for GitHub Container Registry
+        echo "${{ steps.meta.outputs.tags }}" | grep "ghcr.io" | while IFS= read -r tag; do
           [ -z "$tag" ] && continue
-          echo "Creating manifest for tag: $tag"
+          echo "Creating GHCR manifest for tag: $tag"
+          docker buildx imagetools create \
+            --tag "$tag" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-amd64" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-arm64"
+        done
+        
+        # Create manifests for Docker Hub
+        echo "${{ steps.meta.outputs.tags }}" | grep "docker.io" | while IFS= read -r tag; do
+          [ -z "$tag" ] && continue
+          echo "Creating Docker Hub manifest for tag: $tag"
           docker buildx imagetools create \
             --tag "$tag" \
             "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}-linux-amd64" \
