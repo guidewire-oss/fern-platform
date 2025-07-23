@@ -118,9 +118,10 @@ jobs:
   build:
     name: Build Images
     runs-on: ubuntu-latest
+    # For PRs, only run a single build test. For main/tags, build all platforms
     strategy:
       matrix:
-        platform: ["linux/amd64", "linux/arm64"]
+        platform: ${{ github.event_name == 'pull_request' && fromJson('["linux/amd64"]') || fromJson('["linux/amd64", "linux/arm64"]') }}
     steps:
     - uses: actions/checkout@v4
     
