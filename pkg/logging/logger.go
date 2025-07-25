@@ -34,7 +34,7 @@ func NewLogger(cfg *config.LoggingConfig) (*Logger, error) {
 		if cfg.Output == "stderr" {
 			output = os.Stderr
 		} else {
-			file, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			file, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
 				return nil, fmt.Errorf("failed to open log file %s: %w", cfg.Output, err)
 			}

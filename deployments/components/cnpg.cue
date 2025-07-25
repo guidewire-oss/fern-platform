@@ -44,25 +44,6 @@ template: {
 				primaryUpdateStrategy: parameter.primaryUpdateStrategy
 			}
 
-			// postgresql: {
-			// 	parameters: {
-			// 		if parameter.sharedBuffers != "" {
-			// 			"shared_buffers": parameter.sharedBuffers
-			// 		}
-			// 		if parameter.maxStatStatements != "" {
-			// 			"pg_stat_statements.max": parameter.maxStatStatements
-			// 		}
-			// 		if parameter.trackStatStatements != "" {
-			// 			"pg_stat_statements.track": parameter.trackStatStatements
-			// 		}
-			// 		if parameter.logMinDuration != "" {
-			// 			"auto_explain.log_min_duration": parameter.logMinDuration
-			// 		}
-			// 	}
-			// 	if len(parameter.pgHba) > 0 {
-			// 		pg_hba: parameter.pgHba
-			// 	}
-			// }
 			bootstrap: {
 				initdb: {
 					if parameter.initDatabase != "" {

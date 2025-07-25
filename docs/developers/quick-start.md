@@ -9,8 +9,75 @@
 
 | Time Available | Method | Best For |
 |----------------|---------|----------|
+| **2 minutes** | [Docker Quick Start](#-2-minute-docker-quick-start) | Quick evaluation |
 | **15 minutes** | [Full Local Setup](#-15-minute-full-setup) | Developers ready to explore |
 | **30 minutes** | [Production Ready](#-30-minute-production-setup) | Teams preparing for deployment |
+
+---
+
+## 🐳 2-Minute Docker Quick Start (Coming Soon)
+
+**Perfect for:** Quick evaluation without full setup
+
+> **Note**: Docker images are being published. Once available, you'll be able to use:
+> - `ghcr.io/guidewire-oss/fern-platform:latest`
+> - `docker.io/guidewireoss/fern-platform:latest`
+
+### Prerequisites
+- Docker Engine 20.10+
+- PostgreSQL and Redis (local or cloud)
+
+### Future Usage
+
+```bash
+# Once images are available:
+docker run -d \
+  --name fern-platform \
+  -p 8080:8080 \
+  -e DB_HOST=host.docker.internal \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=yourpassword \
+  -e DB_NAME=fern_platform \
+  -e REDIS_HOST=host.docker.internal \
+  ghcr.io/guidewire-oss/fern-platform:latest
+
+# Check health
+curl http://localhost:8080/health
+
+# View logs
+docker logs -f fern-platform
+```
+
+### Docker Compose (All-in-One)
+
+Save this as `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fern_platform
+  redis:
+    image: redis:7-alpine
+  fern-platform:
+    image: ghcr.io/guidewire-oss/fern-platform:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+    depends_on:
+      - postgres
+      - redis
+```
+
+Run: `docker-compose up -d`
+
+Visit `http://localhost:8080`
 
 ---
 
