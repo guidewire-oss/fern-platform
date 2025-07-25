@@ -1,26 +1,19 @@
-# SLSA GoReleaser configuration
-# Used by slsa-github-generator for reproducible builds
-
 version: 1
+
+# The main package
+main: ./cmd/fern-platform
 
 env:
   - CGO_ENABLED=0
 
 flags:
+  - -mod=readonly
   - -trimpath
   - -tags=netgo
 
-goos:
-  - linux
-  - darwin
-  - windows
-
-goarch:
-  - amd64
-  - arm64
-  - 386
-
-binary: fern-platform-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
+goos: linux
+goarch: amd64
+binary: fern-platform-{{ .Os }}-{{ .Arch }}
 
 ldflags:
   - "-s -w"

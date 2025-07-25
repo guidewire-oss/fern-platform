@@ -1115,8 +1115,25 @@
             
             <div class="installation-options">
                 <div class="installation-card">
-                    <h3>⚡ One-Command Setup</h3>
-                    <p>Perfect for local development and testing</p>
+                    <h3>🐳 Docker (Coming Soon)</h3>
+                    <p>Fastest way to try Fern Platform</p>
+                    <div class="code-block">
+# Docker images will be available soon at:
+# - ghcr.io/guidewire-oss/fern-platform:latest
+# - docker.io/guidewireoss/fern-platform:latest
+
+# Future usage:
+docker run -d --name fern-platform \
+  -p 8080:8080 \
+  -e DB_HOST=your-postgres-host \
+  ghcr.io/guidewire-oss/fern-platform:latest
+                    </div>
+                    <p><strong>Ready in:</strong> 2 minutes (once available)</p>
+                </div>
+                
+                <div class="installation-card">
+                    <h3>⚡ Full Local Setup</h3>
+                    <p>Complete platform with OAuth and sample data</p>
                     <div class="code-block">
 # Prerequisites: Docker, k3d, kubectl
 git clone https://github.com/guidewire-oss/fern-platform

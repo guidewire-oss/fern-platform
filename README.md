@@ -29,6 +29,14 @@ Think of it as a specialized analytics platform for your tests - like Datadog or
 
 ### Requirements
 
+Choose based on your installation method:
+
+**For Docker:**
+- Docker Engine 20.10+
+- PostgreSQL 14+ (external or containerized)
+- Redis 6+ (external or containerized)
+
+**For Kubernetes deployment:**
 - Docker with buildx
 - [k3d](https://k3d.io/stable/#installation) (lightweight Kubernetes)
 - kubectl
@@ -37,6 +45,31 @@ Think of it as a specialized analytics platform for your tests - like Datadog or
 - 8GB RAM minimum
 
 ### Installation
+
+Choose your preferred installation method:
+
+#### Option 1: Docker (Coming Soon)
+
+Docker images will be available after the v0.1.0 release:
+- GitHub Container Registry: `ghcr.io/guidewire-oss/fern-platform:latest`
+- Docker Hub: `docker.io/guidewireoss/fern-platform:latest`
+
+```bash
+# Future usage (not yet available):
+docker run -d \
+  --name fern-platform \
+  -p 8080:8080 \
+  -e DB_HOST=host.docker.internal \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=yourpassword \
+  -e DB_NAME=fern_platform \
+  -e REDIS_HOST=host.docker.internal \
+  ghcr.io/guidewire-oss/fern-platform:latest
+```
+
+For now, please use Option 2 (Kubernetes deployment) or build from source.
+
+#### Option 2: Kubernetes with OAuth (Full Features)
 
 ```bash
 # Clone the repository

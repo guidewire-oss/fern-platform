@@ -5,11 +5,9 @@ version: 2
 
 project_name: fern-platform
 
-# Generate SLSA provenance
-slsa:
-  enabled: true
-  attestation:
-    enabled: true
+# SLSA provenance is handled by a separate workflow
+# slsa:
+#   enabled: false
 
 before:
   hooks:
@@ -64,7 +62,6 @@ archives:
       - LICENSE
       - README.md
       - docs/developers/quick-start.md
-      - deployments/docker-compose.yml
       - deployments/fern-platform-kubevela.yaml
       - config/config.yaml
 
@@ -73,11 +70,13 @@ checksum:
   algorithm: sha256
 
 sboms:
-  - artifacts: archive
+  - id: spdx
+    artifacts: archive
     documents:
       - "${artifact}.spdx.sbom.json"
     args: ["${artifact}", "--output", "spdx-json=${document}"]
-  - artifacts: archive
+  - id: cyclonedx
+    artifacts: archive
     documents:
       - "${artifact}.cyclonedx.sbom.json"
     args: ["${artifact}", "--output", "cyclonedx-json=${document}"]
@@ -108,7 +107,7 @@ dockers:
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-amd64'
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-amd64'
     use: buildx
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
     build_flag_templates:
       - "--pull"
       - "--platform=linux/amd64"
@@ -125,7 +124,42 @@ dockers:
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-arm64'
     use: buildx
     goarch: arm64
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+      - "--label=org.opencontainers.image.description=Unified test intelligence platform"
+
+  # Docker Hub images - amd64
+  - image_templates:
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:latest-amd64'
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+      - "--label=org.opencontainers.image.description=Unified test intelligence platform"
+
+  # Docker Hub images - arm64
+  - image_templates:
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:latest-arm64'
+    use: buildx
+    goarch: arm64
+    dockerfile: Dockerfile.goreleaser
     build_flag_templates:
       - "--pull"
       - "--platform=linux/arm64"
@@ -138,6 +172,7 @@ dockers:
       - "--label=org.opencontainers.image.description=Unified test intelligence platform"
 
 docker_manifests:
+  # GHCR manifests
   - name_template: 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}'
     image_templates:
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:{{ .Version }}-amd64'
@@ -147,6 +182,17 @@ docker_manifests:
     image_templates:
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-amd64'
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-arm64'
+
+  # Docker Hub manifests
+  - name_template: 'docker.io/guidewireoss/{{ .ProjectName }}:{{ .Version }}'
+    image_templates:
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:{{ .Version }}-arm64'
+  
+  - name_template: 'docker.io/guidewireoss/{{ .ProjectName }}:latest'
+    image_templates:
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:latest-amd64'
+      - 'docker.io/guidewireoss/{{ .ProjectName }}:latest-arm64'
 
 changelog:
   sort: asc
@@ -234,48 +280,8 @@ release:
   
   extra_files:
     - glob: ./deployments/fern-platform-kubevela.yaml
-    - glob: ./deployments/docker-compose.yml
 
-nfpms:
-  - id: fern-platform
-    package_name: fern-platform
-    vendor: Guidewire
-    homepage: https://github.com/guidewire-oss/fern-platform
-    maintainer: Fern Platform Team <fern-platform@guidewire.com>
-    description: Unified test intelligence platform
-    license: Apache-2.0
-    formats:
-      - deb
-      - rpm
-      - apk
-    bindir: /usr/bin
-    section: utils
-    priority: optional
-    meta: false
-    contents:
-      - src: ./config/config.yaml
-        dst: /etc/fern-platform/config.yaml
-        type: config
-      - src: ./deployments/systemd/fern-platform.service
-        dst: /etc/systemd/system/fern-platform.service
-        type: config
-    scripts:
-      postinstall: ./scripts/postinstall.sh
-      preremove: ./scripts/preremove.sh
 
-brews:
-  - repository:
-      owner: guidewire-oss
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    folder: Formula
-    homepage: https://github.com/guidewire-oss/fern-platform
-    description: Unified test intelligence platform
-    license: Apache-2.0
-    test: |
-      system "#{bin}/fern-platform", "--version"
-    install: |
-      bin.install "fern-platform"
     
 announce:
   discord:

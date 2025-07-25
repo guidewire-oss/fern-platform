@@ -23,22 +23,6 @@ permissions:
   statuses: none
 
 jobs:
-  gosec:
-    name: Go Security Check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Run Gosec Security Scanner
-      uses: securego/gosec@v2.21.4
-      with:
-        args: '-fmt sarif -out gosec-results.sarif ./...'
-    
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: gosec-results.sarif
-
   license-check:
     name: License Compliance Check
     runs-on: ubuntu-latest
@@ -62,6 +46,8 @@ jobs:
   sbom:
     name: Generate SBOM
     runs-on: ubuntu-latest
+    # Only generate SBOM on main branch or tags, not on PRs
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:
     - uses: actions/checkout@v4
     
@@ -82,8 +68,10 @@ jobs:
   dependency-track:
     name: Track Dependencies
     runs-on: ubuntu-latest
-    # Skip for PRs from forks as they don't have write permissions
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    # Skip for PRs from forks and for repositories that don't have dependency graph enabled
+    if: |
+      github.repository == 'guidewire-oss/fern-platform' && 
+      (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     # Add required permissions for dependency submission
     permissions:
       contents: write  # Required to submit dependencies

@@ -2,6 +2,7 @@ name: Build Base Images
 
 on:
   push:
+    branches: [ main ]
     paths:
       - 'ci/Dockerfile.acceptance-test'
       - '.github/workflows/build-base-images.yml'
