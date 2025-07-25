@@ -210,7 +210,9 @@ func (m *Manager) Load(configPath string) error {
 	// Environment variable overrides
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	m.bindEnvVars()
+	if err := m.bindEnvVars(); err != nil {
+		return fmt.Errorf("failed to bind environment variables: %w", err)
+	}
 
 	// Unmarshal into config struct
 	config := &Config{}
@@ -297,65 +299,149 @@ func (m *Manager) setDefaults() {
 	viper.SetDefault("monitoring.health.timeout", "5s")
 }
 
-func (m *Manager) bindEnvVars() {
+func (m *Manager) bindEnvVars() error {
 	// Server
-	viper.BindEnv("server.port", "PORT", "SERVER_PORT")
-	viper.BindEnv("server.host", "HOST", "SERVER_HOST")
+	if err := viper.BindEnv("server.port", "PORT", "SERVER_PORT"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("server.host", "HOST", "SERVER_HOST"); err != nil {
+		return err
+	}
 
 	// Database
-	viper.BindEnv("database.host", "DB_HOST", "POSTGRES_HOST")
-	viper.BindEnv("database.port", "DB_PORT", "POSTGRES_PORT")
-	viper.BindEnv("database.user", "DB_USER", "POSTGRES_USER")
-	viper.BindEnv("database.password", "DB_PASSWORD", "POSTGRES_PASSWORD")
-	viper.BindEnv("database.dbname", "DB_NAME", "POSTGRES_DB")
-	viper.BindEnv("database.sslmode", "DB_SSLMODE", "POSTGRES_SSLMODE")
+	if err := viper.BindEnv("database.host", "DB_HOST", "POSTGRES_HOST"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.port", "DB_PORT", "POSTGRES_PORT"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.user", "DB_USER", "POSTGRES_USER"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.password", "DB_PASSWORD", "POSTGRES_PASSWORD"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.dbname", "DB_NAME", "POSTGRES_DB"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.sslmode", "DB_SSLMODE", "POSTGRES_SSLMODE"); err != nil {
+		return err
+	}
 
 	// Auth
-	viper.BindEnv("auth.enabled", "AUTH_ENABLED")
-	viper.BindEnv("auth.jwtSecret", "JWT_SECRET")
-	viper.BindEnv("auth.jwksUrl", "JWKS_URL")
-	viper.BindEnv("auth.issuer", "AUTH_ISSUER")
-	viper.BindEnv("auth.audience", "AUTH_AUDIENCE")
+	if err := viper.BindEnv("auth.enabled", "AUTH_ENABLED"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.jwtSecret", "JWT_SECRET"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.jwksUrl", "JWKS_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.issuer", "AUTH_ISSUER"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.audience", "AUTH_AUDIENCE"); err != nil {
+		return err
+	}
 
 	// OAuth
-	viper.BindEnv("auth.oauth.enabled", "OAUTH_ENABLED")
-	viper.BindEnv("auth.oauth.clientId", "OAUTH_CLIENT_ID")
-	viper.BindEnv("auth.oauth.clientSecret", "OAUTH_CLIENT_SECRET")
-	viper.BindEnv("auth.oauth.redirectUrl", "OAUTH_REDIRECT_URL")
-	viper.BindEnv("auth.oauth.authUrl", "OAUTH_AUTH_URL")
-	viper.BindEnv("auth.oauth.tokenUrl", "OAUTH_TOKEN_URL")
-	viper.BindEnv("auth.oauth.userInfoUrl", "OAUTH_USERINFO_URL")
-	viper.BindEnv("auth.oauth.jwksUrl", "OAUTH_JWKS_URL")
-	viper.BindEnv("auth.oauth.issuerUrl", "OAUTH_ISSUER_URL")
-	viper.BindEnv("auth.oauth.logoutUrl", "OAUTH_LOGOUT_URL")
+	if err := viper.BindEnv("auth.oauth.enabled", "OAUTH_ENABLED"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.clientId", "OAUTH_CLIENT_ID"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.clientSecret", "OAUTH_CLIENT_SECRET"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.redirectUrl", "OAUTH_REDIRECT_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.authUrl", "OAUTH_AUTH_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.tokenUrl", "OAUTH_TOKEN_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.userInfoUrl", "OAUTH_USERINFO_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.jwksUrl", "OAUTH_JWKS_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.issuerUrl", "OAUTH_ISSUER_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.logoutUrl", "OAUTH_LOGOUT_URL"); err != nil {
+		return err
+	}
 
 	// OAuth Admin and Field Mappings
-	viper.BindEnv("auth.oauth.adminUsers", "OAUTH_ADMIN_USERS")
-	viper.BindEnv("auth.oauth.adminGroups", "OAUTH_ADMIN_GROUPS")
-	viper.BindEnv("auth.oauth.userIdField", "OAUTH_USER_ID_FIELD")
-	viper.BindEnv("auth.oauth.emailField", "OAUTH_EMAIL_FIELD")
-	viper.BindEnv("auth.oauth.nameField", "OAUTH_NAME_FIELD")
-	viper.BindEnv("auth.oauth.groupsField", "OAUTH_GROUPS_FIELD")
-	viper.BindEnv("auth.oauth.rolesField", "OAUTH_ROLES_FIELD")
+	if err := viper.BindEnv("auth.oauth.adminUsers", "OAUTH_ADMIN_USERS"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.adminGroups", "OAUTH_ADMIN_GROUPS"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.userIdField", "OAUTH_USER_ID_FIELD"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.emailField", "OAUTH_EMAIL_FIELD"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.nameField", "OAUTH_NAME_FIELD"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.groupsField", "OAUTH_GROUPS_FIELD"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.rolesField", "OAUTH_ROLES_FIELD"); err != nil {
+		return err
+	}
 
 	// Role group names
-	viper.BindEnv("auth.oauth.adminGroupName", "OAUTH_ADMIN_GROUP_NAME")
-	viper.BindEnv("auth.oauth.managerGroupName", "OAUTH_MANAGER_GROUP_NAME")
-	viper.BindEnv("auth.oauth.userGroupName", "OAUTH_USER_GROUP_NAME")
+	if err := viper.BindEnv("auth.oauth.adminGroupName", "OAUTH_ADMIN_GROUP_NAME"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.managerGroupName", "OAUTH_MANAGER_GROUP_NAME"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.userGroupName", "OAUTH_USER_GROUP_NAME"); err != nil {
+		return err
+	}
 
 	// Redis
-	viper.BindEnv("redis.host", "REDIS_HOST")
-	viper.BindEnv("redis.port", "REDIS_PORT")
-	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	if err := viper.BindEnv("redis.host", "REDIS_HOST"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("redis.port", "REDIS_PORT"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("redis.password", "REDIS_PASSWORD"); err != nil {
+		return err
+	}
 
 	// LLM Providers
-	viper.BindEnv("llm.providers.anthropic.apiKey", "ANTHROPIC_API_KEY")
-	viper.BindEnv("llm.providers.openai.apiKey", "OPENAI_API_KEY")
-	viper.BindEnv("llm.providers.huggingface.apiKey", "HUGGINGFACE_API_KEY")
+	if err := viper.BindEnv("llm.providers.anthropic.apiKey", "ANTHROPIC_API_KEY"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("llm.providers.openai.apiKey", "OPENAI_API_KEY"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("llm.providers.huggingface.apiKey", "HUGGINGFACE_API_KEY"); err != nil {
+		return err
+	}
 
 	// Logging
-	viper.BindEnv("logging.level", "LOG_LEVEL")
-	viper.BindEnv("logging.format", "LOG_FORMAT")
+	if err := viper.BindEnv("logging.level", "LOG_LEVEL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("logging.format", "LOG_FORMAT"); err != nil {
+		return err
+	}
+	
+	return nil
 }
 
 func (m *Manager) validate(config *Config) error {

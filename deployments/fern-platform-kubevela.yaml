@@ -594,8 +594,9 @@ spec:
         - redis
         - keycloak
       properties:
-        image: fern-platform:latest
-        imagePullPolicy: IfNotPresent
+        # Use ghcr.io/guidewire-oss/fern-platform:latest or docker.io/guidewireoss/fern-platform:latest
+        image: ghcr.io/guidewire-oss/fern-platform:latest
+        imagePullPolicy: Always
         namespace: fern-platform
         ports:
           - port: 8080

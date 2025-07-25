@@ -1,0 +1,28 @@
+# Runtime stage for pre-built binaries from GoReleaser
+FROM alpine:3.21
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -g 1000 -S fern && \
+    adduser -u 1000 -S fern -G fern
+
+# Create directories
+RUN mkdir -p /app/web && \
+    chown -R fern:fern /app
+
+WORKDIR /app
+
+# Copy the pre-built binary from GoReleaser build context
+# The binary is at the root of the build context, not from repo paths
+COPY fern-platform /app/
+
+# Set ownership
+RUN chown -R fern:fern /app
+
+USER fern
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/fern-platform"]
