@@ -169,11 +169,16 @@ Feature: Visual Field Mapping Interface
     When the interface loads
     Then the system should auto-suggest mappings based on:
       | JIRA Field    | Suggested Fern Field | Confidence |
+      | Issue Key     | Requirement ID      | 100%       |
       | Summary       | Title               | 95%        |
       | Description   | Description         | 95%        |
-      | Issue Key     | External ID         | 100%       |
+      | Epic Link     | Parent Requirement  | 90%        |
+      | Issue Type    | Requirement Type    | 85%        |
+      | Fix Version/s | Release Version     | 85%        |
       | Status        | Status              | 80% (needs mapping) |
+      | Labels        | Tags                | 90%        |
     And suggested mappings should be shown with dashed lines
+    And required fields (Issue Key, Summary) should be marked with asterisks
 
   Scenario: Create field mapping with drag and drop
     Given I see the field lists
@@ -192,6 +197,14 @@ Feature: Visual Field Mapping Interface
       | Done          | Completed   |
       | Blocked       | On Hold     |
     And I should be able to add custom mappings
+
+  Scenario: Validate epic hierarchy mapping
+    Given I have mapped "Epic Link" to "Parent Requirement"
+    When I hover over the mapping line
+    Then I should see a tooltip explaining: "Creates parent-child relationships for hierarchical coverage reporting"
+    And when I save the mapping
+    Then the system should validate that epic issues will be synchronized
+    And show a preview of the hierarchy structure that will be created
 ```
 
 ### UC-11: Project PM Linking
