@@ -108,6 +108,10 @@ dockers:
       - 'ghcr.io/guidewire-oss/{{ .ProjectName }}:latest-amd64'
     use: buildx
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - config
+      - migrations
+      - web
     build_flag_templates:
       - "--pull"
       - "--platform=linux/amd64"
@@ -125,6 +129,10 @@ dockers:
     use: buildx
     goarch: arm64
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - config
+      - migrations
+      - web
     build_flag_templates:
       - "--pull"
       - "--platform=linux/arm64"
@@ -142,6 +150,10 @@ dockers:
       - 'docker.io/guidewireoss/{{ .ProjectName }}:latest-amd64'
     use: buildx
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - config
+      - migrations
+      - web
     build_flag_templates:
       - "--pull"
       - "--platform=linux/amd64"
@@ -160,6 +172,10 @@ dockers:
     use: buildx
     goarch: arm64
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - config
+      - migrations
+      - web
     build_flag_templates:
       - "--pull"
       - "--platform=linux/arm64"

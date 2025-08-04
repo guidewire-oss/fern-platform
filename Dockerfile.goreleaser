@@ -18,6 +18,11 @@ WORKDIR /app
 # The binary is at the root of the build context, not from repo paths
 COPY fern-platform /app/
 
+# Copy required directories from the repository
+COPY config /app/config
+COPY migrations /app/migrations
+COPY web /app/web
+
 # Set ownership
 RUN chown -R fern:fern /app
 

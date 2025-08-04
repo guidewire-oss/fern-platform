@@ -586,7 +586,7 @@ spec:
               ]
             }
 
-    # Fern Platform Service  
+    # Fern Platform Service
     - name: fern-platform
       type: webservice
       dependsOn:
@@ -595,7 +595,7 @@ spec:
         - keycloak
       properties:
         # Use ghcr.io/guidewire-oss/fern-platform:latest or docker.io/guidewireoss/fern-platform:latest
-        image: ghcr.io/guidewire-oss/fern-platform:latest
+        image: ghcr.io/guidewire-oss/fern-platform:0.1.0
         imagePullPolicy: Always
         namespace: fern-platform
         ports:
@@ -608,7 +608,7 @@ spec:
             value: redis
           - name: REDIS_PORT
             value: "6379"
-          
+
           # Core Authentication Configuration
           - name: AUTH_ENABLED
             value: "true"
@@ -618,7 +618,7 @@ spec:
             value: "http://keycloak:8080/realms/fern-platform"
           - name: AUTH_AUDIENCE
             value: "fern-platform-web"
-          
+
           # OAuth 2.0/OpenID Connect Configuration
           - name: OAUTH_ENABLED
             value: "true"
@@ -630,7 +630,7 @@ spec:
             value: "http://fern-platform.local:8080/auth/callback"
           - name: OAUTH_SCOPES
             value: "openid,profile,email,groups"
-          
+
           # OAuth Provider Endpoints
           # Auth URL must use external URL for browser redirects
           - name: OAUTH_AUTH_URL
@@ -645,17 +645,17 @@ spec:
             value: "http://keycloak:8080/realms/fern-platform"
           - name: OAUTH_LOGOUT_URL
             value: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/logout"
-          
+
           # Debug OAuth issues
           - name: DEBUG_OAUTH
             value: "true"
-          
+
           # Admin User and Group Configuration
           - name: OAUTH_ADMIN_USERS
             value: "admin@fern.com"
           - name: OAUTH_ADMIN_GROUPS
             value: "fern-platform-admins"
-          
+
           # Token Claim Field Mappings
           - name: OAUTH_USER_ID_FIELD
             value: "sub"
@@ -667,14 +667,14 @@ spec:
             value: "groups"
           - name: OAUTH_ROLES_FIELD
             value: "realm_roles"
-          
+
           # Cookie Configuration for local k3d
           - name: COOKIE_DOMAIN
-            value: ""  # Empty for local development (use current domain)
+            value: "" # Empty for local development (use current domain)
           - name: COOKIE_SECURE
-            value: "false"  # HTTP for local k3d
+            value: "false" # HTTP for local k3d
           - name: TRUST_PROXY
-            value: "false"  # No proxy in local k3d
+            value: "false" # No proxy in local k3d
         resources:
           requests:
             cpu: "200m"
@@ -753,19 +753,19 @@ spec:
         type: apply-component
         properties:
           component: postgres
-      
+
       # Step 2: Deploy Redis cache
       - name: deploy-redis
         type: apply-component
         properties:
           component: redis
-      
+
       # Step 3: Deploy Keycloak realm configuration
       - name: deploy-keycloak-config
         type: apply-component
         properties:
           component: keycloak-realm-config
-      
+
       # Step 4: Deploy Keycloak OAuth provider
       - name: deploy-keycloak
         type: apply-component
@@ -773,13 +773,13 @@ spec:
           - deploy-keycloak-config
         properties:
           component: keycloak
-      
+
       # Step 5: Wait for infrastructure to be ready
       - name: wait-for-infrastructure
         type: suspend
         properties:
           duration: 45s
-      
+
       # Step 6: Deploy fern-platform after all infrastructure is ready
       - name: deploy-application
         type: apply-component
