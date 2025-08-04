@@ -111,7 +111,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/dependency-review-action@v4.6.0
+    - uses: actions/dependency-review-action@v4.7.1
       with:
         fail-on-severity: moderate
 
