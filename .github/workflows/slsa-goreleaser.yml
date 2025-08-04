@@ -50,7 +50,7 @@ jobs:
         exclude:
           - os: windows
             arch: arm64
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
     with:
       go-version: "1.24"
       evaluated-envs: "COMMIT_DATE:${{needs.args.outputs.commit-date}},COMMIT:${{needs.args.outputs.commit}},VERSION:${{needs.args.outputs.version}},TREE_STATE:${{needs.args.outputs.tree-state}}"
@@ -69,7 +69,7 @@ jobs:
             arch: arm64
     steps:
       - name: Install SLSA verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
       
       - name: Download artifacts
         uses: actions/download-artifact@v4
