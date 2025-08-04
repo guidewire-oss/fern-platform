@@ -69,7 +69,7 @@ jobs:
             arch: arm64
     steps:
       - name: Install SLSA verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
       
       - name: Download artifacts
         uses: actions/download-artifact@v4
