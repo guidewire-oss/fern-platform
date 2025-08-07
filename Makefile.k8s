@@ -186,6 +186,8 @@ deploy-and-verify: ## Deploy application and verify it's running
 	@echo "☸️ Deploying Fern Platform application..."
 	@echo "📁 Creating namespace..."
 	@kubectl create namespace fern-platform > /dev/null 2>&1 || echo "✅ Namespace already exists"
+	@echo "🔧 Applying CNPG component definition..."
+	@vela def apply deployments/components/cnpg.cue
 	@echo "🚀 Applying KubeVela application..."
 	@kubectl apply -f deployments/fern-platform-kubevela.yaml
 	@echo "⏳ Waiting for initial deployment (60s)..."
