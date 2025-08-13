@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-jira
+  namespace: fern-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-jira
+  template:
+    metadata:
+      labels:
+        app: mock-jira
+    spec:
+      containers:
+      - name: mock-jira
+        image: mock-jira:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-jira
+  namespace: fern-platform
+spec:
+  selector:
+    app: mock-jira
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mock-jira
+  namespace: fern-platform
+spec:
+  rules:
+  - host: mock-jira.fern-platform.local
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: mock-jira
+            port:
+              number: 8080

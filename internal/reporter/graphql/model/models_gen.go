@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+type CreateJiraConnectionInput struct {
+	ProjectID          string `json:"projectId"`
+	Name               string `json:"name"`
+	JiraURL            string `json:"jiraUrl"`
+	AuthenticationType string `json:"authenticationType"`
+	ProjectKey         string `json:"projectKey"`
+	Username           string `json:"username"`
+	Credential         string `json:"credential"`
+}
+
 type CreateProjectInput struct {
 	ProjectID     string         `json:"projectId"`
 	Name          string         `json:"name"`
@@ -95,6 +105,21 @@ type HealthStatus struct {
 	Service   string    `json:"service"`
 	Timestamp time.Time `json:"timestamp"`
 	Version   *string   `json:"version,omitempty"`
+}
+
+type JiraConnection struct {
+	ID                 string     `json:"id"`
+	ProjectID          string     `json:"projectId"`
+	Name               string     `json:"name"`
+	JiraURL            string     `json:"jiraUrl"`
+	AuthenticationType string     `json:"authenticationType"`
+	ProjectKey         string     `json:"projectKey"`
+	Username           string     `json:"username"`
+	Status             string     `json:"status"`
+	IsActive           bool       `json:"isActive"`
+	LastTestedAt       *time.Time `json:"lastTestedAt,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
 type Mutation struct {
@@ -323,6 +348,18 @@ type TreemapData struct {
 	TotalDuration   int                   `json:"totalDuration"`
 	TotalTests      int                   `json:"totalTests"`
 	OverallPassRate float64               `json:"overallPassRate"`
+}
+
+type UpdateJiraConnectionInput struct {
+	Name       string `json:"name"`
+	JiraURL    string `json:"jiraUrl"`
+	ProjectKey string `json:"projectKey"`
+}
+
+type UpdateJiraCredentialsInput struct {
+	AuthenticationType string `json:"authenticationType"`
+	Username           string `json:"username"`
+	Credential         string `json:"credential"`
 }
 
 type UpdateProjectInput struct {

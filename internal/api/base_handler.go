@@ -56,3 +56,14 @@ func (h *BaseHandler) isManager(c *gin.Context) bool {
 	role := h.getUserRole(c)
 	return role == "admin" || role == "manager"
 }
+
+// getUserEmail extracts the user email from the context
+func (h *BaseHandler) getUserEmail(c *gin.Context) string {
+	email, _ := c.Get("user_email")
+	return email.(string)
+}
+
+// ErrorResponse sends an error response with the given status code and message
+func (h *BaseHandler) ErrorResponse(c *gin.Context, code int, message string) {
+	h.respondWithError(c, code, message)
+}

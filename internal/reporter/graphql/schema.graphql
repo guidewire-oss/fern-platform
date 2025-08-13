@@ -316,6 +316,44 @@ type RoleGroupConfig {
   userGroup: String!
 }
 
+# JIRA Integration Types
+type JiraConnection {
+  id: ID!
+  projectId: String!
+  name: String!
+  jiraUrl: String!
+  authenticationType: String!
+  projectKey: String!
+  username: String!
+  status: String!
+  isActive: Boolean!
+  lastTestedAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+input CreateJiraConnectionInput {
+  projectId: String!
+  name: String!
+  jiraUrl: String!
+  authenticationType: String!
+  projectKey: String!
+  username: String!
+  credential: String!
+}
+
+input UpdateJiraConnectionInput {
+  name: String!
+  jiraUrl: String!
+  projectKey: String!
+}
+
+input UpdateJiraCredentialsInput {
+  authenticationType: String!
+  username: String!
+  credential: String!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -429,6 +467,10 @@ type Query {
   ): FlakyTestConnection!
   flakyTestStats(projectId: String): FlakyTestStats!
   recentlyAddedFlakyTests(projectId: String, days: Int = 7, limit: Int = 10): [FlakyTest!]!
+  
+  # JIRA Connections
+  jiraConnection(id: ID!): JiraConnection
+  jiraConnections(projectId: String!): [JiraConnection!]!
 }
 
 # Mutation Root
@@ -458,6 +500,13 @@ type Mutation {
   # User Preferences
   updateUserPreferences(input: UpdateUserPreferencesInput!): UserPreferences!
   toggleProjectFavorite(projectId: String!): UserPreferences!
+  
+  # JIRA Connections
+  createJiraConnection(input: CreateJiraConnectionInput!): JiraConnection!
+  updateJiraConnection(id: ID!, input: UpdateJiraConnectionInput!): JiraConnection!
+  updateJiraCredentials(id: ID!, input: UpdateJiraCredentialsInput!): JiraConnection!
+  testJiraConnection(id: ID!): Boolean!
+  deleteJiraConnection(id: ID!): Boolean!
 }
 
 # Subscription Root (for future real-time features)

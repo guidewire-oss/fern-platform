@@ -99,13 +99,13 @@ var _ = Describe("DomainHandler Integration Tests", func() {
 		It("should return healthy status", func() {
 			// Create a handler - health check doesn't require services
 			// This is one of the few endpoints that works with nil services
-			handler := api.NewDomainHandler(nil, nil, nil, nil, nil, logger)
+			handler := api.NewDomainHandler(nil, nil, nil, nil, nil, nil, logger)
 			
 			// Register routes
 			handler.RegisterRoutes(router)
 			
 			// Create request
-			w := testhelpers.PerformRequest(router, "GET", "/api/v1/health", nil)
+			w := testhelpers.PerformRequest(router, "GET", "/health", nil)
 			
 			// Assert response
 			Expect(w.Code).To(Equal(http.StatusOK))
@@ -114,7 +114,7 @@ var _ = Describe("DomainHandler Integration Tests", func() {
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(response["status"]).To(Equal("healthy"))
-			Expect(response).To(HaveKey("timestamp"))
+			Expect(response).To(HaveKey("time"))
 		})
 	})
 
@@ -133,14 +133,14 @@ var _ = Describe("DomainHandler Integration Tests", func() {
 	
 	Describe("Route Registration", func() {
 		It("should register all expected routes", func() {
-			handler := api.NewDomainHandler(nil, nil, nil, nil, nil, logger)
+			handler := api.NewDomainHandler(nil, nil, nil, nil, nil, nil, logger)
 			handler.RegisterRoutes(router)
 			
 			routes := router.Routes()
 			
 			// Verify some key routes are registered
 			expectedPaths := []string{
-				"/api/v1/health",
+				"/health",
 				"/auth/login", 
 				"/auth/logout",
 				"/auth/callback",

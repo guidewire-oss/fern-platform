@@ -40,6 +40,9 @@ class GraphQLClient {
                 window.location.href = '/auth/login';
                 return;
             }
+            // Try to get error details
+            const errorText = await response.text();
+            console.error(`GraphQL request failed with status ${response.status}:`, errorText);
             throw new Error(`GraphQL request failed: ${response.status}`);
         }
 
@@ -234,55 +237,18 @@ const QUERIES = {
                 repository
                 defaultBranch
                 isActive
+                team
+                canManage
                 stats {
                     totalTestRuns
+                    recentTestRuns
+                    uniqueBranches
                     successRate
                     averageDuration
-                    flakyTestCount
+                    lastRunTime
                 }
-                recentRuns {
-                    id
-                    runId
-                    branch
-                    status
-                    startTime
-                    duration
-                    totalTests
-                    passedTests
-                    failedTests
-                }
-            }
-            
-            testRunStats(projectId: $projectId) {
-                totalRuns
-                statusCounts {
-                    status
-                    count
-                    percentage
-                }
-                averageDuration
-                successRate
-                trendsOverTime {
-                    date
-                    totalRuns
-                    passRate
-                    averageDuration
-                }
-            }
-            
-            flakyTests(filter: { projectId: $projectId }, first: 10) {
-                edges {
-                    node {
-                        id
-                        testName
-                        suiteName
-                        flakeRate
-                        totalExecutions
-                        lastSeenAt
-                        severity
-                        status
-                    }
-                }
+                createdAt
+                updatedAt
             }
         }
     `,
@@ -354,6 +320,95 @@ const QUERIES = {
                 userId
                 favorites
             }
+        }
+    `,
+    
+    // JIRA Connection queries
+    GET_JIRA_CONNECTIONS: `
+        query GetJiraConnections($projectId: String!) {
+            jiraConnections(projectId: $projectId) {
+                id
+                projectId
+                name
+                jiraUrl
+                authenticationType
+                projectKey
+                username
+                status
+                isActive
+                lastTestedAt
+                createdAt
+                updatedAt
+            }
+        }
+    `,
+    
+    CREATE_JIRA_CONNECTION: `
+        mutation CreateJiraConnection($input: CreateJiraConnectionInput!) {
+            createJiraConnection(input: $input) {
+                id
+                projectId
+                name
+                jiraUrl
+                authenticationType
+                projectKey
+                username
+                status
+                isActive
+                lastTestedAt
+                createdAt
+                updatedAt
+            }
+        }
+    `,
+    
+    UPDATE_JIRA_CONNECTION: `
+        mutation UpdateJiraConnection($id: ID!, $input: UpdateJiraConnectionInput!) {
+            updateJiraConnection(id: $id, input: $input) {
+                id
+                projectId
+                name
+                jiraUrl
+                authenticationType
+                projectKey
+                username
+                status
+                isActive
+                lastTestedAt
+                createdAt
+                updatedAt
+            }
+        }
+    `,
+    
+    UPDATE_JIRA_CREDENTIALS: `
+        mutation UpdateJiraCredentials($id: ID!, $input: UpdateJiraCredentialsInput!) {
+            updateJiraCredentials(id: $id, input: $input) {
+                id
+                projectId
+                name
+                jiraUrl
+                authenticationType
+                projectKey
+                username
+                status
+                isActive
+                lastTestedAt
+                createdAt
+                updatedAt
+            }
+        }
+    `,
+    
+    TEST_JIRA_CONNECTION: `
+        mutation TestJiraConnection($id: ID!) {
+            testJiraConnection(id: $id)
+        }
+    `,
+    
+    DELETE_JIRA_CONNECTION: `
+        mutation DeleteJiraConnection($id: ID!) {
+            deleteJiraConnection(id: $id)
         }
     `
 };

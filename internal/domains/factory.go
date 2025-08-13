@@ -27,6 +27,10 @@ import (
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	tagsInfra "github.com/guidewire-oss/fern-platform/internal/domains/tags/infrastructure"
 
+	// Integrations domain
+	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
+	integrationsInfra "github.com/guidewire-oss/fern-platform/internal/infrastructure/repositories"
+
 	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
@@ -55,6 +59,9 @@ type DomainFactory struct {
 
 	// Tags domain
 	tagService *tagsApp.TagService
+
+	// Integrations domain
+	jiraConnectionService *integrations.JiraConnectionService
 }
 
 // NewDomainFactory creates a new domain factory
@@ -79,6 +86,9 @@ func NewDomainFactory(db *gorm.DB, logger *logging.Logger, authConfig *config.Au
 
 	// Initialize Tags domain
 	factory.initTagsDomain()
+
+	// Initialize Integrations domain
+	factory.initIntegrationsDomain()
 
 	return factory
 }
@@ -204,4 +214,29 @@ func (f *DomainFactory) GetFlakyDetectionService() *analyticsApp.FlakyDetectionS
 // GetFlakyDetectionAdapter returns the flaky detection adapter
 func (f *DomainFactory) GetFlakyDetectionAdapter() *analyticsInterfaces.FlakyDetectionAdapter {
 	return f.flakyDetectionAdapter
+}
+
+// initIntegrationsDomain initializes the integrations domain components
+func (f *DomainFactory) initIntegrationsDomain() {
+	// Create repository
+	jiraConnRepo := integrationsInfra.NewGormJiraConnectionRepository(f.db)
+
+	// Create JIRA client
+	jiraClient := integrations.NewDefaultJiraClient()
+
+	// Get encryption key from config (or generate one)
+	// For now, use a placeholder - in production this should come from secure config
+	encryptionKey := []byte("your-32-byte-encryption-key-here") // TODO: Load from secure config
+
+	// Create service
+	f.jiraConnectionService = integrations.NewJiraConnectionService(
+		jiraConnRepo,
+		jiraClient,
+		encryptionKey,
+	)
+}
+
+// GetJiraConnectionService returns the JIRA connection service
+func (f *DomainFactory) GetJiraConnectionService() *integrations.JiraConnectionService {
+	return f.jiraConnectionService
 }

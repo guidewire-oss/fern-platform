@@ -7,7 +7,9 @@ import (
 	"time"
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
+	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/dataloader"
+	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 )
 
 // getLoaders gets the dataloader from context
@@ -210,4 +212,37 @@ func hasUserRole(user *authDomain.User, roleGroups *RoleGroupNames) bool {
 		}
 	}
 	return false
+}
+
+
+// convertJiraConnectionToModel converts a domain JIRA connection to GraphQL model
+func (r *Resolver) convertJiraConnectionToModel(conn *integrations.JiraConnection) *model.JiraConnection {
+	if conn == nil {
+		return nil
+	}
+
+	// Convert time pointers
+	var lastTestedAt *time.Time
+	if conn.LastTestedAt() != nil {
+		t := *conn.LastTestedAt()
+		lastTestedAt = &t
+	}
+
+	createdAt := conn.CreatedAt()
+	updatedAt := conn.UpdatedAt()
+
+	return &model.JiraConnection{
+		ID:                 conn.ID(),
+		ProjectID:          conn.ProjectID(),
+		Name:               conn.Name(),
+		JiraURL:            conn.JiraURL(),
+		AuthenticationType: string(conn.AuthenticationType()),
+		ProjectKey:         conn.ProjectKey(),
+		Username:           conn.Username(),
+		Status:             string(conn.Status()),
+		IsActive:           conn.IsActive(),
+		LastTestedAt:       lastTestedAt,
+		CreatedAt:          createdAt,
+		UpdatedAt:          updatedAt,
+	}
 }

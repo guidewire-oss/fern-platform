@@ -25,3 +25,12 @@ bin/
 
 # Environment-specific deployment files
 fern-platform-atmos-dev.yaml
+
+# Test and debug files
+test-jira-ui.html
+acceptance/test_config.json
+EOF < /dev/null
+bin/fern-platform
+
+# Temporary Dockerfile created by Makefile
+Dockerfile.fern-platform

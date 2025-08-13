@@ -290,9 +290,11 @@ func (r *mutationResolver) CreateProject_domain(ctx context.Context, input model
 		projectID = uuid.New().String()
 	}
 
-	// Determine team from user groups
+	// Use team from input if provided, otherwise determine from user groups
 	team := projectsDomain.Team("default") // Default team
-	if len(user.Groups) > 0 {
+	if input.Team != nil && *input.Team != "" {
+		team = projectsDomain.Team(*input.Team)
+	} else if len(user.Groups) > 0 {
 		team = projectsDomain.Team(user.Groups[0].GroupName)
 	}
 

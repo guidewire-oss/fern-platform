@@ -198,13 +198,34 @@ Creates a new test run. Used by test reporters.
 }
 ```
 
+##### Complete Test Run
+
+```http
+POST /api/v1/test-runs/complete
+```
+
+Completes a test run and updates its final status.
+
+**Request Body:**
+```json
+{
+    "runId": "run-123",
+    "status": "passed",
+    "endTime": "2025-06-25T10:05:00Z",
+    "totalTests": 100,
+    "passedTests": 95,
+    "failedTests": 3,
+    "skippedTests": 2
+}
+```
+
 ##### Update Test Run
 
 ```http
-PUT /api/v1/test-runs/:runId
+PUT /api/v1/test-runs/:id
 ```
 
-Updates a test run status and results.
+Updates a test run by its database ID.
 
 **Request Body:**
 ```json
@@ -220,32 +241,51 @@ Updates a test run status and results.
 
 #### Test Results
 
-##### Submit Test Results
+##### Create Suite Run
 
 ```http
-POST /api/v1/test-runs/:runId/results
+POST /api/v1/suite-runs
 ```
 
-Submits detailed test results for a run.
+Creates a suite run within a test run.
 
 **Request Body:**
 ```json
 {
-    "suite_runs": [
-        {
-            "suite_name": "API Tests",
-            "status": "passed",
-            "duration": 150,
-            "spec_runs": [
-                {
-                    "spec_name": "should authenticate user",
-                    "status": "passed",
-                    "duration": 50,
-                    "error_message": null
-                }
-            ]
-        }
-    ]
+    "testRunId": "run-123",
+    "suiteName": "API Tests",
+    "status": "passed",
+    "startTime": "2025-06-25T10:00:00Z",
+    "endTime": "2025-06-25T10:02:30Z",
+    "duration": 150000,
+    "totalSpecs": 10,
+    "passedSpecs": 9,
+    "failedSpecs": 1
+}
+```
+
+##### Create Spec Run
+
+```http
+POST /api/v1/spec-runs
+```
+
+Creates a spec run within a suite run.
+
+**Request Body:**
+```json
+{
+    "suiteRunId": 123,
+    "specName": "should authenticate user",
+    "status": "passed",
+    "startTime": "2025-06-25T10:00:00Z",
+    "endTime": "2025-06-25T10:00:50Z",
+    "duration": 50000,
+    "errorMessage": null,
+    "stackTrace": null,
+    "stdout": "",
+    "stderr": "",
+    "retries": 0
 }
 ```
 

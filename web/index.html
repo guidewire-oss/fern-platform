@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Fern Platform - Modern Test Intelligence</title>
     
     <!-- Favicon -->
@@ -12,7 +15,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="/web/js/graphql-client.js?v=2"></script>
+    <script src="/web/js/graphql-client.js?v=5"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
     
@@ -67,6 +70,12 @@
         .fas.fa-sort::before { content: "↕️" !important; }
         .fas.fa-eye::before { content: "👁️" !important; }
         .fas.fa-tachometer-alt::before { content: "📊" !important; }
+        .fas.fa-info-circle::before { content: "ℹ️" !important; }
+        .fas.fa-edit::before { content: "✏️" !important; }
+        .fas.fa-trash::before { content: "🗑️" !important; }
+        .fas.fa-user::before { content: "👤" !important; }
+        .fas.fa-clock::before { content: "🕐" !important; }
+        .fas.fa-external-link-alt::before { content: "↗️" !important; }
         
         /* Ensure icons work when FontAwesome loads */
         .fas[class*="fa-"]::before {
@@ -1046,6 +1055,26 @@
             transform: translateX(-2px);
         }
         
+        /* Action button styles */
+        .action-button:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-xs);
+        }
+        
+        .action-button.delete-button:hover {
+            background: var(--error);
+            border-color: var(--error);
+            color: white;
+        }
+        
         .history-title {
             flex: 1;
         }
@@ -1458,6 +1487,85 @@
             font-size: 0.75rem;
             font-weight: 600;
         }
+
+        /* Field Mapping Styles */
+        .field-mapping-modal {
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dragging {
+            opacity: 0.5;
+            cursor: grabbing !important;
+        }
+
+        .drag-over {
+            background: var(--primary)10 !important;
+            border-color: var(--primary) !important;
+            transform: scale(1.02);
+        }
+
+        .field-card {
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .field-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--primary)05 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .field-card:hover::before {
+            opacity: 1;
+        }
+
+        .mapping-line {
+            stroke: var(--primary);
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5,5;
+            animation: dash 20s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -100;
+            }
+        }
+
+        .pulse-icon {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1465,7 +1573,10 @@
 
     <script type="text/babel">
         // Destructure React hooks at the top level
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
+        
+        // Make GraphQL queries available globally
+        const GRAPHQL_QUERIES = window.GRAPHQL_QUERIES;
 
         // User preferences management system
         function useUserPreferences() {
@@ -5559,12 +5670,18 @@
 
             const handleCreateProject = async (projectData) => {
                 try {
-                    await graphqlClient.mutation(GRAPHQL_QUERIES.CREATE_PROJECT, {
+                    // First create the project
+                    const projectResult = await graphqlClient.mutation(GRAPHQL_QUERIES.CREATE_PROJECT, {
                         input: {
                             projectId: '', // Empty string - will be auto-generated
-                            ...projectData
+                            name: projectData.name,
+                            description: projectData.description,
+                            team: projectData.team,
+                            repository: projectData.repository,
+                            defaultBranch: projectData.defaultBranch
                         }
                     });
+                    
                     setShowCreateModal(false);
                     fetchProjects();
                 } catch (err) {
@@ -5891,6 +6008,37 @@
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
+                                                                console.log('Settings button clicked for project:', project.projectId);
+                                                                window.location.hash = `/project/${project.projectId}/settings`;
+                                                            }}
+                                                            title="Project Settings"
+                                                            style={{
+                                                                background: 'var(--bg-secondary)',
+                                                                border: '1px solid var(--border-light)',
+                                                                borderRadius: 'var(--radius-md)',
+                                                                padding: '0.5rem 0.75rem',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--text-secondary)',
+                                                                transition: 'all 0.2s ease',
+                                                                fontSize: '0.875rem'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.target.style.background = 'var(--secondary)';
+                                                                e.target.style.color = 'white';
+                                                                e.target.style.borderColor = 'var(--secondary)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.target.style.background = 'var(--bg-secondary)';
+                                                                e.target.style.color = 'var(--text-secondary)';
+                                                                e.target.style.borderColor = 'var(--border-light)';
+                                                            }}
+                                                        >
+                                                            ⚙️
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 console.log('Edit button clicked for project:', project.id, project.name);
                                                                 setEditingProject(project);
                                                             }}
@@ -5964,7 +6112,7 @@
                     {/* Create/Edit Project Modal */}
                     {(showCreateModal || editingProject) && (
                         <ProjectModal
-                            project={editingProject}
+                            project={showCreateModal && !editingProject ? null : editingProject}
                             teams={userTeams}
                             isAdmin={isAdmin}
                             onSubmit={editingProject ? 
@@ -6141,6 +6289,8 @@
 
         // Project Modal Component
         function ProjectModal({ project, teams, isAdmin, onSubmit, onClose }) {
+            console.log('ProjectModal rendered with project:', project);
+            const [activeTab, setActiveTab] = useState('general');
             const [formData, setFormData] = useState({
                 name: project?.name || '',
                 description: project?.description || '',
@@ -6149,12 +6299,20 @@
                 defaultBranch: project?.defaultBranch || 'main'
             });
 
+
+
+
+
+
+
+
             const handleSubmit = (e) => {
                 e.preventDefault();
                 if (!formData.name.trim()) {
                     alert('Project name is required');
                     return;
                 }
+                
                 onSubmit(formData);
             };
 
@@ -6175,7 +6333,7 @@
                         background: 'var(--bg-primary)',
                         borderRadius: 'var(--radius-xl)',
                         padding: '2rem',
-                        maxWidth: '500px',
+                        maxWidth: '600px',
                         width: '90%',
                         maxHeight: '90vh',
                         overflow: 'auto',
@@ -6185,11 +6343,39 @@
                             {project ? 'Edit Project' : 'Create New Project'}
                         </h3>
                         
+                        {/* Tab Navigation */}
+                        <div style={{
+                                display: 'flex',
+                                borderBottom: '2px solid var(--border-color)',
+                                marginBottom: '2rem'
+                            }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('general')}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        background: 'none',
+                                        border: 'none',
+                                        borderBottom: activeTab === 'general' ? '2px solid var(--primary)' : '2px solid transparent',
+                                        color: activeTab === 'general' ? 'var(--primary)' : 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        fontWeight: activeTab === 'general' ? '600' : '400',
+                                        marginBottom: '-2px',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    General
+                                </button>
+                        </div>
+                        
                         <form onSubmit={handleSubmit}>
-                            <div style={{marginBottom: '1rem'}}>
-                                <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: '500'}}>
-                                    Project Name *
-                                </label>
+                            {/* General Tab Content */}
+                            {activeTab === 'general' && (
+                                <div>
+                                    <div style={{marginBottom: '1rem'}}>
+                                        <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: '500'}}>
+                                            Project Name *
+                                        </label>
                                 <input
                                     type="text"
                                     value={formData.name}
@@ -6290,8 +6476,11 @@
                                     }}
                                 />
                             </div>
+                                </div>
+                            )}
+
                             
-                            <div style={{display: 'flex', gap: '0.75rem', justifyContent: 'flex-end'}}>
+                            <div style={{display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem'}}>
                                 <button
                                     type="button"
                                     onClick={onClose}
@@ -6328,6 +6517,1946 @@
             );
         }
 
+        // JIRA Connection Management Component
+        function JiraConnectionManager({ projectId }) {
+            const [connections, setConnections] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [editingConnection, setEditingConnection] = useState(null);
+            const [testingConnection, setTestingConnection] = useState(null);
+            const [showFieldMapping, setShowFieldMapping] = useState(false);
+            const [mappingConnection, setMappingConnection] = useState(null);
+
+            useEffect(() => {
+                fetchConnections();
+            }, [projectId]);
+
+            const fetchConnections = async () => {
+                try {
+                    setLoading(true);
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_CONNECTIONS, { projectId });
+                    setConnections(data.jiraConnections || []);
+                } catch (err) {
+                    console.error('Failed to fetch JIRA connections:', err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleAddConnection = () => {
+                setEditingConnection(null);
+                setShowAddModal(true);
+            };
+
+            const handleEditConnection = (connection) => {
+                setEditingConnection(connection);
+                setShowAddModal(true);
+            };
+
+            const handleTestConnection = async (connectionId) => {
+                try {
+                    setTestingConnection(connectionId);
+                    console.log('Testing connection:', connectionId);
+                    const result = await graphqlClient.mutation(GRAPHQL_QUERIES.TEST_JIRA_CONNECTION, { id: connectionId });
+                    // Check if the test was successful (true), not just if it exists
+                    if (result.testJiraConnection === true) {
+                        // Success - refresh to get updated status
+                        await fetchConnections();
+                        alert('Connection test successful!');
+                    } else {
+                        // Test returned false - connection failed
+                        await fetchConnections();
+                        alert('Connection test failed. Please check your credentials and JIRA configuration.');
+                    }
+                } catch (err) {
+                    console.error('Connection test error:', err);
+                    alert(`Connection test failed: ${err.message}`);
+                } finally {
+                    setTestingConnection(null);
+                }
+            };
+
+            const handleDeleteConnection = async (connectionId) => {
+                if (!confirm('Are you sure you want to remove this JIRA connection?')) {
+                    return;
+                }
+
+                try {
+                    await graphqlClient.mutation(GRAPHQL_QUERIES.DELETE_JIRA_CONNECTION, { id: connectionId });
+                    await fetchConnections();
+                } catch (err) {
+                    alert(`Failed to delete connection: ${err.message}`);
+                }
+            };
+
+            const handleFieldMapping = (connection) => {
+                setMappingConnection(connection);
+                setShowFieldMapping(true);
+            };
+
+            const getStatusBadge = (status) => {
+                const statusConfig = {
+                    pending: { color: '#6b7280', icon: '⏸️', text: 'Not Tested' },
+                    connected: { color: '#10b981', icon: '✓', text: 'Connected' },
+                    failed: { color: '#ef4444', icon: '✗', text: 'Failed' }
+                };
+
+                const config = statusConfig[status] || statusConfig.pending;
+
+                return (
+                    <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: 'var(--radius-full)',
+                        background: `${config.color}20`,
+                        color: config.color,
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                    }}>
+                        <span>{config.icon}</span>
+                        {config.text}
+                    </span>
+                );
+            };
+
+            const getAuthTypeBadge = (authType) => {
+                const typeConfig = {
+                    api_token: { color: '#3b82f6', text: 'API Token' },
+                    oauth: { color: '#8b5cf6', text: 'OAuth' },
+                    personal_access_token: { color: '#f59e0b', text: 'PAT' }
+                };
+
+                const config = typeConfig[authType] || { color: '#6b7280', text: authType };
+
+                return (
+                    <span style={{
+                        padding: '0.125rem 0.5rem',
+                        borderRadius: 'var(--radius-sm)',
+                        background: `${config.color}15`,
+                        color: config.color,
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.025em'
+                    }}>
+                        {config.text}
+                    </span>
+                );
+            };
+
+            if (loading) {
+                return (
+                    <div style={{ padding: '2rem', textAlign: 'center' }}>
+                        <div className="loading-spinner"></div>
+                        <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>Loading JIRA connections...</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div style={{ padding: '1.5rem' }}>
+                    <div style={{ 
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <div>
+                            <h3 style={{ margin: 0, marginBottom: '0.25rem' }}>🔗 JIRA Connection</h3>
+                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                {connections.length === 0 
+                                    ? 'Connect to JIRA to track test coverage for your requirements'
+                                    : 'Your project is connected to JIRA for requirement tracking'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleAddConnection}
+                            disabled={connections.length > 0}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.5rem 1rem',
+                                border: 'none',
+                                borderRadius: 'var(--radius-md)',
+                                background: connections.length > 0 ? 'var(--bg-tertiary)' : 'var(--primary)',
+                                color: connections.length > 0 ? 'var(--text-secondary)' : 'white',
+                                cursor: connections.length > 0 ? 'not-allowed' : 'pointer',
+                                fontWeight: '600',
+                                fontSize: '0.875rem',
+                                opacity: connections.length > 0 ? 0.6 : 1
+                            }}
+                        >
+                            <i className="fas fa-plus-circle"></i>
+                            Add JIRA Connection
+                        </button>
+                    </div>
+
+                    {connections.length === 0 ? (
+                        <div style={{
+                            padding: '3rem',
+                            textAlign: 'center',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-lg)',
+                            border: '2px dashed var(--border-color)'
+                        }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}>🔌</div>
+                            <h4 style={{ margin: 0, marginBottom: '0.5rem' }}>No JIRA Connections</h4>
+                            <p style={{ margin: 0, marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
+                                Connect your JIRA instance to enable test coverage tracking
+                            </p>
+                            <button
+                                onClick={handleAddConnection}
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    border: 'none',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: 'var(--primary)',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                }}
+                            >
+                                Add Your First Connection
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {connections.length > 0 && (
+                                <div style={{
+                                    padding: '1rem',
+                                    background: 'var(--info)10',
+                                    border: '1px solid var(--info)30',
+                                    borderRadius: 'var(--radius-md)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.75rem'
+                                }}>
+                                    <i className="fas fa-info-circle" style={{ color: 'var(--info)' }}></i>
+                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                        Each project supports one JIRA connection at a time. To connect to a different JIRA instance, first delete the existing connection.
+                                    </span>
+                                </div>
+                            )}
+                            {connections.map(connection => (
+                                <div key={connection.id} style={{
+                                    padding: '2rem',
+                                    background: 'var(--bg-surface)',
+                                    borderRadius: 'var(--radius-lg)',
+                                    border: '1px solid var(--border-color)',
+                                    boxShadow: 'var(--shadow-md)',
+                                    transition: 'all 0.2s ease',
+                                    position: 'relative'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2rem' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>{connection.name}</h4>
+                                                {getStatusBadge(connection.status)}
+                                                {getAuthTypeBadge(connection.authenticationType)}
+                                                {connection.isActive && (
+                                                    <span style={{
+                                                        padding: '0.125rem 0.5rem',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        background: 'var(--success)15',
+                                                        color: 'var(--success)',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: '600'
+                                                    }}>
+                                                        ACTIVE
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            <div style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: 'repeat(2, 1fr)',
+                                                gap: '1.5rem',
+                                                marginBottom: '1rem'
+                                            }}>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    background: 'var(--bg-tertiary)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)'
+                                                }}>
+                                                    <span style={{ 
+                                                        fontSize: '0.75rem', 
+                                                        color: 'var(--text-secondary)',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em',
+                                                        fontWeight: '600'
+                                                    }}>JIRA URL</span>
+                                                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+                                                        <a href={connection.jiraUrl} target="_blank" rel="noopener noreferrer" style={{
+                                                            color: 'var(--primary)',
+                                                            textDecoration: 'none',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.25rem'
+                                                        }}>
+                                                            {connection.jiraUrl}
+                                                            <i className="fas fa-external-link-alt" style={{ fontSize: '0.75rem' }}></i>
+                                                        </a>
+                                                    </p>
+                                                </div>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    background: 'var(--bg-tertiary)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)'
+                                                }}>
+                                                    <span style={{ 
+                                                        fontSize: '0.75rem', 
+                                                        color: 'var(--text-secondary)',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em',
+                                                        fontWeight: '600'
+                                                    }}>Project Key</span>
+                                                    <p style={{ margin: '0.5rem 0 0 0', fontWeight: '600', fontSize: '1rem' }}>{connection.projectKey}</p>
+                                                </div>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    background: 'var(--bg-tertiary)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)'
+                                                }}>
+                                                    <span style={{ 
+                                                        fontSize: '0.75rem', 
+                                                        color: 'var(--text-secondary)',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em',
+                                                        fontWeight: '600'
+                                                    }}>Username</span>
+                                                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+                                                        <i className="fas fa-user" style={{ marginRight: '0.5rem', color: 'var(--text-secondary)' }}></i>
+                                                        {connection.username}
+                                                    </p>
+                                                </div>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    background: 'var(--bg-tertiary)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)'
+                                                }}>
+                                                    <span style={{ 
+                                                        fontSize: '0.75rem', 
+                                                        color: 'var(--text-secondary)',
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em',
+                                                        fontWeight: '600'
+                                                    }}>Last Tested</span>
+                                                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+                                                        <i className="fas fa-clock" style={{ marginRight: '0.5rem', color: 'var(--text-secondary)' }}></i>
+                                                        {connection.lastTestedAt ? formatDate(new Date(connection.lastTestedAt)) : 'Never'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column', minWidth: '180px' }}>
+                                            <button
+                                                onClick={() => handleTestConnection(connection.id)}
+                                                disabled={testingConnection === connection.id}
+                                                className="action-button"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem 1rem',
+                                                    border: '1px solid var(--border-color)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    background: 'var(--bg-secondary)',
+                                                    color: 'var(--text-primary)',
+                                                    cursor: testingConnection === connection.id ? 'not-allowed' : 'pointer',
+                                                    opacity: testingConnection === connection.id ? 0.6 : 1,
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: '500',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                title="Test Connection"
+                                            >
+                                                {testingConnection === connection.id ? (
+                                                    <>
+                                                        <i className="fas fa-spinner fa-spin"></i>
+                                                        Testing...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="fas fa-flask"></i>
+                                                        Test Connection
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={() => handleFieldMapping(connection)}
+                                                className="action-button"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem 1rem',
+                                                    border: '1px solid var(--primary)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    background: 'var(--primary)10',
+                                                    color: 'var(--primary)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: '500',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                title="Configure Field Mapping"
+                                            >
+                                                <span style={{ marginRight: '0.5rem' }}>🎯</span>
+                                                Configure Mapping
+                                            </button>
+                                            <button
+                                                onClick={() => handleEditConnection(connection)}
+                                                className="action-button"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem 1rem',
+                                                    border: '1px solid var(--border-color)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    background: 'var(--bg-secondary)',
+                                                    color: 'var(--text-primary)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: '500',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                title="Edit Connection"
+                                            >
+                                                <i className="fas fa-edit"></i>
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteConnection(connection.id)}
+                                                className="action-button delete-button"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem 1rem',
+                                                    border: '1px solid var(--error)30',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    background: 'var(--error)10',
+                                                    color: 'var(--error)',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: '500',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                title="Remove Connection"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                                Delete Connection
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {showAddModal && (
+                        <JiraConnectionModal
+                            projectId={projectId}
+                            connection={editingConnection}
+                            onClose={() => {
+                                setShowAddModal(false);
+                                setEditingConnection(null);
+                            }}
+                            onSuccess={() => {
+                                setShowAddModal(false);
+                                setEditingConnection(null);
+                                fetchConnections();
+                            }}
+                        />
+                    )}
+
+                    {showFieldMapping && mappingConnection && (
+                        <FieldMappingModal
+                            connection={mappingConnection}
+                            onClose={() => {
+                                setShowFieldMapping(false);
+                                setMappingConnection(null);
+                            }}
+                            onSuccess={() => {
+                                setShowFieldMapping(false);
+                                setMappingConnection(null);
+                            }}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // JIRA Connection Modal Component
+        function JiraConnectionModal({ projectId, connection, onClose, onSuccess }) {
+            const [formData, setFormData] = useState({
+                name: connection?.name || '',
+                jiraUrl: connection?.jiraUrl || '',
+                authenticationType: connection?.authenticationType || 'api_token',
+                projectKey: connection?.projectKey || '',
+                username: connection?.username || '',
+                credential: ''
+            });
+            const [loading, setLoading] = useState(false);
+            const [errors, setErrors] = useState({});
+            const [showPassword, setShowPassword] = useState(false);
+
+            const validateForm = () => {
+                const newErrors = {};
+                
+                if (!formData.name.trim()) {
+                    newErrors.name = 'Connection name is required';
+                }
+                
+                if (!formData.jiraUrl.trim()) {
+                    newErrors.jiraUrl = 'JIRA URL is required';
+                } else if (!formData.jiraUrl.match(/^https?:\/\/.+/)) {
+                    newErrors.jiraUrl = 'Please enter a valid URL';
+                }
+                
+                if (!formData.projectKey.trim()) {
+                    newErrors.projectKey = 'Project key is required';
+                }
+                
+                if (!formData.username.trim()) {
+                    newErrors.username = 'Username is required';
+                }
+                
+                if (!connection && !formData.credential.trim()) {
+                    newErrors.credential = 'API token is required';
+                }
+                
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                
+                if (loading) {
+                    return; // Prevent double submission
+                }
+                
+                if (!validateForm()) {
+                    return;
+                }
+
+                try {
+                    setLoading(true);
+                    
+                    if (connection) {
+                        // Update existing connection
+                        await graphqlClient.mutation(GRAPHQL_QUERIES.UPDATE_JIRA_CONNECTION, {
+                            id: connection.id,
+                            input: {
+                                name: formData.name,
+                                jiraUrl: formData.jiraUrl,
+                                projectKey: formData.projectKey
+                            }
+                        });
+                        
+                        // Update credentials if provided
+                        if (formData.credential) {
+                            await graphqlClient.mutation(GRAPHQL_QUERIES.UPDATE_JIRA_CREDENTIALS, {
+                                id: connection.id,
+                                input: {
+                                    authenticationType: formData.authenticationType,
+                                    username: formData.username,
+                                    credential: formData.credential
+                                }
+                            });
+                        }
+                    } else {
+                        // Create new connection
+                        await graphqlClient.mutation(GRAPHQL_QUERIES.CREATE_JIRA_CONNECTION, {
+                            input: {
+                                projectId,
+                                name: formData.name,
+                                jiraUrl: formData.jiraUrl,
+                                authenticationType: formData.authenticationType,
+                                projectKey: formData.projectKey,
+                                username: formData.username,
+                                credential: formData.credential
+                            }
+                        });
+                    }
+                    
+                    onSuccess();
+                } catch (err) {
+                    // Check if it's a duplicate connection error
+                    if (err.message && err.message.includes('already has a JIRA connection')) {
+                        alert('This project already has a JIRA connection. Please refresh the page to see the existing connection.');
+                        onClose(); // Close the modal
+                        window.location.reload(); // Refresh to show current state
+                    } else {
+                        alert(`Failed to save connection: ${err.message}`);
+                    }
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div className="modal" style={{
+                        background: 'var(--bg-surface)',
+                        borderRadius: 'var(--radius-lg)',
+                        width: '90%',
+                        maxWidth: '600px',
+                        maxHeight: '90vh',
+                        overflow: 'auto',
+                        boxShadow: 'var(--shadow-xl)'
+                    }}>
+                        <div style={{
+                            padding: '1.5rem',
+                            borderBottom: '1px solid var(--border-color)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <h3 style={{ margin: 0 }}>
+                                {connection ? 'Edit' : 'Add'} JIRA Connection
+                            </h3>
+                            <button
+                                onClick={onClose}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '1.25rem',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} style={{ padding: '1.5rem' }}>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Connection Name <span style={{ color: 'var(--error)' }}>*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="Production JIRA Connection"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: `1px solid ${errors.name ? 'var(--error)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                {errors.name && (
+                                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--error)', fontSize: '0.875rem' }}>
+                                        {errors.name}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    JIRA URL <span style={{ color: 'var(--error)' }}>*</span>
+                                </label>
+                                <input
+                                    type="url"
+                                    value={formData.jiraUrl}
+                                    onChange={(e) => setFormData({ ...formData, jiraUrl: e.target.value })}
+                                    placeholder="https://company.atlassian.net"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: `1px solid ${errors.jiraUrl ? 'var(--error)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                {errors.jiraUrl && (
+                                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--error)', fontSize: '0.875rem' }}>
+                                        {errors.jiraUrl}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Authentication Type <span style={{ color: 'var(--error)' }}>*</span>
+                                </label>
+                                <select
+                                    value={formData.authenticationType}
+                                    onChange={(e) => setFormData({ ...formData, authenticationType: e.target.value })}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <option value="api_token">API Token (Recommended)</option>
+                                    <option value="oauth">OAuth</option>
+                                    <option value="personal_access_token">Personal Access Token</option>
+                                </select>
+                                <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                    {formData.authenticationType === 'api_token' && 'Use API tokens for JIRA Cloud. Generate one from your Atlassian account settings.'}
+                                    {formData.authenticationType === 'oauth' && 'OAuth tokens from your JIRA OAuth app.'}
+                                    {formData.authenticationType === 'personal_access_token' && 'Personal Access Tokens for JIRA Server/Data Center.'}
+                                </p>
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Project Key <span style={{ color: 'var(--error)' }}>*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.projectKey}
+                                    onChange={(e) => setFormData({ ...formData, projectKey: e.target.value.toUpperCase() })}
+                                    placeholder="PROJ"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: `1px solid ${errors.projectKey ? 'var(--error)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)',
+                                        textTransform: 'uppercase'
+                                    }}
+                                />
+                                {errors.projectKey && (
+                                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--error)', fontSize: '0.875rem' }}>
+                                        {errors.projectKey}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Username/Email <span style={{ color: 'var(--error)' }}>*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.username}
+                                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                    placeholder="user@company.com"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: `1px solid ${errors.username ? 'var(--error)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                {errors.username && (
+                                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--error)', fontSize: '0.875rem' }}>
+                                        {errors.username}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    {formData.authenticationType === 'api_token' ? 'API Token' : 
+                                     formData.authenticationType === 'oauth' ? 'OAuth Token' : 
+                                     'Personal Access Token'} 
+                                    {!connection && <span style={{ color: 'var(--error)' }}> *</span>}
+                                </label>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={formData.credential}
+                                        onChange={(e) => setFormData({ ...formData, credential: e.target.value })}
+                                        placeholder={connection ? 'Leave blank to keep existing' : 'Enter your token'}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            paddingRight: '3rem',
+                                            border: `1px solid ${errors.credential ? 'var(--error)' : 'var(--border-color)'}`,
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-secondary)',
+                                            color: 'var(--text-primary)'
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '0.75rem',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none',
+                                            border: 'none',
+                                            color: 'var(--text-secondary)',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <i className={`fas fa-${showPassword ? 'eye-slash' : 'eye'}`}></i>
+                                    </button>
+                                </div>
+                                {errors.credential && (
+                                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--error)', fontSize: '0.875rem' }}>
+                                        {errors.credential}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div style={{
+                                padding: '1rem',
+                                background: 'var(--info)10',
+                                borderRadius: 'var(--radius-md)',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--info)' }}>
+                                    <strong>Security Note:</strong> Your credentials are encrypted before storage and are only used to connect to your JIRA instance.
+                                </p>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    disabled={loading}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontWeight: '500',
+                                        opacity: loading ? 0.6 : 1
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        border: 'none',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        fontWeight: '600',
+                                        opacity: loading ? 0.8 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}
+                                >
+                                    {loading && <i className="fas fa-spinner fa-spin"></i>}
+                                    {connection ? 'Update' : 'Create'} Connection
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // Field Mapping Modal Component - Visual connection interface with SVG lines
+        function FieldMappingModal({ connection, onClose, onSuccess }) {
+            // Refs for measuring field positions
+            const containerRef = useRef(null);
+            const jiraFieldRefs = useRef({});
+            const fernFieldRefs = useRef({});
+            const [jiraFields, setJiraFields] = useState([]);
+            const [fernFields] = useState([
+                { id: 'requirement_id', name: 'Requirement ID', type: 'text', required: true, description: 'Unique identifier for the requirement' },
+                { id: 'title', name: 'Title', type: 'text', required: true, description: 'Brief title of the requirement' },
+                { id: 'description', name: 'Description', type: 'richtext', required: false, description: 'Detailed requirement description' },
+                { id: 'type', name: 'Type', type: 'select', required: false, description: 'Type of requirement (Epic, Story, Bug, etc.)' },
+                { id: 'parent_requirement', name: 'Parent Requirement', type: 'reference', required: false, description: 'Link to parent epic or story' },
+                { id: 'release', name: 'Release', type: 'text', required: false, description: 'Target release or fix version' },
+                { id: 'status', name: 'Status', type: 'select', required: false, description: 'Current workflow status' },
+                { id: 'tags', name: 'Tags', type: 'multivalue', required: false, description: 'Labels or categories' },
+                { id: 'priority', name: 'Priority', type: 'select', required: false, description: 'Priority level' },
+                { id: 'component', name: 'Component', type: 'text', required: false, description: 'Component or module' }
+            ]);
+            const [mappings, setMappings] = useState({});
+            const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
+            const [draggingFrom, setDraggingFrom] = useState(null);
+            const [dragLine, setDragLine] = useState(null);
+            const [connectionLines, setConnectionLines] = useState([]);
+            const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+            const svgRef = useRef(null);
+
+            useEffect(() => {
+                fetchJiraFields();
+                loadExistingMappings();
+            }, []);
+
+            const fetchJiraFields = async () => {
+                try {
+                    // Simulated JIRA fields - in production, fetch from JIRA API
+                    const fields = [
+                        { id: 'issuekey', name: 'Issue Key', type: 'text', custom: false, example: 'PROJ-123' },
+                        { id: 'summary', name: 'Summary', type: 'text', custom: false, example: 'Add user authentication' },
+                        { id: 'description', name: 'Description', type: 'richtext', custom: false, example: 'As a user, I want to...' },
+                        { id: 'issuetype', name: 'Issue Type', type: 'select', custom: false, example: 'Story' },
+                        { id: 'status', name: 'Status', type: 'select', custom: false, example: 'In Progress' },
+                        { id: 'priority', name: 'Priority', type: 'select', custom: false, example: 'High' },
+                        { id: 'assignee', name: 'Assignee', type: 'user', custom: false, example: 'john.doe@company.com' },
+                        { id: 'reporter', name: 'Reporter', type: 'user', custom: false, example: 'jane.smith@company.com' },
+                        { id: 'fixVersions', name: 'Fix Version/s', type: 'multivalue', custom: false, example: 'v2.0, v2.1' },
+                        { id: 'components', name: 'Component/s', type: 'multivalue', custom: false, example: 'Backend, API' },
+                        { id: 'labels', name: 'Labels', type: 'multivalue', custom: false, example: 'feature, backend' },
+                        { id: 'epic', name: 'Epic Link', type: 'reference', custom: false, example: 'PROJ-100' },
+                        { id: 'customfield_10001', name: 'Story Points', type: 'number', custom: true, example: '5' },
+                        { id: 'customfield_10002', name: 'Sprint', type: 'text', custom: true, example: 'Sprint 42' },
+                        { id: 'customfield_10003', name: 'Customer', type: 'text', custom: true, example: 'Acme Corp' }
+                    ];
+                    setJiraFields(fields);
+                } catch (err) {
+                    console.error('Failed to fetch JIRA fields:', err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const loadExistingMappings = async () => {
+                try {
+                    // Load existing mappings - in production, fetch from backend
+                    const existingMappings = {
+                        'requirement_id': 'issuekey',
+                        'title': 'summary',
+                        'description': 'description',
+                        'type': 'issuetype',
+                        'parent_requirement': 'epic',
+                        'release': 'fixVersions',
+                        'tags': 'labels'
+                    };
+                    setMappings(existingMappings);
+                } catch (err) {
+                    console.error('Failed to load mappings:', err);
+                }
+            };
+
+            // Update connection lines on scroll, resize, or mapping changes
+            const updateConnectionLines = useCallback(() => {
+                if (!containerRef.current) return;
+                
+                const lines = [];
+                const containerRect = containerRef.current.getBoundingClientRect();
+                
+                Object.entries(mappings).forEach(([fernFieldId, jiraFieldId]) => {
+                    const jiraEl = jiraFieldRefs.current[jiraFieldId];
+                    const fernEl = fernFieldRefs.current[fernFieldId];
+                    
+                    if (jiraEl && fernEl) {
+                        const jiraRect = jiraEl.getBoundingClientRect();
+                        const fernRect = fernEl.getBoundingClientRect();
+                        
+                        lines.push({
+                            id: `${jiraFieldId}-${fernFieldId}`,
+                            x1: jiraRect.right - containerRect.left,
+                            y1: jiraRect.top + jiraRect.height / 2 - containerRect.top,
+                            x2: fernRect.left - containerRect.left,
+                            y2: fernRect.top + fernRect.height / 2 - containerRect.top,
+                            jiraFieldId,
+                            fernFieldId
+                        });
+                    }
+                });
+                setConnectionLines(lines);
+            }, [mappings]);
+
+            // Update lines when mappings change or on scroll/resize
+            useEffect(() => {
+                updateConnectionLines();
+                
+                // Add scroll listeners to both columns
+                const handleScroll = () => {
+                    requestAnimationFrame(updateConnectionLines);
+                };
+                
+                // Add resize observer for dynamic updates
+                const resizeObserver = new ResizeObserver(() => {
+                    requestAnimationFrame(updateConnectionLines);
+                });
+                
+                const container = containerRef.current;
+                if (container) {
+                    // Observe the container for size changes
+                    resizeObserver.observe(container);
+                    
+                    // Add scroll listeners
+                    const scrollElements = container.querySelectorAll('[data-scrollable]');
+                    scrollElements.forEach(el => {
+                        el.addEventListener('scroll', handleScroll, { passive: true });
+                    });
+                    
+                    // Also listen to window resize
+                    window.addEventListener('resize', handleScroll);
+                    
+                    return () => {
+                        resizeObserver.disconnect();
+                        scrollElements.forEach(el => {
+                            el.removeEventListener('scroll', handleScroll);
+                        });
+                        window.removeEventListener('resize', handleScroll);
+                    };
+                }
+            }, [mappings, updateConnectionLines]);
+
+            // Track mouse position for drag line
+            const handleMouseMove = (e) => {
+                if (draggingFrom && containerRef.current) {
+                    const containerRect = containerRef.current.getBoundingClientRect();
+                    setMousePos({
+                        x: e.clientX - containerRect.left,
+                        y: e.clientY - containerRect.top
+                    });
+                }
+            };
+
+            // Start dragging from JIRA field
+            const handleDragStart = (e, field) => {
+                if (Object.values(mappings).includes(field.id)) return;
+                
+                const jiraEl = jiraFieldRefs.current[field.id];
+                if (jiraEl && containerRef.current) {
+                    const containerRect = containerRef.current.getBoundingClientRect();
+                    const jiraRect = jiraEl.getBoundingClientRect();
+                    
+                    setDraggingFrom({
+                        field,
+                        startX: jiraRect.right - containerRect.left,
+                        startY: jiraRect.top + jiraRect.height / 2 - containerRect.top
+                    });
+                    
+                    // Prevent default drag behavior
+                    e.preventDefault();
+                }
+            };
+
+            // Complete connection on drop
+            const handleDrop = (fernField) => {
+                if (!draggingFrom || mappings[fernField.id]) return;
+                
+                // Create mapping
+                setMappings(prev => ({ ...prev, [fernField.id]: draggingFrom.field.id }));
+                setDraggingFrom(null);
+            };
+
+            // Cancel drag on mouse up
+            useEffect(() => {
+                const handleMouseUp = () => {
+                    if (draggingFrom) {
+                        setDraggingFrom(null);
+                    }
+                };
+                
+                window.addEventListener('mouseup', handleMouseUp);
+                return () => window.removeEventListener('mouseup', handleMouseUp);
+            }, [draggingFrom]);
+
+            const removeMapping = (fernFieldId) => {
+                setMappings(prev => {
+                    const updated = { ...prev };
+                    delete updated[fernFieldId];
+                    return updated;
+                });
+            };
+
+            const getFieldTypeIcon = (type) => {
+                const icons = {
+                    text: '✏️',
+                    richtext: '📄',
+                    select: '▼',
+                    multivalue: '🏷️',
+                    reference: '🔗',
+                    number: '#️⃣',
+                    user: '👤',
+                    date: '📅',
+                    boolean: '☑️'
+                };
+                return icons[type] || '📌';
+            };
+
+            const isCompatible = (jiraType, fernType) => {
+                const compatibilityMap = {
+                    text: ['text', 'richtext'],
+                    richtext: ['text', 'richtext'],
+                    select: ['select', 'text'],
+                    multivalue: ['multivalue', 'text'],
+                    reference: ['reference', 'text'],
+                    number: ['number', 'text'],
+                    user: ['user', 'text']
+                };
+                return compatibilityMap[jiraType]?.includes(fernType) || false;
+            };
+
+            const handleSave = async () => {
+                // Validate required fields are mapped
+                const unmappedRequired = fernFields
+                    .filter(f => f.required && !mappings[f.id])
+                    .map(f => f.name);
+                
+                if (unmappedRequired.length > 0) {
+                    alert(`Please map these required fields: ${unmappedRequired.join(', ')}`);
+                    return;
+                }
+
+                try {
+                    setSaving(true);
+                    // Save mappings to backend
+                    console.log('Saving mappings:', mappings);
+                    // await graphqlClient.mutation(SAVE_FIELD_MAPPINGS, { connectionId: connection.id, mappings });
+                    onSuccess();
+                } catch (err) {
+                    alert(`Failed to save mappings: ${err.message}`);
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            return (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    backdropFilter: 'blur(4px)'
+                }}>
+                    <div style={{
+                        background: 'var(--bg-surface)',
+                        borderRadius: 'var(--radius-xl)',
+                        width: '90%',
+                        maxWidth: '1200px',
+                        height: '85vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                    }}>
+                        {/* Header */}
+                        <div style={{
+                            padding: '1.5rem 2rem',
+                            borderBottom: '1px solid var(--border-light)',
+                            background: 'var(--bg-secondary)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700' }}>
+                                    Configure Field Mapping
+                                </h2>
+                                <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-secondary)' }}>
+                                    Click JIRA fields and connect them to Fern fields for {connection.name}
+                                </p>
+                            </div>
+                            <button
+                                onClick={onClose}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '1.5rem',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer',
+                                    padding: '0.5rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.target.style.background = 'var(--bg-tertiary)';
+                                    e.target.style.color = 'var(--text-primary)';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.target.style.background = 'none';
+                                    e.target.style.color = 'var(--text-secondary)';
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Main Content with Visual Connections */}
+                        <div 
+                            ref={containerRef} 
+                            onMouseMove={handleMouseMove}
+                            style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                            {/* SVG Overlay for Connection Lines */}
+                            <svg 
+                                ref={svgRef}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    pointerEvents: 'none',
+                                    zIndex: 10
+                                }}
+                            >
+                                <defs>
+                                    <marker
+                                        id="arrowhead"
+                                        markerWidth="10"
+                                        markerHeight="7"
+                                        refX="9"
+                                        refY="3.5"
+                                        orient="auto"
+                                    >
+                                        <polygon
+                                            points="0 0, 10 3.5, 0 7"
+                                            fill="var(--primary)"
+                                        />
+                                    </marker>
+                                </defs>
+                                
+                                {/* Draw existing connections */}
+                                {connectionLines.map(line => {
+                                    const midX = (line.x1 + line.x2) / 2;
+                                    const controlPoint1X = line.x1 + (midX - line.x1) * 0.7;
+                                    const controlPoint2X = line.x2 - (line.x2 - midX) * 0.7;
+                                    
+                                    return (
+                                        <g key={line.id}>
+                                            {/* Connection line with gradient */}
+                                            <defs>
+                                                <linearGradient id={`gradient-${line.id}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                                                    <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.8" />
+                                                    <stop offset="100%" stopColor="var(--success)" stopOpacity="0.8" />
+                                                </linearGradient>
+                                            </defs>
+                                            <path
+                                                d={`M ${line.x1} ${line.y1} C ${controlPoint1X} ${line.y1}, ${controlPoint2X} ${line.y2}, ${line.x2} ${line.y2}`}
+                                                stroke={`url(#gradient-${line.id})`}
+                                                strokeWidth="3"
+                                                fill="none"
+                                                opacity="0.8"
+                                                markerEnd="url(#arrowhead)"
+                                            />
+                                            {/* Connection points */}
+                                            <circle cx={line.x1} cy={line.y1} r="5" fill="var(--primary)" opacity="0.8" />
+                                            <circle cx={line.x2} cy={line.y2} r="5" fill="var(--success)" opacity="0.8" />
+                                        </g>
+                                    );
+                                })}
+                                
+                                {/* Draw line while dragging */}
+                                {draggingFrom && (
+                                    <g>
+                                        <path
+                                            d={`M ${draggingFrom.startX} ${draggingFrom.startY} Q ${(draggingFrom.startX + mousePos.x) / 2} ${(draggingFrom.startY + mousePos.y) / 2}, ${mousePos.x} ${mousePos.y}`}
+                                            stroke="var(--primary)"
+                                            strokeWidth="3"
+                                            fill="none"
+                                            strokeDasharray="5,5"
+                                            opacity="0.6"
+                                            className="drag-line"
+                                        />
+                                        <circle cx={draggingFrom.startX} cy={draggingFrom.startY} r="5" fill="var(--primary)" />
+                                        <circle cx={mousePos.x} cy={mousePos.y} r="4" fill="var(--primary)" opacity="0.6" />
+                                    </g>
+                                )}
+                            </svg>
+
+                            <div style={{ display: 'flex', height: '100%' }}>
+                                {/* JIRA Fields Column */}
+                                <div 
+                                    data-scrollable
+                                    style={{ 
+                                        flex: 1, 
+                                        padding: '1.5rem',
+                                        overflowY: 'auto'
+                                    }}>
+                                    <h3 style={{ 
+                                        margin: '0 0 1rem 0', 
+                                        fontSize: '1.125rem', 
+                                        fontWeight: '600',
+                                        color: 'var(--text-primary)' 
+                                    }}>
+                                        <span style={{ marginRight: '0.5rem', fontSize: '1.25rem' }}>🎯</span>
+                                        JIRA Fields
+                                    </h3>
+                                    
+                                    {loading ? (
+                                        <div style={{ textAlign: 'center', padding: '2rem' }}>
+                                            <span style={{ fontSize: '2rem' }}>⏳</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {jiraFields.map(field => {
+                                                const isMapped = Object.values(mappings).includes(field.id);
+                                                const isDragging = draggingFrom?.field.id === field.id;
+                                                
+                                                return (
+                                                    <div
+                                                        key={field.id}
+                                                        ref={el => jiraFieldRefs.current[field.id] = el}
+                                                        onMouseDown={(e) => handleDragStart(e, field)}
+                                                        style={{
+                                                            padding: '1rem',
+                                                            background: isDragging ? 'var(--primary)20' : (isMapped ? 'var(--bg-tertiary)' : 'var(--bg-elevated)'),
+                                                            border: `2px solid ${isDragging ? 'var(--primary)' : (isMapped ? 'var(--success)' : 'var(--border-light)')}`,
+                                                            borderRadius: 'var(--radius-lg)',
+                                                            cursor: isMapped ? 'default' : 'grab',
+                                                            opacity: isMapped ? 0.7 : 1,
+                                                            transition: 'all 0.2s ease',
+                                                            position: 'relative',
+                                                            userSelect: 'none'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (!isMapped) {
+                                                                e.currentTarget.style.transform = 'translateX(4px)';
+                                                                e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (!isMapped && !isSelected) {
+                                                                e.currentTarget.style.transform = 'translateX(0)';
+                                                                e.currentTarget.style.boxShadow = 'none';
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                            <span style={{ fontSize: '1.25rem' }}>{getFieldTypeIcon(field.type)}</span>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+                                                                    {field.name}
+                                                                    {field.custom && (
+                                                                        <span style={{
+                                                                            marginLeft: '0.5rem',
+                                                                            fontSize: '0.75rem',
+                                                                            background: 'var(--primary)20',
+                                                                            color: 'var(--primary)',
+                                                                            padding: '0.125rem 0.5rem',
+                                                                            borderRadius: 'var(--radius-sm)',
+                                                                            fontWeight: '500'
+                                                                        }}>Custom</span>
+                                                                    )}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                                                    {field.id} • {field.type}
+                                                                </div>
+                                                                {field.example && (
+                                                                    <div style={{ 
+                                                                        fontSize: '0.75rem', 
+                                                                        color: 'var(--text-tertiary)',
+                                                                        marginTop: '0.25rem',
+                                                                        fontStyle: 'italic'
+                                                                    }}>
+                                                                        Example: {field.example}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {isMapped && (
+                                                                <span style={{ fontSize: '1.25rem', color: 'var(--success)' }}>✓</span>
+                                                            )}
+                                                            {!isMapped && (
+                                                                <div style={{
+                                                                    position: 'absolute',
+                                                                    right: '-10px',
+                                                                    top: '50%',
+                                                                    transform: 'translateY(-50%)',
+                                                                    width: '20px',
+                                                                    height: '20px',
+                                                                    borderRadius: '50%',
+                                                                    background: 'var(--bg-surface)',
+                                                                    border: '2px solid var(--border-light)',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center'
+                                                                }}>
+                                                                    <div style={{
+                                                                        width: '8px',
+                                                                        height: '8px',
+                                                                        borderRadius: '50%',
+                                                                        background: isDragging ? 'var(--primary)' : 'var(--border-medium)'
+                                                                    }} />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Instructions in the middle */}
+                                <div style={{ 
+                                    width: '200px', 
+                                    padding: '2rem 1rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    textAlign: 'center'
+                                }}>
+                                    <div style={{ marginBottom: '2rem' }}>
+                                        <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>🔗</span>
+                                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '600' }}>Drag & Connect</h4>
+                                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
+                                            1. Press and hold a JIRA field<br/>
+                                            2. Drag to a Fern field<br/>
+                                            3. Release to create connection!
+                                        </p>
+                                    </div>
+                                    
+                                    {draggingFrom && (
+                                        <div style={{
+                                            padding: '1rem',
+                                            background: 'var(--primary)10',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px solid var(--primary)30'
+                                        }}>
+                                            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--primary)' }}>
+                                                <strong>🖱️ Drag to a Fern field to connect:</strong><br/>
+                                                {draggingFrom.field.name}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Fern Fields Column */}
+                                <div 
+                                    data-scrollable
+                                    style={{ 
+                                        flex: 1, 
+                                        padding: '1.5rem',
+                                        overflowY: 'auto'
+                                    }}>
+                                    <h3 style={{ 
+                                        margin: '0 0 1rem 0', 
+                                        fontSize: '1.125rem', 
+                                        fontWeight: '600',
+                                        color: 'var(--text-primary)' 
+                                    }}>
+                                        <span style={{ marginRight: '0.5rem', fontSize: '1.25rem' }}>🌿</span>
+                                        Fern Fields
+                                    </h3>
+                                    
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        {fernFields.map(field => {
+                                            const mappedJiraFieldId = mappings[field.id];
+                                            const mappedJiraField = jiraFields.find(f => f.id === mappedJiraFieldId);
+                                            const isDragTarget = draggingFrom && !mappedJiraField;
+                                            
+                                            return (
+                                                <div
+                                                    key={field.id}
+                                                    ref={el => fernFieldRefs.current[field.id] = el}
+                                                    onMouseUp={() => {
+                                                        if (draggingFrom && !mappings[field.id]) {
+                                                            handleDrop(field);
+                                                        }
+                                                    }}
+                                                    onMouseEnter={() => {
+                                                        if (draggingFrom && !mappings[field.id]) {
+                                                            // Visual feedback when hovering while dragging
+                                                            const el = fernFieldRefs.current[field.id];
+                                                            if (el) {
+                                                                el.style.border = '2px dashed var(--primary)';
+                                                                el.style.background = 'var(--primary)20';
+                                                                el.style.transform = 'translateX(-4px)';
+                                                            }
+                                                        }
+                                                    }}
+                                                    onMouseLeave={() => {
+                                                        if (draggingFrom && !mappings[field.id]) {
+                                                            const el = fernFieldRefs.current[field.id];
+                                                            if (el) {
+                                                                el.style.border = '2px solid var(--border-light)';
+                                                                el.style.background = 'var(--bg-elevated)';
+                                                                el.style.transform = 'translateX(0)';
+                                                            }
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        padding: '1rem',
+                                                        background: mappedJiraField ? 'var(--bg-tertiary)' : 'var(--bg-elevated)',
+                                                        border: `2px solid ${mappedJiraField ? 'var(--success)' : 'var(--border-light)'}`,
+                                                        borderRadius: 'var(--radius-lg)',
+                                                        cursor: 'default',
+                                                        transition: 'all 0.2s ease',
+                                                        position: 'relative'
+                                                    }}
+                                                >
+                                                    {isDragTarget && (
+                                                        <span style={{
+                                                            position: 'absolute',
+                                                            left: '-8px',
+                                                            top: '50%',
+                                                            transform: 'translateY(-50%)',
+                                                            width: '16px',
+                                                            height: '16px',
+                                                            borderRadius: '50%',
+                                                            background: 'var(--bg-surface)',
+                                                            border: '2px solid var(--primary)',
+                                                            animation: 'pulse 1s infinite'
+                                                        }}></span>
+                                                    )}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                        <span style={{ fontSize: '1.25rem' }}>{getFieldTypeIcon(field.type)}</span>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+                                                                {field.name}
+                                                                {field.required && (
+                                                                    <span style={{
+                                                                        marginLeft: '0.5rem',
+                                                                        color: 'var(--error)',
+                                                                        fontSize: '0.875rem'
+                                                                    }}>*</span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                                                {field.description}
+                                                            </div>
+                                                            {mappedJiraField && (
+                                                                <div style={{
+                                                                    marginTop: '0.5rem',
+                                                                    padding: '0.5rem',
+                                                                    background: 'var(--success)10',
+                                                                    borderRadius: 'var(--radius-md)',
+                                                                    fontSize: '0.875rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.5rem'
+                                                                }}>
+                                                                    <span style={{ color: 'var(--success)' }}>🔗</span>
+                                                                    <span style={{ fontWeight: '500' }}>{mappedJiraField.name}</span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            removeMapping(field.id);
+                                                                        }}
+                                                                        style={{
+                                                                            marginLeft: 'auto',
+                                                                            background: 'none',
+                                                                            border: 'none',
+                                                                            color: 'var(--text-secondary)',
+                                                                            cursor: 'pointer',
+                                                                            padding: '0.25rem',
+                                                                            borderRadius: 'var(--radius-sm)',
+                                                                            fontSize: '0.75rem'
+                                                                        }}
+                                                                        onMouseEnter={(e) => {
+                                                                            e.target.style.background = 'var(--error)20';
+                                                                            e.target.style.color = 'var(--error)';
+                                                                        }}
+                                                                        onMouseLeave={(e) => {
+                                                                            e.target.style.background = 'none';
+                                                                            e.target.style.color = 'var(--text-secondary)';
+                                                                        }}
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            padding: '1.5rem 2rem',
+                            borderTop: '1px solid var(--border-light)',
+                            background: 'var(--bg-secondary)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                {Object.keys(mappings).length} of {fernFields.filter(f => f.required).length} required fields mapped
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button
+                                    onClick={() => setMappings({})}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        border: '1px solid var(--border-medium)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'transparent',
+                                        color: 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        fontWeight: '500',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.background = 'var(--bg-tertiary)';
+                                        e.target.style.borderColor = 'var(--error)';
+                                        e.target.style.color = 'var(--error)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.background = 'transparent';
+                                        e.target.style.borderColor = 'var(--border-medium)';
+                                        e.target.style.color = 'var(--text-secondary)';
+                                    }}
+                                >
+                                    Clear All
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    disabled={saving}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        border: '1px solid var(--border-medium)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        cursor: saving ? 'not-allowed' : 'pointer',
+                                        fontWeight: '500',
+                                        opacity: saving ? 0.6 : 1,
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving || Object.keys(mappings).length === 0}
+                                    style={{
+                                        padding: '0.75rem 2rem',
+                                        border: 'none',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        cursor: saving || Object.keys(mappings).length === 0 ? 'not-allowed' : 'pointer',
+                                        fontWeight: '600',
+                                        opacity: saving || Object.keys(mappings).length === 0 ? 0.6 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (!saving && Object.keys(mappings).length > 0) {
+                                            e.target.style.background = 'var(--primary-dark)';
+                                            e.target.style.transform = 'translateY(-1px)';
+                                            e.target.style.boxShadow = 'var(--shadow-md)';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.background = 'var(--primary)';
+                                        e.target.style.transform = 'translateY(0)';
+                                        e.target.style.boxShadow = 'none';
+                                    }}
+                                >
+                                    {saving && <i className="fas fa-spinner fa-spin"></i>}
+                                    Save Mapping Configuration
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Project Settings Component
+        function ProjectSettings() {
+            const { route } = useRouter();
+            const { isManager, isAdmin } = useAuth();
+            const [project, setProject] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [activeTab, setActiveTab] = useState('general');
+
+            // Extract project ID from route (format: /project/:projectId/settings)
+            const projectId = route.split('/')[2];
+            
+            console.log('ProjectSettings component - Route:', route);
+            console.log('ProjectSettings component - Extracted projectId:', projectId);
+
+            useEffect(() => {
+                if (projectId) {
+                    fetchProject();
+                }
+            }, [projectId]);
+
+            const fetchProject = async () => {
+                try {
+                    console.log('Fetching project with ID:', projectId);
+                    console.log('Route:', route);
+                    console.log('GraphQL client:', window.graphqlClient);
+                    console.log('GraphQL queries:', GRAPHQL_QUERIES.GET_PROJECT_DETAILS);
+                    const data = await window.graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECT_DETAILS, { projectId });
+                    console.log('Project data received:', data);
+                    setProject(data.projectByProjectId);
+                } catch (err) {
+                    console.error('Failed to fetch project:', err);
+                    console.error('Error details:', err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="page-container">
+                        <div style={{ padding: '2rem', textAlign: 'center' }}>
+                            <div className="loading-spinner"></div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!project) {
+                return (
+                    <div className="page-container">
+                        <div style={{ padding: '2rem', textAlign: 'center' }}>
+                            <h2>Project not found</h2>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!isManager && !isAdmin) {
+                return <AccessDenied />;
+            }
+
+            const tabs = [
+                { id: 'general', label: 'General', emoji: '⚙️' },
+                { id: 'integrations', label: 'Integrations', emoji: '🔗' },
+                { id: 'team', label: 'Team', emoji: '👥' },
+                { id: 'notifications', label: 'Notifications', emoji: '🔔' }
+            ];
+
+            return (
+                <div className="page-container">
+                    <div className="page-header" style={{
+                        borderBottom: '1px solid var(--border-light)',
+                        paddingBottom: '1.5rem',
+                        marginBottom: '2rem'
+                    }}>
+                        <div>
+                            <h1 style={{
+                                fontSize: '1.875rem',
+                                fontWeight: '700',
+                                letterSpacing: '-0.025em',
+                                marginBottom: '0.5rem'
+                            }}>{project.name} Settings</h1>
+                            <p style={{
+                                fontSize: '1rem',
+                                color: 'var(--text-secondary)',
+                                margin: 0
+                            }}>Configure project settings and integrations</p>
+                        </div>
+                    </div>
+
+                    <div style={{
+                        display: 'flex',
+                        gap: '2rem',
+                        marginTop: '2rem'
+                    }}>
+                        {/* Sidebar with tabs */}
+                        <div style={{
+                            width: '250px',
+                            flexShrink: 0
+                        }}>
+                            <nav style={{
+                                background: 'var(--bg-surface)',
+                                borderRadius: 'var(--radius-lg)',
+                                padding: '0.75rem',
+                                boxShadow: 'var(--shadow-sm)',
+                                border: '1px solid var(--border-light)'
+                            }}>
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.875rem 1.25rem',
+                                            border: 'none',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: activeTab === tab.id ? 'var(--primary)' : 'transparent',
+                                            color: activeTab === tab.id ? 'white' : 'var(--text-primary)',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.875rem',
+                                            fontSize: '0.9375rem',
+                                            fontWeight: activeTab === tab.id ? '600' : '500',
+                                            marginBottom: '0.375rem',
+                                            transition: 'all 0.2s ease',
+                                            position: 'relative',
+                                            overflow: 'hidden'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (activeTab !== tab.id) {
+                                                e.currentTarget.style.background = 'var(--bg-secondary)';
+                                                e.currentTarget.style.transform = 'translateX(4px)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (activeTab !== tab.id) {
+                                                e.currentTarget.style.background = 'transparent';
+                                                e.currentTarget.style.transform = 'translateX(0)';
+                                            }
+                                        }}
+                                    >
+                                        <span style={{
+                                            fontSize: '1.25rem',
+                                            width: '28px',
+                                            height: '28px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderRadius: '8px',
+                                            background: activeTab === tab.id ? 'rgba(255,255,255,0.2)' : 'var(--bg-tertiary)',
+                                            transition: 'all 0.2s ease'
+                                        }}>
+                                            {tab.emoji}
+                                        </span>
+                                        <span style={{
+                                            letterSpacing: '-0.01em'
+                                        }}>
+                                            {tab.label}
+                                        </span>
+                                        {activeTab === tab.id && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                left: 0,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                width: '4px',
+                                                height: '60%',
+                                                background: 'white',
+                                                borderRadius: '0 2px 2px 0'
+                                            }}></div>
+                                        )}
+                                    </button>
+                                ))}
+                            </nav>
+                        </div>
+
+                        {/* Content area */}
+                        <div style={{
+                            flex: 1,
+                            background: 'var(--bg-surface)',
+                            borderRadius: 'var(--radius-lg)',
+                            boxShadow: 'var(--shadow-sm)',
+                            overflow: 'hidden',
+                            border: '1px solid var(--border-light)'
+                        }}>
+                            {activeTab === 'general' && (
+                                <div style={{ padding: '2rem' }}>
+                                    <h2 style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: '600',
+                                        letterSpacing: '-0.02em',
+                                        marginBottom: '0.5rem'
+                                    }}>General Settings</h2>
+                                    <p style={{
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.9375rem'
+                                    }}>Configure basic project settings</p>
+                                    {/* General settings form would go here */}
+                                </div>
+                            )}
+
+                            {activeTab === 'integrations' && (
+                                <div>
+                                    <div style={{
+                                        padding: '2rem',
+                                        borderBottom: '1px solid var(--border-color)'
+                                    }}>
+                                        <h2 style={{ 
+                                            margin: 0, 
+                                            marginBottom: '0.5rem',
+                                            fontSize: '1.5rem',
+                                            fontWeight: '600',
+                                            letterSpacing: '-0.02em'
+                                        }}>Integrations</h2>
+                                        <p style={{ 
+                                            margin: 0, 
+                                            color: 'var(--text-secondary)',
+                                            fontSize: '0.9375rem'
+                                        }}>
+                                            Connect external tools and services to enhance your testing workflow
+                                        </p>
+                                    </div>
+                                    <JiraConnectionManager projectId={projectId} />
+                                </div>
+                            )}
+
+                            {activeTab === 'team' && (
+                                <div style={{ padding: '2rem' }}>
+                                    <h2 style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: '600',
+                                        letterSpacing: '-0.02em',
+                                        marginBottom: '0.5rem'
+                                    }}>Team Management</h2>
+                                    <p style={{
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.9375rem'
+                                    }}>Manage team members and permissions</p>
+                                    {/* Team management would go here */}
+                                </div>
+                            )}
+
+                            {activeTab === 'notifications' && (
+                                <div style={{ padding: '2rem' }}>
+                                    <h2 style={{
+                                        fontSize: '1.5rem',
+                                        fontWeight: '600',
+                                        letterSpacing: '-0.02em',
+                                        marginBottom: '0.5rem'
+                                    }}>Notification Settings</h2>
+                                    <p style={{
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.9375rem'
+                                    }}>Configure how and when you receive notifications</p>
+                                    {/* Notification settings would go here */}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         // Main App component
         function FernPlatform() {
             const { route, navigate } = useRouter();
@@ -6357,6 +8486,11 @@
 
             const renderPage = () => {
                 const { user, isAdmin, isManager } = useAuth();
+                
+                // Check if it's a project settings route
+                if (route.startsWith('/project/') && route.endsWith('/settings')) {
+                    return <ProjectSettings />;
+                }
                 
                 switch (route) {
                     case '/test-summaries':

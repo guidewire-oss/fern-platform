@@ -3,6 +3,7 @@ package graphql
 
 import (
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
+	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	testingApp "github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
@@ -21,6 +22,7 @@ type Resolver struct {
 	projectService        *projectsApp.ProjectService
 	tagService            *tagsApp.TagService
 	flakyDetectionService *analyticsApp.FlakyDetectionService
+	jiraConnectionService *integrations.JiraConnectionService
 	loaders               *dataloader.Loaders
 	db                    *gorm.DB
 	logger                *logging.Logger
@@ -32,6 +34,7 @@ func NewResolver(
 	projectService *projectsApp.ProjectService,
 	tagService *tagsApp.TagService,
 	flakyDetectionService *analyticsApp.FlakyDetectionService,
+	jiraConnectionService *integrations.JiraConnectionService,
 	db *gorm.DB,
 	logger *logging.Logger,
 ) *Resolver {
@@ -40,6 +43,7 @@ func NewResolver(
 		projectService:        projectService,
 		tagService:            tagService,
 		flakyDetectionService: flakyDetectionService,
+		jiraConnectionService: jiraConnectionService,
 		loaders:               dataloader.NewLoaders(db),
 		db:                    db,
 		logger:                logger,

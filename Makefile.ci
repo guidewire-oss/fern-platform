@@ -41,5 +41,5 @@ install-tools: ## Install development tools
 	@echo "🔧 Installing development tools..."
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 	go install github.com/air-verse/air@v1.62.0
-	go install github.com/vektra/mockery/v2@v2.65.0
+	go install github.com/vektra/mockery/v2@v2.53.4
 	@echo "✅ Development tools installed"

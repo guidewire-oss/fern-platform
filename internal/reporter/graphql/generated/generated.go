@@ -105,19 +105,39 @@ type ComplexityRoot struct {
 		Version   func(childComplexity int) int
 	}
 
+	JiraConnection struct {
+		AuthenticationType func(childComplexity int) int
+		CreatedAt          func(childComplexity int) int
+		ID                 func(childComplexity int) int
+		IsActive           func(childComplexity int) int
+		JiraURL            func(childComplexity int) int
+		LastTestedAt       func(childComplexity int) int
+		Name               func(childComplexity int) int
+		ProjectID          func(childComplexity int) int
+		ProjectKey         func(childComplexity int) int
+		Status             func(childComplexity int) int
+		UpdatedAt          func(childComplexity int) int
+		Username           func(childComplexity int) int
+	}
+
 	Mutation struct {
 		ActivateProject       func(childComplexity int, projectID string) int
 		AssignTagsToTestRun   func(childComplexity int, testRunID string, tagIds []string) int
+		CreateJiraConnection  func(childComplexity int, input model.CreateJiraConnectionInput) int
 		CreateProject         func(childComplexity int, input model.CreateProjectInput) int
 		CreateTag             func(childComplexity int, input model.CreateTagInput) int
 		CreateTestRun         func(childComplexity int, input model.CreateTestRunInput) int
 		DeactivateProject     func(childComplexity int, projectID string) int
+		DeleteJiraConnection  func(childComplexity int, id string) int
 		DeleteProject         func(childComplexity int, id string) int
 		DeleteTag             func(childComplexity int, id string) int
 		DeleteTestRun         func(childComplexity int, id string) int
 		MarkFlakyTestResolved func(childComplexity int, id string) int
 		MarkSpecAsFlaky       func(childComplexity int, specRunID string) int
+		TestJiraConnection    func(childComplexity int, id string) int
 		ToggleProjectFavorite func(childComplexity int, projectID string) int
+		UpdateJiraConnection  func(childComplexity int, id string, input model.UpdateJiraConnectionInput) int
+		UpdateJiraCredentials func(childComplexity int, id string, input model.UpdateJiraCredentialsInput) int
 		UpdateProject         func(childComplexity int, id string, input model.UpdateProjectInput) int
 		UpdateTag             func(childComplexity int, id string, input model.UpdateTagInput) int
 		UpdateTestRunStatus   func(childComplexity int, runID string, status string, endTime *time.Time) int
@@ -185,6 +205,8 @@ type ComplexityRoot struct {
 		FlakyTestStats          func(childComplexity int, projectID *string) int
 		FlakyTests              func(childComplexity int, filter *model.FlakyTestFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
 		Health                  func(childComplexity int) int
+		JiraConnection          func(childComplexity int, id string) int
+		JiraConnections         func(childComplexity int, projectID string) int
 		PopularTags             func(childComplexity int, limit *int) int
 		Project                 func(childComplexity int, id string) int
 		ProjectByProjectID      func(childComplexity int, projectID string) int
@@ -401,6 +423,11 @@ type MutationResolver interface {
 	MarkSpecAsFlaky(ctx context.Context, specRunID string) (*model.SpecRun, error)
 	UpdateUserPreferences(ctx context.Context, input model.UpdateUserPreferencesInput) (*model.UserPreferences, error)
 	ToggleProjectFavorite(ctx context.Context, projectID string) (*model.UserPreferences, error)
+	CreateJiraConnection(ctx context.Context, input model.CreateJiraConnectionInput) (*model.JiraConnection, error)
+	UpdateJiraConnection(ctx context.Context, id string, input model.UpdateJiraConnectionInput) (*model.JiraConnection, error)
+	UpdateJiraCredentials(ctx context.Context, id string, input model.UpdateJiraCredentialsInput) (*model.JiraConnection, error)
+	TestJiraConnection(ctx context.Context, id string) (bool, error)
+	DeleteJiraConnection(ctx context.Context, id string) (bool, error)
 }
 type ProjectResolver interface {
 	CanManage(ctx context.Context, obj *model.Project) (bool, error)
@@ -430,6 +457,8 @@ type QueryResolver interface {
 	FlakyTests(ctx context.Context, filter *model.FlakyTestFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.FlakyTestConnection, error)
 	FlakyTestStats(ctx context.Context, projectID *string) (*model.FlakyTestStats, error)
 	RecentlyAddedFlakyTests(ctx context.Context, projectID *string, days *int, limit *int) ([]*model.FlakyTest, error)
+	JiraConnection(ctx context.Context, id string) (*model.JiraConnection, error)
+	JiraConnections(ctx context.Context, projectID string) ([]*model.JiraConnection, error)
 }
 type SubscriptionResolver interface {
 	TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error)
@@ -708,6 +737,90 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.HealthStatus.Version(childComplexity), true
 
+	case "JiraConnection.authenticationType":
+		if e.complexity.JiraConnection.AuthenticationType == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.AuthenticationType(childComplexity), true
+
+	case "JiraConnection.createdAt":
+		if e.complexity.JiraConnection.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.CreatedAt(childComplexity), true
+
+	case "JiraConnection.id":
+		if e.complexity.JiraConnection.ID == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.ID(childComplexity), true
+
+	case "JiraConnection.isActive":
+		if e.complexity.JiraConnection.IsActive == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.IsActive(childComplexity), true
+
+	case "JiraConnection.jiraUrl":
+		if e.complexity.JiraConnection.JiraURL == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.JiraURL(childComplexity), true
+
+	case "JiraConnection.lastTestedAt":
+		if e.complexity.JiraConnection.LastTestedAt == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.LastTestedAt(childComplexity), true
+
+	case "JiraConnection.name":
+		if e.complexity.JiraConnection.Name == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.Name(childComplexity), true
+
+	case "JiraConnection.projectId":
+		if e.complexity.JiraConnection.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.ProjectID(childComplexity), true
+
+	case "JiraConnection.projectKey":
+		if e.complexity.JiraConnection.ProjectKey == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.ProjectKey(childComplexity), true
+
+	case "JiraConnection.status":
+		if e.complexity.JiraConnection.Status == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.Status(childComplexity), true
+
+	case "JiraConnection.updatedAt":
+		if e.complexity.JiraConnection.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.UpdatedAt(childComplexity), true
+
+	case "JiraConnection.username":
+		if e.complexity.JiraConnection.Username == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.Username(childComplexity), true
+
 	case "Mutation.activateProject":
 		if e.complexity.Mutation.ActivateProject == nil {
 			break
@@ -731,6 +844,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.AssignTagsToTestRun(childComplexity, args["testRunId"].(string), args["tagIds"].([]string)), true
+
+	case "Mutation.createJiraConnection":
+		if e.complexity.Mutation.CreateJiraConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createJiraConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CreateJiraConnection(childComplexity, args["input"].(model.CreateJiraConnectionInput)), true
 
 	case "Mutation.createProject":
 		if e.complexity.Mutation.CreateProject == nil {
@@ -779,6 +904,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DeactivateProject(childComplexity, args["projectId"].(string)), true
+
+	case "Mutation.deleteJiraConnection":
+		if e.complexity.Mutation.DeleteJiraConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteJiraConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeleteJiraConnection(childComplexity, args["id"].(string)), true
 
 	case "Mutation.deleteProject":
 		if e.complexity.Mutation.DeleteProject == nil {
@@ -840,6 +977,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Mutation.MarkSpecAsFlaky(childComplexity, args["specRunId"].(string)), true
 
+	case "Mutation.testJiraConnection":
+		if e.complexity.Mutation.TestJiraConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_testJiraConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.TestJiraConnection(childComplexity, args["id"].(string)), true
+
 	case "Mutation.toggleProjectFavorite":
 		if e.complexity.Mutation.ToggleProjectFavorite == nil {
 			break
@@ -851,6 +1000,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ToggleProjectFavorite(childComplexity, args["projectId"].(string)), true
+
+	case "Mutation.updateJiraConnection":
+		if e.complexity.Mutation.UpdateJiraConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateJiraConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateJiraConnection(childComplexity, args["id"].(string), args["input"].(model.UpdateJiraConnectionInput)), true
+
+	case "Mutation.updateJiraCredentials":
+		if e.complexity.Mutation.UpdateJiraCredentials == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateJiraCredentials_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateJiraCredentials(childComplexity, args["id"].(string), args["input"].(model.UpdateJiraCredentialsInput)), true
 
 	case "Mutation.updateProject":
 		if e.complexity.Mutation.UpdateProject == nil {
@@ -1208,6 +1381,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Health(childComplexity), true
+
+	case "Query.jiraConnection":
+		if e.complexity.Query.JiraConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Query_jiraConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.JiraConnection(childComplexity, args["id"].(string)), true
+
+	case "Query.jiraConnections":
+		if e.complexity.Query.JiraConnections == nil {
+			break
+		}
+
+		args, err := ec.field_Query_jiraConnections_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.JiraConnections(childComplexity, args["projectId"].(string)), true
 
 	case "Query.popularTags":
 		if e.complexity.Query.PopularTags == nil {
@@ -2259,6 +2456,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputCreateJiraConnectionInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateTagInput,
 		ec.unmarshalInputCreateTestRunInput,
@@ -2266,6 +2464,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputProjectFilter,
 		ec.unmarshalInputTagFilter,
 		ec.unmarshalInputTestRunFilter,
+		ec.unmarshalInputUpdateJiraConnectionInput,
+		ec.unmarshalInputUpdateJiraCredentialsInput,
 		ec.unmarshalInputUpdateProjectInput,
 		ec.unmarshalInputUpdateTagInput,
 		ec.unmarshalInputUpdateUserPreferencesInput,
@@ -2701,6 +2901,44 @@ type RoleGroupConfig {
   userGroup: String!
 }
 
+# JIRA Integration Types
+type JiraConnection {
+  id: ID!
+  projectId: String!
+  name: String!
+  jiraUrl: String!
+  authenticationType: String!
+  projectKey: String!
+  username: String!
+  status: String!
+  isActive: Boolean!
+  lastTestedAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+input CreateJiraConnectionInput {
+  projectId: String!
+  name: String!
+  jiraUrl: String!
+  authenticationType: String!
+  projectKey: String!
+  username: String!
+  credential: String!
+}
+
+input UpdateJiraConnectionInput {
+  name: String!
+  jiraUrl: String!
+  projectKey: String!
+}
+
+input UpdateJiraCredentialsInput {
+  authenticationType: String!
+  username: String!
+  credential: String!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -2814,6 +3052,10 @@ type Query {
   ): FlakyTestConnection!
   flakyTestStats(projectId: String): FlakyTestStats!
   recentlyAddedFlakyTests(projectId: String, days: Int = 7, limit: Int = 10): [FlakyTest!]!
+  
+  # JIRA Connections
+  jiraConnection(id: ID!): JiraConnection
+  jiraConnections(projectId: String!): [JiraConnection!]!
 }
 
 # Mutation Root
@@ -2843,6 +3085,13 @@ type Mutation {
   # User Preferences
   updateUserPreferences(input: UpdateUserPreferencesInput!): UserPreferences!
   toggleProjectFavorite(projectId: String!): UserPreferences!
+  
+  # JIRA Connections
+  createJiraConnection(input: CreateJiraConnectionInput!): JiraConnection!
+  updateJiraConnection(id: ID!, input: UpdateJiraConnectionInput!): JiraConnection!
+  updateJiraCredentials(id: ID!, input: UpdateJiraCredentialsInput!): JiraConnection!
+  testJiraConnection(id: ID!): Boolean!
+  deleteJiraConnection(id: ID!): Boolean!
 }
 
 # Subscription Root (for future real-time features)
@@ -2943,6 +3192,34 @@ func (ec *executionContext) field_Mutation_assignTagsToTestRun_argsTagIds(
 	}
 
 	var zeroVal []string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_createJiraConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Mutation_createJiraConnection_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_createJiraConnection_argsInput(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (model.CreateJiraConnectionInput, error) {
+	if _, ok := rawArgs["input"]; !ok {
+		var zeroVal model.CreateJiraConnectionInput
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNCreateJiraConnectionInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐCreateJiraConnectionInput(ctx, tmp)
+	}
+
+	var zeroVal model.CreateJiraConnectionInput
 	return zeroVal, nil
 }
 
@@ -3052,6 +3329,34 @@ func (ec *executionContext) field_Mutation_deactivateProject_argsProjectID(
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
 	if tmp, ok := rawArgs["projectId"]; ok {
 		return ec.unmarshalNString2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteJiraConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Mutation_deleteJiraConnection_argsID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_deleteJiraConnection_argsID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["id"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+	if tmp, ok := rawArgs["id"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
 	}
 
 	var zeroVal string
@@ -3198,6 +3503,34 @@ func (ec *executionContext) field_Mutation_markSpecAsFlaky_argsSpecRunID(
 	return zeroVal, nil
 }
 
+func (ec *executionContext) field_Mutation_testJiraConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Mutation_testJiraConnection_argsID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_testJiraConnection_argsID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["id"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+	if tmp, ok := rawArgs["id"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
 func (ec *executionContext) field_Mutation_toggleProjectFavorite_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3223,6 +3556,108 @@ func (ec *executionContext) field_Mutation_toggleProjectFavorite_argsProjectID(
 	}
 
 	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_updateJiraConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Mutation_updateJiraConnection_argsID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := ec.field_Mutation_updateJiraConnection_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_updateJiraConnection_argsID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["id"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+	if tmp, ok := rawArgs["id"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_updateJiraConnection_argsInput(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (model.UpdateJiraConnectionInput, error) {
+	if _, ok := rawArgs["input"]; !ok {
+		var zeroVal model.UpdateJiraConnectionInput
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNUpdateJiraConnectionInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐUpdateJiraConnectionInput(ctx, tmp)
+	}
+
+	var zeroVal model.UpdateJiraConnectionInput
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_updateJiraCredentials_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Mutation_updateJiraCredentials_argsID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := ec.field_Mutation_updateJiraCredentials_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_updateJiraCredentials_argsID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["id"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+	if tmp, ok := rawArgs["id"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_updateJiraCredentials_argsInput(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (model.UpdateJiraCredentialsInput, error) {
+	if _, ok := rawArgs["input"]; !ok {
+		var zeroVal model.UpdateJiraCredentialsInput
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNUpdateJiraCredentialsInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐUpdateJiraCredentialsInput(ctx, tmp)
+	}
+
+	var zeroVal model.UpdateJiraCredentialsInput
 	return zeroVal, nil
 }
 
@@ -3631,6 +4066,62 @@ func (ec *executionContext) field_Query_flakyTests_argsOrderDirection(
 	}
 
 	var zeroVal *model.OrderDirection
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Query_jiraConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Query_jiraConnection_argsID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Query_jiraConnection_argsID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["id"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+	if tmp, ok := rawArgs["id"]; ok {
+		return ec.unmarshalNID2string(ctx, tmp)
+	}
+
+	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Query_jiraConnections_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_Query_jiraConnections_argsProjectID(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Query_jiraConnections_argsProjectID(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (string, error) {
+	if _, ok := rawArgs["projectId"]; !ok {
+		var zeroVal string
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+	if tmp, ok := rawArgs["projectId"]; ok {
+		return ec.unmarshalNString2string(ctx, tmp)
+	}
+
+	var zeroVal string
 	return zeroVal, nil
 }
 
@@ -6177,6 +6668,531 @@ func (ec *executionContext) fieldContext_HealthStatus_version(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _JiraConnection_id(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_id(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_projectId(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_projectId(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ProjectID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_name(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_name(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Name, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_jiraUrl(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.JiraURL, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_jiraUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_authenticationType(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.AuthenticationType, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_authenticationType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_projectKey(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_projectKey(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ProjectKey, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_projectKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_username(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_username(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Username, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_status(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_status(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Status, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_isActive(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_isActive(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.IsActive, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_isActive(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_lastTestedAt(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.LastTestedAt, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*time.Time)
+	fc.Result = res
+	return ec.marshalOTime2ᚖtimeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_lastTestedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_createdAt(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.CreatedAt, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(time.Time)
+	fc.Result = res
+	return ec.marshalNTime2timeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraConnection_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.UpdatedAt, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(time.Time)
+	fc.Result = res
+	return ec.marshalNTime2timeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createTestRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Mutation_createTestRun(ctx, field)
 	if err != nil {
@@ -7413,6 +8429,359 @@ func (ec *executionContext) fieldContext_Mutation_toggleProjectFavorite(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_toggleProjectFavorite_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createJiraConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_createJiraConnection(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().CreateJiraConnection(rctx, fc.Args["input"].(model.CreateJiraConnectionInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraConnection)
+	fc.Result = res
+	return ec.marshalNJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createJiraConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraConnection_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_JiraConnection_projectId(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraConnection_name(ctx, field)
+			case "jiraUrl":
+				return ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+			case "authenticationType":
+				return ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+			case "projectKey":
+				return ec.fieldContext_JiraConnection_projectKey(ctx, field)
+			case "username":
+				return ec.fieldContext_JiraConnection_username(ctx, field)
+			case "status":
+				return ec.fieldContext_JiraConnection_status(ctx, field)
+			case "isActive":
+				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "lastTestedAt":
+				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_JiraConnection_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createJiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateJiraConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_updateJiraConnection(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().UpdateJiraConnection(rctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateJiraConnectionInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraConnection)
+	fc.Result = res
+	return ec.marshalNJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateJiraConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraConnection_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_JiraConnection_projectId(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraConnection_name(ctx, field)
+			case "jiraUrl":
+				return ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+			case "authenticationType":
+				return ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+			case "projectKey":
+				return ec.fieldContext_JiraConnection_projectKey(ctx, field)
+			case "username":
+				return ec.fieldContext_JiraConnection_username(ctx, field)
+			case "status":
+				return ec.fieldContext_JiraConnection_status(ctx, field)
+			case "isActive":
+				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "lastTestedAt":
+				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_JiraConnection_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateJiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateJiraCredentials(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_updateJiraCredentials(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().UpdateJiraCredentials(rctx, fc.Args["id"].(string), fc.Args["input"].(model.UpdateJiraCredentialsInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraConnection)
+	fc.Result = res
+	return ec.marshalNJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateJiraCredentials(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraConnection_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_JiraConnection_projectId(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraConnection_name(ctx, field)
+			case "jiraUrl":
+				return ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+			case "authenticationType":
+				return ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+			case "projectKey":
+				return ec.fieldContext_JiraConnection_projectKey(ctx, field)
+			case "username":
+				return ec.fieldContext_JiraConnection_username(ctx, field)
+			case "status":
+				return ec.fieldContext_JiraConnection_status(ctx, field)
+			case "isActive":
+				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "lastTestedAt":
+				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_JiraConnection_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateJiraCredentials_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_testJiraConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_testJiraConnection(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().TestJiraConnection(rctx, fc.Args["id"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_testJiraConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_testJiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteJiraConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_deleteJiraConnection(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().DeleteJiraConnection(rctx, fc.Args["id"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteJiraConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteJiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10677,6 +12046,165 @@ func (ec *executionContext) fieldContext_Query_recentlyAddedFlakyTests(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_recentlyAddedFlakyTests_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_jiraConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_jiraConnection(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().JiraConnection(rctx, fc.Args["id"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraConnection)
+	fc.Result = res
+	return ec.marshalOJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_jiraConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraConnection_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_JiraConnection_projectId(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraConnection_name(ctx, field)
+			case "jiraUrl":
+				return ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+			case "authenticationType":
+				return ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+			case "projectKey":
+				return ec.fieldContext_JiraConnection_projectKey(ctx, field)
+			case "username":
+				return ec.fieldContext_JiraConnection_username(ctx, field)
+			case "status":
+				return ec.fieldContext_JiraConnection_status(ctx, field)
+			case "isActive":
+				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "lastTestedAt":
+				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_JiraConnection_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_jiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_jiraConnections(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_jiraConnections(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().JiraConnections(rctx, fc.Args["projectId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.JiraConnection)
+	fc.Result = res
+	return ec.marshalNJiraConnection2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnectionᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_jiraConnections(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraConnection_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_JiraConnection_projectId(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraConnection_name(ctx, field)
+			case "jiraUrl":
+				return ec.fieldContext_JiraConnection_jiraUrl(ctx, field)
+			case "authenticationType":
+				return ec.fieldContext_JiraConnection_authenticationType(ctx, field)
+			case "projectKey":
+				return ec.fieldContext_JiraConnection_projectKey(ctx, field)
+			case "username":
+				return ec.fieldContext_JiraConnection_username(ctx, field)
+			case "status":
+				return ec.fieldContext_JiraConnection_status(ctx, field)
+			case "isActive":
+				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "lastTestedAt":
+				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_JiraConnection_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraConnection_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_jiraConnections_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -18447,6 +19975,75 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputCreateJiraConnectionInput(ctx context.Context, obj any) (model.CreateJiraConnectionInput, error) {
+	var it model.CreateJiraConnectionInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "name", "jiraUrl", "authenticationType", "projectKey", "username", "credential"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "jiraUrl":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jiraUrl"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JiraURL = data
+		case "authenticationType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authenticationType"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AuthenticationType = data
+		case "projectKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectKey = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "credential":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("credential"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Credential = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context, obj any) (model.CreateProjectInput, error) {
 	var it model.CreateProjectInput
 	asMap := map[string]any{}
@@ -18805,6 +20402,88 @@ func (ec *executionContext) unmarshalInputTestRunFilter(ctx context.Context, obj
 				return it, err
 			}
 			it.Tags = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateJiraConnectionInput(ctx context.Context, obj any) (model.UpdateJiraConnectionInput, error) {
+	var it model.UpdateJiraConnectionInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "jiraUrl", "projectKey"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "jiraUrl":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jiraUrl"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JiraURL = data
+		case "projectKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectKey = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateJiraCredentialsInput(ctx context.Context, obj any) (model.UpdateJiraCredentialsInput, error) {
+	var it model.UpdateJiraCredentialsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"authenticationType", "username", "credential"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "authenticationType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("authenticationType"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AuthenticationType = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "credential":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("credential"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Credential = data
 		}
 	}
 
@@ -19344,6 +21023,97 @@ func (ec *executionContext) _HealthStatus(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var jiraConnectionImplementors = []string{"JiraConnection"}
+
+func (ec *executionContext) _JiraConnection(ctx context.Context, sel ast.SelectionSet, obj *model.JiraConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, jiraConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("JiraConnection")
+		case "id":
+			out.Values[i] = ec._JiraConnection_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._JiraConnection_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._JiraConnection_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jiraUrl":
+			out.Values[i] = ec._JiraConnection_jiraUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authenticationType":
+			out.Values[i] = ec._JiraConnection_authenticationType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectKey":
+			out.Values[i] = ec._JiraConnection_projectKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._JiraConnection_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._JiraConnection_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isActive":
+			out.Values[i] = ec._JiraConnection_isActive(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastTestedAt":
+			out.Values[i] = ec._JiraConnection_lastTestedAt(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._JiraConnection_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._JiraConnection_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -19471,6 +21241,41 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "toggleProjectFavorite":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_toggleProjectFavorite(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createJiraConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createJiraConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateJiraConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateJiraConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateJiraCredentials":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateJiraCredentials(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "testJiraConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_testJiraConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteJiraConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteJiraConnection(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -20406,6 +22211,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_recentlyAddedFlakyTests(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "jiraConnection":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_jiraConnection(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "jiraConnections":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_jiraConnections(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -22043,6 +23889,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalNCreateJiraConnectionInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐCreateJiraConnectionInput(ctx context.Context, v any) (model.CreateJiraConnectionInput, error) {
+	res, err := ec.unmarshalInputCreateJiraConnectionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐCreateProjectInput(ctx context.Context, v any) (model.CreateProjectInput, error) {
 	res, err := ec.unmarshalInputCreateProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -22302,6 +24153,64 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNJiraConnection2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx context.Context, sel ast.SelectionSet, v model.JiraConnection) graphql.Marshaler {
+	return ec._JiraConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNJiraConnection2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnectionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.JiraConnection) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx context.Context, sel ast.SelectionSet, v *model.JiraConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._JiraConnection(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
@@ -23198,6 +25107,16 @@ func (ec *executionContext) marshalNTreemapData2ᚖgithubᚗcomᚋguidewireᚑos
 	return ec._TreemapData(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNUpdateJiraConnectionInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐUpdateJiraConnectionInput(ctx context.Context, v any) (model.UpdateJiraConnectionInput, error) {
+	res, err := ec.unmarshalInputUpdateJiraConnectionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateJiraCredentialsInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐUpdateJiraCredentialsInput(ctx context.Context, v any) (model.UpdateJiraCredentialsInput, error) {
+	res, err := ec.unmarshalInputUpdateJiraCredentialsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateProjectInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐUpdateProjectInput(ctx context.Context, v any) (model.UpdateProjectInput, error) {
 	res, err := ec.unmarshalInputUpdateProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -23576,6 +25495,13 @@ func (ec *executionContext) marshalOJSON2map(ctx context.Context, sel ast.Select
 	_ = ctx
 	res := graphql.MarshalMap(v)
 	return res
+}
+
+func (ec *executionContext) marshalOJiraConnection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraConnection(ctx context.Context, sel ast.SelectionSet, v *model.JiraConnection) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._JiraConnection(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOOrderDirection2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐOrderDirection(ctx context.Context, v any) (*model.OrderDirection, error) {

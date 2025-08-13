@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
+	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
@@ -14,13 +15,14 @@ import (
 // DomainHandlerV2 provides REST API handlers using domain services with split handlers
 type DomainHandlerV2 struct {
 	// Sub-handlers
-	authHandler       *AuthHandler
-	healthHandler     *HealthHandler
-	testRunHandler    *TestRunHandler
-	projectHandler    *ProjectHandler
-	tagHandler        *TagHandler
-	systemHandler     *SystemHandler
-	fernLegacyHandler *FernLegacyHandler
+	authHandler           *AuthHandler
+	healthHandler         *HealthHandler
+	testRunHandler        *TestRunHandler
+	projectHandler        *ProjectHandler
+	tagHandler            *TagHandler
+	systemHandler         *SystemHandler
+	fernLegacyHandler     *FernLegacyHandler
+	jiraConnectionHandler *JiraConnectionHandler
 
 	// Middleware
 	authMiddleware *interfaces.AuthMiddlewareAdapter
@@ -33,19 +35,22 @@ func NewDomainHandlerV2(
 	projectService *projectsApp.ProjectService,
 	tagService *tagsApp.TagService,
 	flakyDetectionService *analyticsApp.FlakyDetectionService,
+	jiraConnectionService *integrations.JiraConnectionService,
 	authMiddleware *interfaces.AuthMiddlewareAdapter,
 	logger *logging.Logger,
 ) *DomainHandlerV2 {
+	baseHandler := NewBaseHandler(logger)
 	return &DomainHandlerV2{
-		authHandler:       NewAuthHandler(authMiddleware, logger),
-		healthHandler:     NewHealthHandler(logger),
-		testRunHandler:    NewTestRunHandler(testingService, logger),
-		projectHandler:    NewProjectHandler(projectService, logger),
-		tagHandler:        NewTagHandler(tagService, logger),
-		systemHandler:     NewSystemHandler(logger),
-		fernLegacyHandler: NewFernLegacyHandler(testingService, projectService, logger),
-		authMiddleware:    authMiddleware,
-		logger:            logger,
+		authHandler:           NewAuthHandler(authMiddleware, logger),
+		healthHandler:         NewHealthHandler(logger),
+		testRunHandler:        NewTestRunHandler(testingService, logger),
+		projectHandler:        NewProjectHandler(projectService, logger),
+		tagHandler:            NewTagHandler(tagService, logger),
+		systemHandler:         NewSystemHandler(logger),
+		fernLegacyHandler:     NewFernLegacyHandler(testingService, projectService, logger),
+		jiraConnectionHandler: NewJiraConnectionHandler(baseHandler, jiraConnectionService, projectService),
+		authMiddleware:        authMiddleware,
+		logger:                logger,
 	}
 }
 
@@ -95,6 +100,9 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	h.projectHandler.RegisterRoutes(userGroup, managerGroup, adminGroup)
 	h.tagHandler.RegisterRoutes(userGroup, adminGroup)
 	h.systemHandler.RegisterRoutes(adminGroup)
+	
+	// Register JIRA connection routes
+	h.registerJiraConnectionRoutes(managerGroup)
 
 	// Legacy fern-reporter compatible API endpoints
 	apiGroup := router.Group("/api")
@@ -102,6 +110,28 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 
 	// Log route registration
 	h.logger.Info("All routes registered successfully with split handlers")
+}
+
+// Helper methods
+
+// isUserAuthenticated checks if the user is authenticated
+func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
+	sessionID, err := c.Cookie("session_id")
+	return err == nil && sessionID != ""
+}
+
+// registerJiraConnectionRoutes registers JIRA connection routes
+func (h *DomainHandlerV2) registerJiraConnectionRoutes(managerGroup *gin.RouterGroup) {
+	// JIRA connection endpoints - managers can configure integrations
+	jira := managerGroup.Group("/projects/:projectId/integrations/jira")
+	{
+		jira.GET("/connections", h.jiraConnectionHandler.GetConnections)
+		jira.POST("/connections", h.jiraConnectionHandler.CreateConnection)
+		jira.PUT("/connections/:connectionId", h.jiraConnectionHandler.UpdateConnection)
+		jira.PUT("/connections/:connectionId/credentials", h.jiraConnectionHandler.UpdateCredentials)
+		jira.POST("/connections/:connectionId/test", h.jiraConnectionHandler.TestConnection)
+		jira.DELETE("/connections/:connectionId", h.jiraConnectionHandler.DeleteConnection)
+	}
 }
 
 // Backward compatibility - delegate to sub-handlers
@@ -147,9 +177,3 @@ func (h *DomainHandlerV2) getTag(c *gin.Context) {
 	h.tagHandler.getTag(c)
 }
 
-// Helper methods
-
-func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
-	sessionID, err := c.Cookie("session_id")
-	return err == nil && sessionID != ""
-}
