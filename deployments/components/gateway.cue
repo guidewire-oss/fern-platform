@@ -14,31 +14,31 @@ gateway: {
 				}
 				let ingressMetaName = context.name + nameSuffix
 				let ig  = [for i in context.outputs if (i.kind == "Ingress") && (i.metadata.name == ingressMetaName) {i}][0]
-				igs: *null | string
-				if ig != _|_ if ig.status != _|_ if ig.status.loadbalancer != _|_ {
+				igs: *null | _
+				if ig != _|_ if ig.status != _|_ if ig.status.loadbalancer != _|_ if ig.status.loadbalancer.ingress != _|_ if len(ig.status.loadbalancer.ingress) > 0 {
 				  igs: ig.status.loadbalancer.ingress[0]
 				}
-				igr: *null | string
-				if ig != _|_ if ig.spec != _|_  {
+				igr: *null | _
+				if ig != _|_ if ig.spec != _|_ if ig.spec.rules != _|_ if len(ig.spec.rules) > 0 {
 				  igr: ig.spec.rules[0]
 				}
-				if igs == _|_ {
+				if igs == null {
 				  message: "No loadBalancer found, visiting by using 'vela port-forward " + context.appName + "'\\n"
 				}
-				if igs != _|_ {
+				if igs != null {
 				  if igs.ip != _|_ {
-				    if igr.host != _|_ {
+				    if igr != null && igr.host != _|_ {
 				      message: "Visiting URL: " + igr.host + ", IP: " + igs.ip + "\\n"
 				    }
-				    if igr.host == _|_ {
+				    if igr == null || igr.host == _|_ {
 				      message: "Host not specified, visit the cluster or load balancer in front of the cluster, IP: " + igs.ip + "\\n"
 				    }
 				  }
 				  if igs.ip == _|_ {
-				    if igr.host != _|_ {
+				    if igr != null && igr.host != _|_ {
 				      message: "Visiting URL: " + igr.host + "\\n"
 				    }
-				    if igs.host == _|_ {
+				    if igr == null || igr.host == _|_ {
 				      message: "Host not specified, visit the cluster or load balancer in front of the cluster\\n"
 				    }
 				  }

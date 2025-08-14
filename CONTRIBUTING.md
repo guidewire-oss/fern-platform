@@ -157,7 +157,7 @@ kubectl get pods -n cnpg-system
 vela def apply deployments/components/cnpg.cue
 
 # Apply Gateway component definition (optional)
-vela def apply deployments/components/gateway.yaml
+vela def apply deployments/components/gateway.cue
 
 # Verify component definitions are installed
 vela def list
