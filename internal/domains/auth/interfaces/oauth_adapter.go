@@ -54,14 +54,33 @@ func (a *OAuthAdapter) BuildAuthURL(state string) string {
 	return a.config.OAuth.AuthURL + "?" + params.Encode()
 }
 
+// Helper to build URL with PKCE
+func (a *OAuthAdapter) buildAuthURLWithPKCE(state, codeChallenge string) string {
+	params := url.Values{}
+	params.Add("response_type", "code")
+	params.Add("client_id", a.config.OAuth.ClientID)
+	params.Add("redirect_uri", a.config.OAuth.RedirectURL)
+	params.Add("scope", strings.Join(a.config.OAuth.Scopes, " "))
+	params.Add("state", state)
+	params.Add("code_challenge", codeChallenge)
+	params.Add("code_challenge_method", "S256")
+
+	return a.config.OAuth.AuthURL + "?" + params.Encode()
+}
+
 // ExchangeCodeForToken exchanges authorization code for tokens
-func (a *OAuthAdapter) ExchangeCodeForToken(code string) (*application.TokenInfo, error) {
+func (a *OAuthAdapter) ExchangeCodeForToken(code string, codeVerifier string) (*application.TokenInfo, error) {
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
 	data.Set("redirect_uri", a.config.OAuth.RedirectURL)
 	data.Set("client_id", a.config.OAuth.ClientID)
-	data.Set("client_secret", a.config.OAuth.ClientSecret)
+
+	if codeVerifier != "" {
+		data.Set("code_verifier", codeVerifier) // Required for PKCE
+	} else {
+		data.Set("client_secret", a.config.OAuth.ClientSecret)
+	}
 
 	req, err := http.NewRequest("POST", a.config.OAuth.TokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
