@@ -27,7 +27,7 @@ jobs:
     name: License Compliance Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -49,7 +49,7 @@ jobs:
     # Only generate SBOM on main branch or tags, not on PRs
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Generate SBOM
       uses: anchore/sbom-action@v0
@@ -77,7 +77,7 @@ jobs:
       contents: write  # Required to submit dependencies
       security-events: write  # Required for dependency submission API
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
