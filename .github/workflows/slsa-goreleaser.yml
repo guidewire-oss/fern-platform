@@ -26,7 +26,7 @@ jobs:
       tree-state: ${{ steps.ldflags.outputs.tree-state }}
     steps:
       - id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}

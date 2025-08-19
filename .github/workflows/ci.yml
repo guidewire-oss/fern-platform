@@ -22,7 +22,7 @@ jobs:
     name: Lint Code
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -43,7 +43,7 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -77,7 +77,7 @@ jobs:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - uses: dagger/dagger-for-github@8.0.0
       with:
@@ -90,7 +90,7 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: actions/dependency-review-action@v4.7.1
       with:
         fail-on-severity: moderate
@@ -123,7 +123,7 @@ jobs:
       matrix:
         platform: ${{ github.event_name == 'pull_request' && fromJson('["linux/amd64"]') || fromJson('["linux/amd64", "linux/arm64"]') }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -149,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - uses: dagger/dagger-for-github@8.0.0
       with:

@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate-pr
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Run acceptance tests with Dagger
       uses: dagger/dagger-for-github@8.0.0
