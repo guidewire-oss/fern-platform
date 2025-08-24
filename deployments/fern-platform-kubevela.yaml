@@ -604,6 +604,8 @@ spec:
         env:
           - name: LOG_LEVEL
             value: debug
+          - name: FERN_USE_SPLIT_HANDLERS
+            value: "true"
           - name: REDIS_HOST
             value: redis
           - name: REDIS_PORT

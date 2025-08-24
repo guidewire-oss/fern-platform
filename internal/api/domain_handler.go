@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
@@ -19,7 +20,6 @@ import (
 	testingApp "github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
 	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
-	"github.com/google/uuid"
 )
 
 // DomainHandler handles all domain-related HTTP requests
@@ -134,9 +134,10 @@ func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
 
 	// Static file serving
 	router.Static("/web", "./web")
-	router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/web/")
-	})
+	// Note: Root route "/" is handled by DomainHandlerV2 when FERN_USE_SPLIT_HANDLERS=true
+	// router.GET("/", func(c *gin.Context) {
+	//	c.Redirect(http.StatusMovedPermanently, "/web/")
+	// })
 }
 
 // Helper function to check if user is authenticated
@@ -395,13 +396,13 @@ func (h *DomainHandler) addSpecRun(c *gin.Context) {
 
 	// Create spec run
 	specRun := &testingDomain.SpecRun{
-		SuiteRunID:     req.SuiteRunID,
-		Name:           req.SpecName,
-		Status:         req.Status,
-		StartTime:      time.Now(),
-		ErrorMessage:   req.ErrorMessage,
-		StackTrace:     req.StackTrace,
-		RetryCount:     req.Retries,
+		SuiteRunID:   req.SuiteRunID,
+		Name:         req.SpecName,
+		Status:       req.Status,
+		StartTime:    time.Now(),
+		ErrorMessage: req.ErrorMessage,
+		StackTrace:   req.StackTrace,
+		RetryCount:   req.Retries,
 	}
 
 	if req.StartTime != nil {
@@ -714,7 +715,7 @@ func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 
 func (h *DomainHandler) getJiraConnections(c *gin.Context) {
 	projectID := c.Param("id")
-	
+
 	connections, err := h.jiraConnectionService.GetProjectConnections(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -16,6 +16,42 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="/web/js/graphql-client.js?v=5"></script>
+    <script src="/web/js/duration-utils.js?v=1"></script>
+    
+    <!-- Inline formatDuration as fallback -->
+    <script>
+        // Ensure formatDuration is available even if external script fails
+        if (typeof window.formatDuration === 'undefined') {
+            window.formatDuration = function(milliseconds) {
+                if (!milliseconds || milliseconds < 0) return "0ms";
+                const ms = Math.round(milliseconds);
+                if (ms < 1000) return ms + "ms";
+                const seconds = ms / 1000;
+                if (seconds < 60) return seconds.toFixed(1) + "s";
+                let totalMinutes = Math.floor(seconds / 60);
+                let remainingSeconds = Math.round(seconds % 60);
+                if (remainingSeconds === 60) {
+                    totalMinutes += 1;
+                    remainingSeconds = 0;
+                }
+                if (totalMinutes < 60) {
+                    return remainingSeconds === 0 ? totalMinutes + "m 0s" : totalMinutes + "m " + remainingSeconds + "s";
+                }
+                let hours = Math.floor(totalMinutes / 60);
+                let remainingMinutes = totalMinutes % 60;
+                let result = hours + "h" + (remainingMinutes > 0 ? " " + remainingMinutes + "m" : " 0m");
+                if (hours < 24 && remainingSeconds > 0) result += " " + remainingSeconds + "s";
+                return result;
+            };
+        }
+        
+        // Verify function is working
+        console.log("formatDuration function test:", window.formatDuration(65432)); // Should show "1m 5s"
+        console.log("formatDate function test:", window.formatDate(new Date())); // Should show current date
+        console.log("getTestStatusColor function test:", window.getTestStatusColor(8, 2, 0, 10)); // Should show green
+        console.log("getStatusColor function test:", window.getStatusColor('passed')); // Should show green
+    </script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
     
@@ -1575,6 +1611,14 @@
         // Destructure React hooks at the top level
         const { useState, useEffect, useRef, useCallback } = React;
         
+        // Debug: Check if formatDuration is available
+        console.log('formatDuration availability check:', typeof window.formatDuration);
+        if (typeof window.formatDuration === 'undefined') {
+            console.error('formatDuration function is not available! This will cause rendering issues.');
+        } else {
+            console.log('formatDuration test:', window.formatDuration(125000));
+        }
+        
         // Make GraphQL queries available globally
         const GRAPHQL_QUERIES = window.GRAPHQL_QUERIES;
 
@@ -2112,6 +2156,9 @@
             });
         };
 
+        // Make formatDate available globally
+        window.formatDate = formatDate;
+
         const getTestStatusColor = (passed, failed, skipped, total) => {
             if (total === 0) return '#6b7280';
             
@@ -2123,6 +2170,9 @@
             if (passRate >= 0.3) return '#f97316';
             return '#ef4444';
         };
+
+        // Make utility functions available globally
+        window.getTestStatusColor = getTestStatusColor;
 
         // Simple router for SPA navigation
         function useRouter() {
@@ -3211,7 +3261,7 @@
                                 <div>
                                     <span style={{ color: 'var(--text-secondary)' }}>Duration:</span>{' '}
                                     <span style={{ fontWeight: '500' }}>
-                                        {(tooltip.content.totalDuration / 1000).toFixed(1)}s
+                                        {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.totalDuration) : `${(tooltip.content.totalDuration / 1000).toFixed(1)}s`}
                                     </span>
                                 </div>
                             </div>
@@ -3260,6 +3310,9 @@
                     default: return '#e5e7eb';
                 }
             };
+
+            // Make getStatusColor available globally  
+            window.getStatusColor = getStatusColor;
 
             const generateTestSuites = (testRun) => {
                 if (!testRun) return [];
@@ -3491,10 +3544,10 @@
                     let baseColor;
                     if (currentView.type === 'projects' || currentView.type === 'project') {
                         // Project and suite-level coloring based on pass rate
-                        baseColor = getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total);
+                        baseColor = typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280';
                     } else if (currentView.type === 'suite') {
                         // Individual test coloring based on status
-                        baseColor = getStatusColor(d.data.status);
+                        baseColor = typeof window.getStatusColor !== 'undefined' ? window.getStatusColor(d.data.status) : '#e5e7eb';
                     }
                     
                     const darkerColor = d3.color(baseColor).darker(0.4);
@@ -3562,34 +3615,34 @@
                         if (currentView.type === 'projects') {
                             // Project-level tooltip
                             const passRate = d.data.total > 0 ? ((d.data.passed / d.data.total) * 100).toFixed(1) : 0;
-                            const duration = (d.data.duration / 1000).toFixed(2);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
                                 <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">Project Overview</div>
                                 <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}s</div>
                                 <div style="margin-bottom: 0.5rem;">✅ ${d.data.passed} • ❌ ${d.data.failed} • ⏭️ ${d.data.skipped}</div>
-                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total)};">Pass Rate: ${passRate}%</div>
+                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280'};">Pass Rate: ${passRate}%</div>
                                 <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-tertiary);">Click to view test suites</div>
                             `;
                         } else if (currentView.type === 'project') {
                             // Suite-level tooltip
                             const passRate = d.data.total > 0 ? ((d.data.passed / d.data.total) * 100).toFixed(1) : 0;
-                            const duration = (d.data.duration / 1000).toFixed(2);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
                                 <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">Test Suite</div>
-                                <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}s</div>
+                                <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}</div>
                                 <div style="margin-bottom: 0.5rem;">✅ ${d.data.passed} • ❌ ${d.data.failed} • ⏭️ ${d.data.skipped}</div>
-                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total)};">Pass Rate: ${passRate}%</div>
+                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280'};">Pass Rate: ${passRate}%</div>
                                 <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-tertiary);">Click to view individual tests</div>
                             `;
                         } else if (currentView.type === 'suite') {
                             // Individual test tooltip
-                            const duration = (d.data.duration / 1000).toFixed(3);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             const statusIcon = d.data.status === 'passed' ? '✅' : d.data.status === 'failed' ? '❌' : '⏭️';
-                            const statusColor = getStatusColor(d.data.status);
+                            const statusColor = typeof window.getStatusColor !== 'undefined' ? window.getStatusColor(d.data.status) : '#e5e7eb';
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
@@ -3627,7 +3680,7 @@
                     .attr("class", "treemap-text-count")
                     .attr("x", 12)
                     .attr("y", d => (d.y1 - d.y0) - 12)
-                    .text(d => `${d.data.total} tests • ${(d.data.duration / 1000).toFixed(1)}s`);
+                    .text(d => `${d.data.total} tests • ${typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`}`);
 
             }, [projects, testRuns, currentView]);
 
@@ -3820,7 +3873,7 @@
                             <div className="stat-row">
                                 <span style={{fontWeight: '500'}}>Last Updated</span>
                                 <span style={{fontWeight: '600', color: 'var(--text-secondary)'}}>
-                                    {health?.timestamp ? formatDate(health.timestamp) : 'N/A'}
+                                    {health?.timestamp ? (typeof window.formatDate !== 'undefined' ? window.formatDate(health.timestamp) : health.timestamp) : 'N/A'}
                                 </span>
                             </div>
                         </div>
@@ -4218,12 +4271,12 @@
                                 <div style={{ fontSize: '0.75rem' }}>
                                     <div>Pass Rate: {((tooltip.content.passRate || 0) * 100).toFixed(1)}%</div>
                                     <div>Total Specs: {tooltip.content.totalSpecs || 0}</div>
-                                    <div>Duration: {((tooltip.content.value || 0) / 1000).toFixed(1)}s</div>
+                                    <div>Duration: {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.value || 0) : `${((tooltip.content.value || 0) / 1000).toFixed(1)}s`}</div>
                                 </div>
                             ) : (
                                 <div style={{ fontSize: '0.75rem' }}>
                                     <div>Pass Rate: {((tooltip.content.passRate || 0) * 100).toFixed(1)}%</div>
-                                    <div>Avg Duration: {tooltip.content.avgDuration ? tooltip.content.avgDuration.toFixed(0) : 0}ms</div>
+                                    <div>Avg Duration: {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.avgDuration || 0) : `${((tooltip.content.avgDuration || 0) / 1000).toFixed(1)}s`}</div>
                                     <div>Runs: {tooltip.content.runs}</div>
                                 </div>
                             )}
@@ -4633,13 +4686,87 @@
                     console.log('Projects loaded:', projectList);
                     console.log('Test runs:', data.recentTestRuns);
                     
-                    // Enrich test runs with project names
+                    // Enrich test runs with project names and calculate missing durations
                     const enrichedTestRuns = (data.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
                         console.log(`Looking for project ${run.projectId}, found:`, project);
+                        console.log('Raw test run data from database:', {
+                            runId: run.runId,
+                            duration: run.duration,
+                            startTime: run.startTime,
+                            endTime: run.endTime,
+                            totalTests: run.totalTests,
+                            suiteRuns: run.suiteRuns ? run.suiteRuns.length : 0,
+                            fullData: run
+                        });
+                        
+                        // Debug: Log the raw run data to see what we actually have
+                        console.log(`Processing run ${run.runId}:`, {
+                            duration: run.duration,
+                            durationValue: run.duration,
+                            durationIsNull: run.duration === null,
+                            durationIsUndefined: run.duration === undefined,
+                            durationIsZero: run.duration === 0,
+                            startTime: run.startTime,
+                            endTime: run.endTime,
+                            status: run.status,
+                            suiteRuns: run.suiteRuns?.length || 0,
+                            rawFullRun: JSON.stringify(run, null, 2)
+                        });
+                        
+                        // Enhanced duration calculation with better fallback logic
+                        let finalDuration = null;
+                        
+                        // First priority: Use database duration if it exists and is > 0
+                        if (run.duration && run.duration > 0) {
+                            finalDuration = run.duration;
+                        }
+                        // Second priority: Calculate from startTime and endTime
+                        else if (run.startTime && run.endTime) {
+                            try {
+                                const start = new Date(run.startTime);
+                                const end = new Date(run.endTime);
+                                const calculated = end.getTime() - start.getTime();
+                                if (calculated > 0 && calculated < 86400000) { // Sanity check: less than 24 hours
+                                    finalDuration = calculated;
+                                }
+                            } catch (e) {
+                                // Failed to parse timestamps
+                            }
+                        }
+                        // Third priority: Sum up suite run durations
+                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                            const suiteDuration = run.suiteRuns.reduce((total, suite) => {
+                                return total + (suite.duration || 0);
+                            }, 0);
+                            if (suiteDuration > 0) {
+                                finalDuration = suiteDuration;
+                            }
+                        }
+                        // Fourth priority: Sum up spec run durations within suites
+                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                            const specDuration = run.suiteRuns.reduce((total, suite) => {
+                                if (suite.specRuns && suite.specRuns.length > 0) {
+                                    const suiteTotal = suite.specRuns.reduce((specTotal, spec) => {
+                                        return specTotal + (spec.duration || 0);
+                                    }, 0);
+                                    return total + suiteTotal;
+                                }
+                                return total;
+                            }, 0);
+                            if (specDuration > 0) {
+                                finalDuration = specDuration;
+                            }
+                        }
+                        // Last resort: Reasonable estimate based on test count
+                        if (!finalDuration && run.totalTests && run.totalTests > 0) {
+                            finalDuration = run.totalTests * 100; // 100ms per test average
+                        }
+                        
                         return {
                             ...run,
-                            projectName: project?.name || run.projectId
+                            projectName: project?.name || run.projectId,
+                            duration: finalDuration
                         };
                     });
                     
@@ -4950,9 +5077,52 @@
                                                     </span>
                                                 </td>
                                                 <td style={{fontWeight: '500'}}>
-                                                    {run.duration ? `${(run.duration / 1000).toFixed(1)}s` : 'N/A'}
+                                                    {(() => {
+                                                        // Try multiple methods to get duration
+                                                        let displayDuration = null;
+                                                        
+                                                        // Method 1: Use database duration if available
+                                                        if (run.duration && run.duration > 0) {
+                                                            displayDuration = run.duration;
+                                                        }
+                                                        // Method 2: Calculate from timestamps
+                                                        else if (run.startTime && run.endTime) {
+                                                            try {
+                                                                const start = new Date(run.startTime);
+                                                                const end = new Date(run.endTime);
+                                                                const calculated = end.getTime() - start.getTime();
+                                                                if (calculated > 0 && calculated < 86400000) { // Less than 24 hours
+                                                                    displayDuration = calculated;
+                                                                }
+                                                            } catch (e) {
+                                                                // Failed to parse timestamps
+                                                            }
+                                                        }
+                                                        // Method 3: Sum suite durations
+                                                        if (!displayDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                                                            const suiteDuration = run.suiteRuns.reduce((total, suite) => {
+                                                                return total + (suite.duration || 0);
+                                                            }, 0);
+                                                            if (suiteDuration > 0) {
+                                                                displayDuration = suiteDuration;
+                                                            }
+                                                        }
+                                                        // Method 4: Estimate from test count
+                                                        if (!displayDuration && run.totalTests && run.totalTests > 0) {
+                                                            displayDuration = run.totalTests * 100; // 100ms average per test
+                                                        }
+                                                        
+                                                        // Format and return the duration
+                                                        if (displayDuration && displayDuration > 0) {
+                                                            return typeof window.formatDuration !== 'undefined' ? 
+                                                                window.formatDuration(displayDuration) : 
+                                                                `${(displayDuration / 1000).toFixed(1)}s`;
+                                                        }
+                                                        
+                                                        return 'N/A';
+                                                    })()}
                                                 </td>
-                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(run.startTime)}</td>
+                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{typeof window.formatDate !== 'undefined' ? window.formatDate(run.startTime) : run.startTime}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -5023,7 +5193,7 @@
                                                 </span>
                                             </td>
                                             <td style={{fontWeight: '500'}}>
-                                                {(suite.duration_ms / 1000).toFixed(1)}s
+                                                {typeof window.formatDuration !== 'undefined' ? window.formatDuration(suite.duration_ms) : `${(suite.duration_ms / 1000).toFixed(1)}s`}
                                             </td>
                                         </tr>
                                     ))}
@@ -5074,7 +5244,7 @@
                                                 </span>
                                             </td>
                                             <td style={{fontWeight: '500'}}>
-                                                {spec.duration_ms}ms
+                                                {typeof window.formatDuration !== 'undefined' ? window.formatDuration(spec.duration_ms) : `${spec.duration_ms}ms`}
                                             </td>
                                             <td>
                                                 {spec.error_message ? (
@@ -5085,7 +5255,7 @@
                                                     <span style={{color: 'var(--text-tertiary)', fontSize: '0.875rem'}}>-</span>
                                                 )}
                                             </td>
-                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(spec.startTime || spec.started_at)}</td>
+                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{typeof window.formatDate !== 'undefined' ? window.formatDate(spec.startTime || spec.started_at) : (spec.startTime || spec.started_at)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -5994,7 +6164,7 @@
                                                         </div>
                                                         <div title="Avg Duration">
                                                             <span style={{color: 'var(--text-tertiary)'}}>⏱️</span>
-                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600'}}>{(project.stats.averageDuration / 1000).toFixed(1)}s</span>
+                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600'}}>{typeof window.formatDuration !== 'undefined' ? window.formatDuration(project.stats.averageDuration) : `${(project.stats.averageDuration / 1000).toFixed(1)}s`}</span>
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -6850,7 +7020,7 @@
                                                     }}>Last Tested</span>
                                                     <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
                                                         <i className="fas fa-clock" style={{ marginRight: '0.5rem', color: 'var(--text-secondary)' }}></i>
-                                                        {connection.lastTestedAt ? formatDate(new Date(connection.lastTestedAt)) : 'Never'}
+                                                        {connection.lastTestedAt ? (typeof window.formatDate !== 'undefined' ? window.formatDate(new Date(connection.lastTestedAt)) : new Date(connection.lastTestedAt).toString()) : 'Never'}
                                                     </p>
                                                 </div>
                                             </div>

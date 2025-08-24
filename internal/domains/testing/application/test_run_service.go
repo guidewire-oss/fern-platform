@@ -161,6 +161,19 @@ func (s *TestRunService) updateSuiteStatistics(ctx context.Context, suiteRunID u
 
 	for _, spec := range specRuns {
 		totalTests++
+		// Fallback: If EndTime is nil, set to now
+		if spec.EndTime == nil {
+			now := time.Now()
+			spec.EndTime = &now
+		}
+		// Fallback: If StartTime is zero, set to EndTime
+		if spec.StartTime.IsZero() && spec.EndTime != nil {
+			spec.StartTime = *spec.EndTime
+		}
+		// Calculate duration if missing
+		if spec.Duration == 0 && spec.EndTime != nil && !spec.StartTime.IsZero() {
+			spec.Duration = spec.EndTime.Sub(spec.StartTime)
+		}
 		totalDuration += spec.Duration
 
 		switch spec.Status {
@@ -232,6 +245,10 @@ func (s *TestRunService) CreateSuiteRun(ctx context.Context, suiteRun *domain.Su
 	if suiteRun.Status == "" {
 		suiteRun.Status = "running"
 	}
+	// Always set StartTime if zero
+	if suiteRun.StartTime.IsZero() {
+		suiteRun.StartTime = time.Now()
+	}
 
 	return s.suiteRunRepo.Create(ctx, suiteRun)
 }
@@ -245,6 +262,10 @@ func (s *TestRunService) CreateSpecRun(ctx context.Context, specRun *domain.Spec
 	// Set default values
 	if specRun.Status == "" {
 		specRun.Status = "pending"
+	}
+	// Always set StartTime if zero
+	if specRun.StartTime.IsZero() {
+		specRun.StartTime = time.Now()
 	}
 
 	// Calculate duration if not set
