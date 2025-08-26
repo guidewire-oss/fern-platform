@@ -16,6 +16,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="/web/js/graphql-client.js?v=5"></script>
+    <script src="/web/js/timestamp-component.js?v=2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
     
@@ -2112,6 +2113,35 @@
             });
         };
 
+        // Timestamp React Component wrapper for timezone-aware display
+        const Timestamp = ({ timestamp, options = {} }) => {
+            const [element, setElement] = useState(null);
+
+            useEffect(() => {
+                if (!timestamp || !window.TimestampComponent) return;
+                
+                try {
+                    const timestampElement = window.TimestampComponent.createElement(timestamp, options);
+                    setElement(timestampElement);
+                } catch (error) {
+                    console.error('Error creating timestamp element:', error);
+                    // Fallback to formatDate
+                    setElement(null);
+                }
+            }, [timestamp, options]);
+
+            if (!element) {
+                return <span>{formatDate(timestamp)}</span>;
+            }
+
+            return <span ref={node => {
+                if (node && element) {
+                    node.innerHTML = '';
+                    node.appendChild(element);
+                }
+            }} />;
+        };
+
         const getTestStatusColor = (passed, failed, skipped, total) => {
             if (total === 0) return '#6b7280';
             
@@ -3820,7 +3850,7 @@
                             <div className="stat-row">
                                 <span style={{fontWeight: '500'}}>Last Updated</span>
                                 <span style={{fontWeight: '600', color: 'var(--text-secondary)'}}>
-                                    {health?.timestamp ? formatDate(health.timestamp) : 'N/A'}
+                                    {health?.timestamp ? <Timestamp timestamp={health.timestamp} /> : 'N/A'}
                                 </span>
                             </div>
                         </div>
@@ -4952,7 +4982,7 @@
                                                 <td style={{fontWeight: '500'}}>
                                                     {run.duration ? `${(run.duration / 1000).toFixed(1)}s` : 'N/A'}
                                                 </td>
-                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(run.startTime)}</td>
+                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}><Timestamp timestamp={run.startTime} /></td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -5085,7 +5115,7 @@
                                                     <span style={{color: 'var(--text-tertiary)', fontSize: '0.875rem'}}>-</span>
                                                 )}
                                             </td>
-                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(spec.startTime || spec.started_at)}</td>
+                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}><Timestamp timestamp={spec.startTime || spec.started_at} /></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -6850,7 +6880,7 @@
                                                     }}>Last Tested</span>
                                                     <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
                                                         <i className="fas fa-clock" style={{ marginRight: '0.5rem', color: 'var(--text-secondary)' }}></i>
-                                                        {connection.lastTestedAt ? formatDate(new Date(connection.lastTestedAt)) : 'Never'}
+                                                        {connection.lastTestedAt ? <Timestamp timestamp={new Date(connection.lastTestedAt)} /> : 'Never'}
                                                     </p>
                                                 </div>
                                             </div>
