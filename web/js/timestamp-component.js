@@ -9,7 +9,8 @@ class TimestampComponent {
 
     initializeStyles() {
         // Add styles for the component if they don't exist
-        if (!document.getElementById('timestamp-component-styles')) {
+        // Guard against SSR/Node contexts where document is undefined
+        if (typeof window === 'undefined' || !document.getElementById('timestamp-component-styles')) {
             const style = document.createElement('style');
             style.id = 'timestamp-component-styles';
             style.textContent = `
@@ -78,7 +79,6 @@ class TimestampComponent {
     formatTimestamp(timestamp, options = {}) {
         const {
             includeSeconds = true,
-            includeDateIfDifferent = true,
             shortFormat = false
         } = options;
 
@@ -278,8 +278,10 @@ class TimestampComponent {
     }
 }
 
-// Create global instance
-window.TimestampComponent = new TimestampComponent();
+// Create global instance with SSR compatibility
+if (typeof window !== 'undefined') {
+    window.TimestampComponent = new TimestampComponent();
+}
 
 // Export for module usage if needed
 if (typeof module !== 'undefined' && module.exports) {

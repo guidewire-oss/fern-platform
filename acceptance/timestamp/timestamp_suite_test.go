@@ -54,9 +54,13 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	if pw != nil {
 		defer func() {
-			recover()
+			if r := recover(); r != nil {
+				GinkgoWriter.Printf("Warning: panic during Playwright shutdown: %v\n", r)
+			}
 		}()
-		pw.Stop()
+		if err := pw.Stop(); err != nil {
+			GinkgoWriter.Printf("Warning: error stopping Playwright: %v\n", err)
+		}
 	}
 })
 
@@ -97,7 +101,7 @@ func CreateBrowser() playwright.Browser {
 
 	// Allow CI to override with custom args
 	if customArgs := os.Getenv("PLAYWRIGHT_CHROMIUM_ARGS"); customArgs != "" {
-		extraArgs := strings.Split(customArgs, " ")
+		extraArgs := parseShellArgs(customArgs)
 		args = append(args, extraArgs...)
 	}
 
@@ -126,4 +130,52 @@ func isRunningInDocker() bool {
 		return strings.Contains(string(data), "docker") || strings.Contains(string(data), "containerd")
 	}
 	return false
+}
+
+// parseShellArgs parses shell-style arguments, handling quotes and escapes properly
+func parseShellArgs(input string) []string {
+	var args []string
+	var current strings.Builder
+	var inQuotes bool
+	var quoteChar rune
+	
+	runes := []rune(input)
+	for i := 0; i < len(runes); i++ {
+		char := runes[i]
+		
+		switch {
+		case !inQuotes && (char == '"' || char == '\''):
+			// Start quoted section
+			inQuotes = true
+			quoteChar = char
+		case inQuotes && char == quoteChar:
+			// End quoted section
+			inQuotes = false
+			quoteChar = 0
+		case !inQuotes && (char == ' ' || char == '\t'):
+			// Whitespace outside quotes - end current arg
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+			// Skip consecutive whitespace
+			for i+1 < len(runes) && (runes[i+1] == ' ' || runes[i+1] == '\t') {
+				i++
+			}
+		case char == '\\' && i+1 < len(runes):
+			// Escape sequence
+			i++
+			current.WriteRune(runes[i])
+		default:
+			// Regular character
+			current.WriteRune(char)
+		}
+	}
+	
+	// Add final argument if any
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+	
+	return args
 }

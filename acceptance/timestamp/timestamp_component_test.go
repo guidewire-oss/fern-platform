@@ -2,7 +2,6 @@ package timestamp_test
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -192,17 +191,13 @@ var _ = Describe("Timestamp Component", Label("acceptance", "ui", "timestamp"), 
 			err = element.Hover()
 			Expect(err).NotTo(HaveOccurred())
 
-			// Wait a moment for the tooltip transition (300ms + buffer)
-			time.Sleep(500 * time.Millisecond)
-
-			// Check if tooltip becomes visible
-			tooltipVisible, err := page.Evaluate(`() => {
-				var tooltip = document.querySelector('#test-timestamp .timestamp-tooltip');
-				var computedStyle = window.getComputedStyle(tooltip);
-				return computedStyle.visibility === 'visible' || computedStyle.opacity > 0;
-			}`)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(tooltipVisible).To(Equal(true), "Tooltip should be visible on hover")
+			// Wait for tooltip to become visible using Playwright's wait functionality
+			tooltip := page.Locator("#test-timestamp .timestamp-tooltip")
+			err = tooltip.WaitFor(playwright.LocatorWaitForOptions{
+				State:   playwright.WaitForSelectorStateVisible,
+				Timeout: playwright.Float(2000), // 2 second timeout
+			})
+			Expect(err).NotTo(HaveOccurred(), "Tooltip should become visible on hover")
 		})
 	})
 

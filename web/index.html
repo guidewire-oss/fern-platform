@@ -2116,19 +2116,22 @@
         // Timestamp React Component wrapper for timezone-aware display
         const Timestamp = ({ timestamp, options = {} }) => {
             const [element, setElement] = useState(null);
+            
+            // Memoize options to prevent infinite re-renders
+            const memoizedOptions = useMemo(() => options, [JSON.stringify(options)]);
 
             useEffect(() => {
                 if (!timestamp || !window.TimestampComponent) return;
                 
                 try {
-                    const timestampElement = window.TimestampComponent.createElement(timestamp, options);
+                    const timestampElement = window.TimestampComponent.createElement(timestamp, memoizedOptions);
                     setElement(timestampElement);
                 } catch (error) {
                     console.error('Error creating timestamp element:', error);
                     // Fallback to formatDate
                     setElement(null);
                 }
-            }, [timestamp, options]);
+            }, [timestamp, memoizedOptions]);
 
             if (!element) {
                 return <span>{formatDate(timestamp)}</span>;
