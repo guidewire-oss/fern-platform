@@ -440,7 +440,7 @@ func (m *Manager) bindEnvVars() error {
 	if err := viper.BindEnv("logging.format", "LOG_FORMAT"); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -463,9 +463,6 @@ func (m *Manager) validate(config *Config) error {
 			if config.Auth.OAuth.ClientID == "" {
 				return fmt.Errorf("oauth is enabled but client ID is missing")
 			}
-			if config.Auth.OAuth.ClientSecret == "" {
-				return fmt.Errorf("oauth is enabled but client secret is missing")
-			}
 			if config.Auth.OAuth.AuthURL == "" {
 				return fmt.Errorf("oauth is enabled but auth URL is missing")
 			}
@@ -484,6 +481,10 @@ func (m *Manager) validate(config *Config) error {
 	}
 
 	return nil
+}
+
+func (m *Manager) GetString(key string) string {
+	return viper.GetString(key)
 }
 
 // GetConfig returns the global configuration instance

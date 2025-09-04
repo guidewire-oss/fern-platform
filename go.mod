@@ -3,6 +3,7 @@ module github.com/guidewire-oss/fern-platform
 go 1.24
 
 require (
+	bou.ke/monkey v1.0.2
 	github.com/99designs/gqlgen v0.17.78
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/gin-contrib/cors v1.7.6
