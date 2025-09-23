@@ -245,7 +245,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			mockTestRunRepo.On("Create", ctx, testRun).Return(nil)
 
-			err := service.CreateTestRun(ctx, testRun)
+			_, _, err := service.CreateTestRun(ctx, testRun)
 			Expect(err).NotTo(HaveOccurred())
 
 			mockTestRunRepo.AssertExpectations(GinkgoT())
@@ -260,7 +260,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			expectedErr := errors.New("database error")
 			mockTestRunRepo.On("Create", ctx, testRun).Return(expectedErr)
 
-			err := service.CreateTestRun(ctx, testRun)
+			_, _, err := service.CreateTestRun(ctx, testRun)
 			Expect(err).To(MatchError(expectedErr))
 		})
 
@@ -269,7 +269,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				// Missing required fields
 			}
 
-			err := service.CreateTestRun(ctx, testRun)
+			_, _, err := service.CreateTestRun(ctx, testRun)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("project ID is required"))
 		})
@@ -314,7 +314,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 		It("should validate RunID parameter", func() {
 			mockTestRunRepo.On("GetByRunID", ctx, "").Return(nil, errors.New("RunID is required"))
-			
+
 			result, err := service.GetTestRunByRunID(ctx, "")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("RunID is required"))
@@ -348,7 +348,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 		It("should validate ProjectID parameter", func() {
 			mockTestRunRepo.On("GetLatestByProjectID", ctx, "", 100).Return(nil, errors.New("ProjectID is required"))
-			
+
 			results, err := service.GetProjectTestRuns(ctx, "", 100)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("ProjectID is required"))
@@ -381,13 +381,13 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				testhelpers.WithTestRunID("test-123"),
 				testhelpers.WithStatus("running"),
 			)
-			
+
 			mockTestRunRepo.On("GetByID", ctx, uint(1)).Return(existingRun, nil)
 			mockSuiteRepo.On("FindByTestRunID", ctx, uint(1)).Return([]*domain.SuiteRun{}, nil)
 			mockTestRunRepo.On("Update", ctx, mock.MatchedBy(func(tr *domain.TestRun) bool {
 				return tr.Status == "invalid-status"
 			})).Return(nil)
-			
+
 			err := service.CompleteTestRun(ctx, 1, "invalid-status")
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -405,7 +405,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			existingRun := fixtures.TestRun("proj-123",
 				testhelpers.WithTestRunID("test-123"),
 			)
-			
+
 			mockTestRunRepo.On("GetByID", ctx, uint(1)).Return(existingRun, nil)
 			mockTestRunRepo.On("Delete", ctx, uint(1)).Return(nil)
 
@@ -420,7 +420,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				testhelpers.WithTestRunID("test-123"),
 			)
 			expectedErr := errors.New("deletion failed")
-			
+
 			mockTestRunRepo.On("GetByID", ctx, uint(1)).Return(existingRun, nil)
 			mockTestRunRepo.On("Delete", ctx, uint(1)).Return(expectedErr)
 
@@ -430,7 +430,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 		It("should return error when test run not found", func() {
 			mockTestRunRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found"))
-			
+
 			err := service.DeleteTestRun(ctx, 999)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("test run not found"))
@@ -504,7 +504,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			done := make(chan bool, 3)
 			for i := 0; i < 3; i++ {
 				go func() {
-					err := service.CreateTestRun(ctx, testRun)
+					_, _, err := service.CreateTestRun(ctx, testRun)
 					Expect(err).NotTo(HaveOccurred())
 					done <- true
 				}()

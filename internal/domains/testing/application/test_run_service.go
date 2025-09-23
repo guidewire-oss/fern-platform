@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
@@ -29,10 +30,11 @@ func NewTestRunService(
 }
 
 // CreateTestRun creates a new test run
-func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.TestRun) error {
+// Returns the test run (existing or newly created), a flag indicating if it already existed, and any error
+func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.TestRun) (*domain.TestRun, bool, error) {
 	// Validate test run
 	if testRun.ProjectID == "" {
-		return fmt.Errorf("project ID is required")
+		return nil, false, fmt.Errorf("project ID is required")
 	}
 
 	// Set default values
@@ -42,10 +44,25 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 
 	// Create the test run
 	if err := s.testRunRepo.Create(ctx, testRun); err != nil {
-		return fmt.Errorf("failed to create test run: %w", err)
+		// Check if it's a unique constraint violation (concurrent thread created it)
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
+			// Another thread already created this test run
+			// Try to fetch the existing one
+			fmt.Println("Duplicate found: fetching existing test run")
+			if testRun.RunID != "" {
+				existing, fetchErr := s.testRunRepo.GetByRunID(ctx, testRun.RunID)
+				if fetchErr == nil && existing != nil {
+					// Return the existing test run
+					return existing, true, nil // true = already existed
+				}
+			}
+		}
+		return nil, false, fmt.Errorf("failed to create test run: %w", err)
 	}
 
-	return nil
+	fmt.Println("New test run created with ID:", testRun.ID)
+	return testRun, false, nil // false = newly created
 }
 
 // CompleteTestRun marks a test run as completed
@@ -186,9 +203,18 @@ func (s *TestRunService) updateSuiteStatistics(ctx context.Context, suiteRunID u
 // CreateTestRunWithSuites creates a test run with all its suites and specs in one transaction
 func (s *TestRunService) CreateTestRunWithSuites(ctx context.Context, testRun *domain.TestRun, suites []domain.SuiteRun) error {
 	// Create the test run
-	if err := s.CreateTestRun(ctx, testRun); err != nil {
+	createdTestRun, _, err := s.CreateTestRun(ctx, testRun)
+	if err != nil {
 		return err
 	}
+
+	// Use the returned test run (either new or existing)
+	if createdTestRun != nil {
+		testRun = createdTestRun
+	}
+
+	// Always add the suite runs, whether test run is new or existing
+	// This handles the concurrent creation case where another thread created the test run
 
 	// Create all suites
 	for _, suite := range suites {

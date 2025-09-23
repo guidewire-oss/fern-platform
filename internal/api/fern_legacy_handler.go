@@ -304,7 +304,7 @@ func (h *FernLegacyHandler) createFernTestReport(c *gin.Context) {
 			"total_tests", testRun.TotalTests,
 			"status", testRun.Status)
 
-		if err := h.testingService.CreateTestRun(c.Request.Context(), testRun); err != nil {
+		if _, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun); err != nil {
 			h.logger.WithError(err).Error("Failed to create test run")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -386,7 +386,7 @@ func (h *FernLegacyHandler) convertTestRunToLegacyAPI(tr *domain.TestRun) gin.H 
 	if tr.EndTime != nil {
 		endTime = tr.EndTime.Format(time.RFC3339)
 	}
-	
+
 	return gin.H{
 		"uuid":         tr.RunID,
 		"project_uuid": tr.ProjectID,

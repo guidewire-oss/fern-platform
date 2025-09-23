@@ -34,3 +34,10 @@ bin/fern-platform
 
 # Temporary Dockerfile created by Makefile
 Dockerfile.fern-platform
+
+# Git files
+.git-authors
+
+# Intellij files
+.idea
+.devcontainer

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
@@ -19,7 +20,6 @@ import (
 	testingApp "github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
 	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
-	"github.com/google/uuid"
 )
 
 // DomainHandler handles all domain-related HTTP requests
@@ -184,49 +184,121 @@ func (h *DomainHandler) healthCheck(c *gin.Context) {
 // Test Run Handlers
 
 func (h *DomainHandler) recordTestRun(c *gin.Context) {
-	var req struct {
-		ProjectID   string                 `json:"projectId" binding:"required"`
-		RunID       string                 `json:"runId"`
-		Branch      string                 `json:"branch"`
-		CommitSHA   string                 `json:"commitSha"`
-		Environment string                 `json:"environment"`
-		Metadata    map[string]interface{} `json:"metadata"`
-		Status      string                 `json:"status"`
-	}
+	var req TestRunRequest
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Generate a unique run ID if not provided
-	if req.RunID == "" {
-		req.RunID = uuid.New().String()
+	// Convert request SuiteRuns to domain SuiteRuns
+	domainSuiteRuns := h.convertApiSuiteRunstoDomain(req.SuiteRuns)
+
+	// Calculate counts and status for this batch
+	status := h.calculateOverallStatus(req.SuiteRuns)
+	// Use client-provided environment if present, otherwise default
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+	totalTests, passedTests, failedTests, skippedTests :=
+		h.calculateOverallTestCounts(domainSuiteRuns)
+
+	// Determine runID
+	var runID string
+	if req.TestSeed != 0 {
+		runID = strconv.FormatUint(req.TestSeed, 10)
+	} else {
+		runID = uuid.New().String()
 	}
 
-	// Set defaults
-	if req.Status == "" {
-		req.Status = "pending"
+	// Look up existing run if seed provided
+	var testRun *testingDomain.TestRun
+	if req.TestSeed != 0 {
+		existing, err := h.testingService.GetTestRunByRunID(c.Request.Context(), runID)
+		if err == nil && existing != nil {
+			testRun = existing
+		}
 	}
 
-	// Create test run object
-	testRun := &testingDomain.TestRun{
-		RunID:       req.RunID,
-		ProjectID:   req.ProjectID,
-		Branch:      req.Branch,
-		GitCommit:   req.CommitSHA,
-		Environment: req.Environment,
-		Metadata:    req.Metadata,
-		Status:      req.Status,
-		StartTime:   time.Now(),
+	if testRun == nil {
+		// brand new run
+		newTestRun := &testingDomain.TestRun{
+			RunID:        runID,
+			ProjectID:    req.TestProjectID,
+			Branch:       req.GitBranch,
+			GitCommit:    req.GitSha,
+			Environment:  environment,
+			Metadata:     map[string]interface{}{},
+			Status:       status,
+			StartTime:    time.Now(),
+			SuiteRuns:    domainSuiteRuns,
+			TotalTests:   totalTests,
+			PassedTests:  passedTests,
+			FailedTests:  failedTests,
+			SkippedTests: skippedTests,
+		}
+
+		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
+		fmt.Println("alreadyExisted:", alreadyExisted)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		testRun = createdTestRun
+
+		// If it was newly created (not a duplicate), return immediately
+		if !alreadyExisted {
+			response := h.convertDomainTestRunToAPI(testRun)
+			c.JSON(http.StatusCreated, response)
+			return
+		}
+		// If it already existed (concurrent creation), continue to add suite runs below
 	}
 
-	err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	// At this point, testRun exists (either was already there or was concurrently created)
+	// Add the new suite runs to the existing test run
+	if testRun != nil {
+		// Reset TestRunID on new suites
+		for _, suite := range domainSuiteRuns {
+			suite.TestRunID = testRun.ID
+			if err := h.testingService.CreateSuiteRun(c.Request.Context(), &suite); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// now insert spec runs for this suite
+			for _, spec := range suite.SpecRuns {
+				spec.SuiteRunID = suite.ID
+				if err := h.testingService.CreateSpecRun(c.Request.Context(), spec); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+		}
+		// Update existing run: accumulate suite runs + counts
+		testRun.SuiteRuns = append(testRun.SuiteRuns, domainSuiteRuns...)
+		testRun.TotalTests += totalTests
+		testRun.PassedTests += passedTests
+		testRun.FailedTests += failedTests
+		testRun.SkippedTests += skippedTests
+
+		// mark overall status as failed if any failed
+		if status == "failed" || testRun.Status == "failed" {
+			testRun.Status = "failed"
+		} else if status == "partial" || testRun.Status == "partial" {
+			testRun.Status = "partial"
+		} else {
+			testRun.Status = "passed"
+		}
+
+		if err := h.testingService.UpdateTestRun(c.Request.Context(), testRun); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
-	response := h.convertTestRunToAPI(testRun)
+	response := h.convertDomainTestRunToAPI(testRun)
 	c.JSON(http.StatusCreated, response)
 }
 
@@ -251,19 +323,25 @@ func (h *DomainHandler) startTestRun(c *gin.Context) {
 		req.RunID = uuid.New().String()
 	}
 
+	// Use client-provided environment if present, otherwise default
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+
 	// Create the test run object
 	testRun := &testingDomain.TestRun{
 		ProjectID:   req.ProjectID,
 		RunID:       req.RunID,
 		Branch:      req.Branch,
 		GitCommit:   req.CommitSha,
-		Environment: req.Environment,
+		Environment: environment,
 		Status:      "running",
 		StartTime:   time.Now(),
 		Metadata:    req.Metadata,
 	}
 
-	err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
+	_, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -395,13 +473,13 @@ func (h *DomainHandler) addSpecRun(c *gin.Context) {
 
 	// Create spec run
 	specRun := &testingDomain.SpecRun{
-		SuiteRunID:     req.SuiteRunID,
-		Name:           req.SpecName,
-		Status:         req.Status,
-		StartTime:      time.Now(),
-		ErrorMessage:   req.ErrorMessage,
-		StackTrace:     req.StackTrace,
-		RetryCount:     req.Retries,
+		SuiteRunID:   req.SuiteRunID,
+		Name:         req.SpecName,
+		Status:       req.Status,
+		StartTime:    time.Now(),
+		ErrorMessage: req.ErrorMessage,
+		StackTrace:   req.StackTrace,
+		RetryCount:   req.Retries,
 	}
 
 	if req.StartTime != nil {
@@ -457,7 +535,7 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 	// Convert to API response
 	response := make([]gin.H, len(testRuns))
 	for i, tr := range testRuns {
-		response[i] = h.convertTestRunToAPI(tr)
+		response[i] = h.convertDomainTestRunToAPI(tr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -599,7 +677,7 @@ func (h *DomainHandler) getTestRun(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.convertTestRunToAPI(testRun))
+	c.JSON(http.StatusOK, h.convertDomainTestRunToAPI(testRun))
 }
 
 func (h *DomainHandler) getTestRunByRunId(c *gin.Context) {
@@ -667,44 +745,6 @@ func (h *DomainHandler) ignoreFlakyTest(c *gin.Context) {
 
 // Conversion helpers
 
-func (h *DomainHandler) convertTestRunToAPI(tr *testingDomain.TestRun) gin.H {
-	// Convert test run to API response
-	return gin.H{
-		"id":           tr.ID,
-		"runId":        tr.RunID,
-		"projectId":    tr.ProjectID,
-		"branch":       tr.Branch,
-		"commitSha":    tr.GitCommit,
-		"status":       tr.Status,
-		"startTime":    tr.StartTime,
-		"endTime":      tr.EndTime,
-		"duration":     tr.Duration.Seconds(),
-		"totalTests":   tr.TotalTests,
-		"passedTests":  tr.PassedTests,
-		"failedTests":  tr.FailedTests,
-		"skippedTests": tr.SkippedTests,
-		"environment":  tr.Environment,
-		"metadata":     tr.Metadata,
-	}
-}
-
-func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
-	snapshot := p.ToSnapshot()
-	return gin.H{
-		"id":            snapshot.ID,
-		"projectId":     string(snapshot.ProjectID),
-		"name":          snapshot.Name,
-		"description":   snapshot.Description,
-		"repository":    snapshot.Repository,
-		"defaultBranch": snapshot.DefaultBranch,
-		"team":          string(snapshot.Team),
-		"isActive":      snapshot.IsActive,
-		"settings":      snapshot.Settings,
-		"createdAt":     snapshot.CreatedAt,
-		"updatedAt":     snapshot.UpdatedAt,
-	}
-}
-
 // convertFlakyTestToAPI is deprecated - flaky test types have changed
 // func (h *DomainHandler) convertFlakyTestToAPI(ft *testingDomain.FlakyTest) gin.H {
 // 	return gin.H{}
@@ -714,7 +754,7 @@ func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 
 func (h *DomainHandler) getJiraConnections(c *gin.Context) {
 	projectID := c.Param("id")
-	
+
 	connections, err := h.jiraConnectionService.GetProjectConnections(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

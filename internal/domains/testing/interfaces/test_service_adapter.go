@@ -52,7 +52,7 @@ func (a *TestServiceAdapter) CreateTestRun() gin.HandlerFunc {
 		}
 
 		// Create test run
-		if err := a.service.CreateTestRun(c.Request.Context(), testRun); err != nil {
+		if _, _, err := a.service.CreateTestRun(c.Request.Context(), testRun); err != nil {
 			a.logger.WithError(err).Error("Failed to create test run")
 			c.JSON(500, gin.H{"error": "Failed to create test run"})
 			return

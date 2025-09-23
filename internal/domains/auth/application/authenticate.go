@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
+	"github.com/spf13/viper"
 )
 
 // AuthenticationService handles user authentication
@@ -138,6 +139,7 @@ func (s *AuthenticationService) findOrCreateUser(ctx context.Context, userInfo U
 		user.LastName = userInfo.LastName
 		user.ProfileURL = userInfo.Picture
 		user.EmailVerified = userInfo.EmailVerified
+		user.Role = s.determineUserRole(userInfo)
 
 		if err := s.userRepo.Update(ctx, user); err != nil {
 			return nil, false, err
@@ -204,7 +206,7 @@ func (s *AuthenticationService) createSession(ctx context.Context, user *domain.
 func (s *AuthenticationService) determineUserRole(userInfo UserInfo) domain.UserRole {
 	// Check for admin groups
 	for _, group := range userInfo.Groups {
-		if group == "admin" || group == "/admin" {
+		if group == "admin" || group == "/admin" || stringSliceContains(viper.GetStringSlice("auth.oauth.adminGroups"), group) {
 			return domain.RoleAdmin
 		}
 	}
@@ -221,4 +223,14 @@ func generateSessionID() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// stringSliceContains checks if a string is present in a slice
+func stringSliceContains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
