@@ -89,15 +89,8 @@ template: {
 
 	let ingressOutputName = "ingress" + nameSuffix
 	let ingressMetaName = context.name + nameSuffix
-	legacyAPI: context.clusterVersion.minor < 19
-
 	outputs: (ingressOutputName): {
-		if legacyAPI {
-			apiVersion: "networking.k8s.io/v1beta1"
-		}
-		if !legacyAPI {
-			apiVersion: "networking.k8s.io/v1"
-		}
+		apiVersion: "networking.k8s.io/v1"
 		kind: "Ingress"
 		metadata: {
 			name: "\(ingressMetaName)"
@@ -143,17 +136,11 @@ template: {
 						path:     k
 						pathType: parameter.pathType
 						backend: {
-							if legacyAPI {
-								serviceName: serviceMetaName
-								servicePort: v
-							}
-							if !legacyAPI {
 								service: {
 									name: serviceMetaName
 									port: number: v
 								}
 							}
-						}
 					},
 				]
 			}]

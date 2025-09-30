@@ -21,7 +21,6 @@ type DomainHandlerV2 struct {
 	projectHandler        *ProjectHandler
 	tagHandler            *TagHandler
 	systemHandler         *SystemHandler
-	fernLegacyHandler     *FernLegacyHandler
 	jiraConnectionHandler *JiraConnectionHandler
 
 	// Middleware
@@ -47,7 +46,6 @@ func NewDomainHandlerV2(
 		projectHandler:        NewProjectHandler(projectService, logger),
 		tagHandler:            NewTagHandler(tagService, logger),
 		systemHandler:         NewSystemHandler(logger),
-		fernLegacyHandler:     NewFernLegacyHandler(testingService, projectService, logger),
 		jiraConnectionHandler: NewJiraConnectionHandler(baseHandler, jiraConnectionService, projectService),
 		authMiddleware:        authMiddleware,
 		logger:                logger,
@@ -74,7 +72,7 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 
 	// OAuth authentication routes
 	authGroup := router.Group("/auth")
-	
+
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 
@@ -100,13 +98,9 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	h.projectHandler.RegisterRoutes(userGroup, managerGroup, adminGroup)
 	h.tagHandler.RegisterRoutes(userGroup, adminGroup)
 	h.systemHandler.RegisterRoutes(adminGroup)
-	
+
 	// Register JIRA connection routes
 	h.registerJiraConnectionRoutes(managerGroup)
-
-	// Legacy fern-reporter compatible API endpoints
-	apiGroup := router.Group("/api")
-	h.fernLegacyHandler.RegisterRoutes(apiGroup)
 
 	// Log route registration
 	h.logger.Info("All routes registered successfully with split handlers")
@@ -176,4 +170,3 @@ func (h *DomainHandlerV2) createTag(c *gin.Context) {
 func (h *DomainHandlerV2) getTag(c *gin.Context) {
 	h.tagHandler.getTag(c)
 }
-
