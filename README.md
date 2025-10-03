@@ -136,7 +136,7 @@ query {
 
 **For Users** → [UI Features Guide](docs/user-guide/ui-features.md) • [Workflows](docs/workflows/README.md) • [Use Cases](docs/use-cases/)
 
-**For Developers** → [Integration Guide](docs/developers/integration-guide.md) • [API Reference](docs/developers/api-reference.md) • [GraphQL](docs/graphql-api.md)
+**For Developers** → [Integration Guide](docs/developers/integration-guide.md) • [Development](docs/developers/quick-start.md) • [API Reference](docs/developers/api-reference.md) • [GraphQL](docs/graphql-api.md)
 
 **For DevOps** → [Installation](docs/developers/quick-start.md) • [Configuration](docs/configuration/) • [Troubleshooting](docs/troubleshooting/README.md)
 

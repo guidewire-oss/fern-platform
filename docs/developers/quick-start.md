@@ -7,11 +7,12 @@
 
 ## ⚡ Choose Your Path
 
-| Time Available | Method | Best For |
-|----------------|---------|----------|
-| **2 minutes** | [Docker Quick Start](#-2-minute-docker-quick-start) | Quick evaluation |
-| **15 minutes** | [Full Local Setup](#-15-minute-full-setup) | Developers ready to explore |
-| **30 minutes** | [Production Ready](#-30-minute-production-setup) | Teams preparing for deployment |
+| Time Available | Method                                                       | Best For                       |
+|----------------|--------------------------------------------------------------|--------------------------------|
+| **2 minutes**  | [Docker Quick Start](#-2-minute-docker-quick-start)          | Quick evaluation               |
+| **15 minutes** | [Full Local Setup](#-15-minute-full-setup)                   | Developers ready to explore    |
+| **20 minutes** | [Full Local Development](#-20-minute-full-local-development) | Developers ready to contribute |
+| **30 minutes** | [Production Ready](#-30-minute-production-setup)             | Teams preparing for deployment |
 
 ---
 
@@ -213,6 +214,202 @@ open http://fern-platform.local:8080
 # Note: Use fern-platform.local:8080, not localhost:8080, for OAuth to work.
 ```
 
+---
+
+## 🔥 20-Minute Full Local Development
+
+**Perfect for:** Developers who want to contribute to making Fern great!
+
+### Prerequisites (5 minutes)
+
+#### 1. Install Required Tools
+
+Fern Platform supports Linux, macOS, and Windows. Choose your installation method:
+
+**macOS (Homebrew)**
+```bash
+brew install k3d kubectl helm go
+
+# Install vela CLI
+curl -fsSl https://kubevela.io/script/install.sh | bash
+```
+
+**Linux**
+```bash
+# Install k3d
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+# Install kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Install helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Install vela CLI
+curl -fsSl https://kubevela.io/script/install.sh | bash
+```
+
+**Windows (PowerShell as Administrator)**
+```powershell
+# Install Chocolatey if not present
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install tools
+choco install k3d kubernetes-cli kubernetes-helm go
+
+# Install vela CLI
+Invoke-WebRequest -Uri "https://github.com/kubevela/kubevela/releases/latest/download/vela-windows-amd64.exe" -OutFile "vela.exe"
+Move-Item vela.exe $env:WINDIR\system32\
+```
+
+**For other installation methods:**
+- k3d: https://k3d.io/stable/#installation
+- kubectl: https://kubernetes.io/docs/tasks/tools/
+- helm: https://helm.sh/docs/intro/install/
+- vela: https://kubevela.io/docs/installation/kubernetes#install-vela-cli
+- go: https://go.dev/doc/install
+
+#### 2. Configure hosts file (Required for OAuth)
+
+**macOS/Linux**
+```bash
+# Add these entries to /etc/hosts for OAuth authentication to work:
+sudo sh -c 'echo "127.0.0.1 fern-platform.local" >> /etc/hosts'
+sudo sh -c 'echo "127.0.0.1 keycloak" >> /etc/hosts'
+
+# Verify entries were added:
+cat /etc/hosts | grep -E "fern-platform|keycloak"
+```
+
+**Windows (PowerShell as Administrator)**
+```powershell
+# Add entries to hosts file
+Add-Content -Path $env:windir\System32\drivers\etc\hosts -Value "`n127.0.0.1 fern-platform.local"
+Add-Content -Path $env:windir\System32\drivers\etc\hosts -Value "127.0.0.1 keycloak"
+
+# Verify entries were added
+Get-Content $env:windir\System32\drivers\etc\hosts | Select-String "fern-platform|keycloak"
+```
+
+> ⚠️ **Important**: Without these /etc/hosts entries, OAuth login will fail with redirect errors.
+
+### One-Command Setup (10 minutes)
+```bash
+# Clone and setup everything
+git clone https://github.com/guidewire-oss/fern-platform
+cd fern-platform
+
+# This single command:
+# 1. Check/create k3d cluster"
+# 2. Install prerequisites (KubeVela, CNPG)"
+# 3. Deploys PostgreSQL, Redis, and Keycloak"
+# 4. Setup PostgreSQL access from host and create necessary Keyclock realms and users for authentication"
+make deploy-infra
+
+# After deployment completes, the terminal will show the PostgreSQL credentials and terminal will hang (Due to port forwarding).
+
+# Notes: 
+# - OAuth authentication requires the /etc/hosts entries configured above.
+# - Users can also deploy PostgreSQL using Docker via `docker run --name postgres-local -e POSTGRES_USER=fern -e POSTGRES_PASSWORD=fern -e POSTGRES_DB=fern -p 5432:5432 -d postgres` and add the DB connection in `config/config.yaml`.
+```
+### Setup up development environment (5 minutes)
+```
+# open the `fern-platform` project in your favorite IDE
+
+# Update config/config.yaml by replacing the `database` and `auth` sections with following:
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "app"
+  password: "<DB_Password_From_Terminal"
+  dbname: "app"
+  sslmode: "disable"
+  timezone: "UTC"
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: "300s"
+  connMaxIdleTime: "300s"
+
+auth:
+  enabled: true
+  jwtSecret: ""
+  jwksUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/certs"
+  issuer: "http://keycloak:8080/realms/fern-platform"
+  audience: "fern-platform-web"
+  tokenExpiry: "24h"
+  refreshExpiry: "168h"
+  oauth:
+    enabled: true
+    clientId: "fern-platform-web"
+    clientSecret: "fern-platform-client-secret"
+    redirectUrl: "http://localhost:8080/auth/callback"
+    scopes: [ "openid", "profile", "email" ]
+    adminGroups: [ "fern-admin" ]
+
+    # OAuth endpoints (required)
+    authUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/auth"
+    tokenUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/token"
+    userInfoUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/userinfo"
+    jwksUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/certs"
+    logoutUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/logout"
+```
+```bash
+# Start Fern Platform by running
+go run cmd/fern-platform/main.go
+
+# UI is accessible from http://localhost:8080
+# The login credentials are available in section below 
+```
+
+### Test Credentials
+```bash
+# Multiple test users are available with different permission levels
+# See docs/configuration/test-users.md for complete list
+
+# Example users:
+Admin: admin@fern.com / test123 (full system access)
+Manager: fern-manager@fern.com / test123 (can edit fern team projects)
+User: fern-user@fern.com / test123 (read-only access to fern team)
+```
+
+### What You Get
+- ✅ **Full OAuth flow** with Keycloak
+- ✅ **Admin vs user roles** and permissions
+- ✅ **Real database** with migrations
+- ✅ **All APIs** (REST + GraphQL)
+- ✅ **Modern web UI** with treemap visualization
+- ✅ **Multi-framework test data** support
+- 🚧 **AI features planned** (not yet implemented)
+
+#### Note: This setup may be over engineered for local development. To quickly validate the changes on local deployment, follow the steps below
+In the file `deployments/fern-platform-kubevela.yaml`, update the lines:
+```
+image: ghcr.io/guidewire-oss/fern-platform:0.1.0
+imagePullPolicy: Always
+```
+To:
+```
+image: docker.io/library/fern-platform:latest
+imagePullPolicy: Never
+```
+And run the command:
+```bash
+make deploy-all
+```
+
+### Verify Everything Works
+```bash
+# 1. Check all pods are running
+kubectl get pods -n fern-platform
+
+# 2. Test health endpoint  
+curl http://localhost:8080/health
+
+# 3. Access the application
+open http://localhost:8080
+```
 ---
 
 ## 🏢 30-Minute Production Setup
