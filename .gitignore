@@ -9,6 +9,9 @@ CLAUDE.md
 acceptance-go/test-results/
 test-session.txt
 cookies*.txt
+coverage*.out
+coverage*.txt
+coverage*.html
 
 # Temporary configuration files
 config/oauth-keycloak-example.yaml
