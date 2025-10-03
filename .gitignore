@@ -12,6 +12,7 @@ cookies*.txt
 coverage*.out
 coverage*.txt
 coverage*.html
+*.test
 
 # Temporary configuration files
 config/oauth-keycloak-example.yaml
