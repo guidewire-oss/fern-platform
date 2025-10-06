@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     tags: [ 'v*' ]
     paths-ignore:
+      - '.github/CODEOWNERS'
+      - '.github/SECURITY.md'
       - '.slsa-goreleaser/**'
       - '.gitignore'
       - 'docs/**'
@@ -12,6 +14,8 @@ on:
   pull_request:
     branches: [ main ]
     paths-ignore:
+      - '.github/CODEOWNERS'
+      - '.github/SECURITY.md'
       - '.slsa-goreleaser/**'
       - '.gitignore'
       - 'docs/**'

@@ -9,6 +9,8 @@ on:
   push:
     branches: [ "main" ]
     paths-ignore:
+      - '.github/CODEOWNERS'
+      - '.github/SECURITY.md'
       - '.slsa-goreleaser/**'
       - '.gitignore'
       - 'docs/**'
