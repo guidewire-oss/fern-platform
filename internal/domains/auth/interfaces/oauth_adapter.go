@@ -115,6 +115,15 @@ func (a *OAuthAdapter) ExchangeCodeForToken(code string, codeVerifier string) (*
 
 // GetUserInfo retrieves user information from OAuth provider
 func (a *OAuthAdapter) GetUserInfo(accessToken string) (*application.UserInfo, error) {
+	a.logger.Debug("Fetching user info from: " + a.config.OAuth.UserInfoURL)
+
+	// Log token type for debugging (first 20 chars)
+	tokenPreview := accessToken
+	if len(tokenPreview) > 20 {
+		tokenPreview = tokenPreview[:20] + "..."
+	}
+	a.logger.Debugf("Using token: %s", tokenPreview)
+
 	req, err := http.NewRequest("GET", a.config.OAuth.UserInfoURL, nil)
 	if err != nil {
 		return nil, err
@@ -125,17 +134,32 @@ func (a *OAuthAdapter) GetUserInfo(accessToken string) (*application.UserInfo, e
 
 	resp, err := a.client.Do(req)
 	if err != nil {
+		a.logger.WithError(err).Error("Failed to make userinfo request")
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		a.logger.Errorf("UserInfo request failed - Status: %d, URL: %s, Response: %s",
+			resp.StatusCode, a.config.OAuth.UserInfoURL, string(body))
+
+		// Common Okta 403 errors and solutions
+		if resp.StatusCode == http.StatusForbidden {
+			return nil, fmt.Errorf("userinfo request forbidden (403). Common causes:\n"+
+				"  1) Using ID token instead of access token (check you're sending access_token, not id_token)\n"+
+				"  2) Access token missing required scopes (must include 'openid')\n"+
+				"  3) Token audience mismatch (token 'aud' must match authorization server)\n"+
+				"  4) Token expired or invalid\n"+
+				"Okta response: %s", string(body))
+		}
+
 		return nil, fmt.Errorf("userinfo request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var rawInfo map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&rawInfo); err != nil {
+	if err := json.Unmarshal(body, &rawInfo); err != nil {
 		return nil, err
 	}
 
@@ -276,4 +300,97 @@ func (a *OAuthAdapter) applyAdminOverrides(userInfo *application.UserInfo) {
 			}
 		}
 	}
+}
+
+// ValidateAndCheckScope validates a service account token and checks if it has a specific scope.
+// This function assumes the token is from a service account (not a user account).
+// It uses OAuth token introspection (RFC 7662) to validate the token with the authorization server.
+func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
+	// Check if introspection URL is configured
+	if a.config.OAuth.IntrospectionURL == "" {
+		return false, fmt.Errorf("introspection URL not configured")
+	}
+
+	// Build introspection request
+	data := url.Values{}
+	data.Set("token", accessToken)
+	data.Set("token_type_hint", "access_token")
+
+	req, err := http.NewRequest("POST", a.config.OAuth.IntrospectionURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return false, fmt.Errorf("failed to create introspection request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	// Use introspection-specific client credentials if configured, otherwise fall back to main credentials
+	clientID := a.config.OAuth.IntrospectionClientID
+	clientSecret := a.config.OAuth.IntrospectionClientSecret
+	
+	if clientID == "" {
+		clientID = a.config.OAuth.ClientID
+	}
+	if clientSecret == "" {
+		clientSecret = a.config.OAuth.ClientSecret
+	}
+
+	// Add client authentication
+	if clientSecret != "" {
+		req.SetBasicAuth(clientID, clientSecret)
+	}
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to introspect token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("token introspection failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse introspection response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read introspection response: %w", err)
+	}
+
+	var introspectionData map[string]interface{}
+	if err := json.Unmarshal(body, &introspectionData); err != nil {
+		return false, fmt.Errorf("failed to parse introspection response: %w", err)
+	}
+
+	// Check if token is active
+	active, ok := introspectionData["active"].(bool)
+	if !ok || !active {
+		return false, fmt.Errorf("token is not active")
+	}
+
+	// Extract scopes from introspection response
+	var scopes []string
+
+	// Try 'scope' field (space-separated string format per RFC 7662)
+	if scope, ok := introspectionData["scope"].(string); ok {
+		scopes = strings.Split(scope, " ")
+	}
+
+	// Try 'scp' field (array format - some providers use this)
+	if scp, ok := introspectionData["scp"].([]interface{}); ok {
+		for _, s := range scp {
+			if scopeStr, ok := s.(string); ok {
+				scopes = append(scopes, scopeStr)
+			}
+		}
+	}
+
+	// Check if required scope is present
+	for _, scope := range scopes {
+		if scope == requiredScope {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

@@ -38,14 +38,16 @@ func (f *fakeAuthService) Logout(ctx context.Context, sid string) error {
 }
 
 type fakeOAuthAdapter struct {
-	state     string
-	stateErr  error
-	authURL   string
-	token     *application.TokenInfo
-	tokenErr  error
-	user      *application.UserInfo
-	userErr   error
-	logoutURL string
+	state            string
+	stateErr         error
+	authURL          string
+	token            *application.TokenInfo
+	tokenErr         error
+	user             *application.UserInfo
+	userErr          error
+	logoutURL        string
+	validateScopeRes bool
+	validateScopeErr error
 }
 
 func (f *fakeOAuthAdapter) GenerateState() (string, error) { return f.state, f.stateErr }
@@ -62,6 +64,9 @@ func (f *fakeOAuthAdapter) GetUserInfo(accessToken string) (*application.UserInf
 	return f.user, f.userErr
 }
 func (f *fakeOAuthAdapter) BuildProviderLogoutURL(idToken string) string { return f.logoutURL }
+func (f *fakeOAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
+	return f.validateScopeRes, f.validateScopeErr
+}
 
 var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 	var (
@@ -102,7 +107,7 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 
 	Describe("RequireAuth", func() {
 		It("authenticates with bearer token", func() {
-			oauth.user = &application.UserInfo{Sub: "u1"}
+			oauth.user = &application.UserInfo{Sub: "u1", Groups: []string{"team1-users"}}
 			authSvc.authFn = func(ctx context.Context, u application.UserInfo, t application.TokenInfo, ip, ua string) (*application.AuthenticateResult, error) {
 				return &application.AuthenticateResult{Session: &domain.Session{SessionID: "sid1"}, User: &domain.User{UserID: "u1"}}, nil
 			}
@@ -124,7 +129,54 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 			mw := adapter.RequireAuth()
 			mw(c)
 
-			Expect(recorder.Code).To(Equal(400))
+			Expect(recorder.Code).To(Equal(401)) // Changed from 400 to 401
+		})
+
+		It("authenticates service account token with fern-read scope", func() {
+			// GetUserInfo fails (service account token doesn't have openid scope)
+			oauth.userErr = errors.New("no userinfo for service account")
+			// But ValidateAndCheckScope succeeds (token is valid and has fern-read scope)
+			oauth.validateScopeRes = true
+			oauth.validateScopeErr = nil
+
+			c.Request.Header.Set("Authorization", "Bearer service-token")
+			mw := adapter.RequireAuth()
+			mw(c)
+
+			Expect(c.IsAborted()).To(BeFalse())
+			user, exists := c.Get("user")
+			Expect(exists).To(BeTrue())
+			Expect(user.(*domain.User).UserID).To(Equal("service-account"))
+			isServiceAccount, _ := c.Get("is_service_account")
+			Expect(isServiceAccount).To(BeTrue())
+		})
+
+		It("fails with service account token that fails validation", func() {
+			oauth.userErr = errors.New("no userinfo")
+			// Token validation fails (invalid signature or expired)
+			oauth.validateScopeRes = false
+			oauth.validateScopeErr = errors.New("token signature invalid")
+
+			c.Request.Header.Set("Authorization", "Bearer forged-token")
+			mw := adapter.RequireAuth()
+			mw(c)
+
+			Expect(recorder.Code).To(Equal(401))
+			Expect(recorder.Body.String()).To(ContainSubstring("validation failed"))
+		})
+
+		It("fails with service account token that lacks fern-read scope", func() {
+			oauth.userErr = errors.New("no userinfo")
+			// Token is valid but doesn't have the required scope
+			oauth.validateScopeRes = false
+			oauth.validateScopeErr = nil
+
+			c.Request.Header.Set("Authorization", "Bearer token-without-scope")
+			mw := adapter.RequireAuth()
+			mw(c)
+
+			Expect(recorder.Code).To(Equal(401))
+			Expect(recorder.Body.String()).To(ContainSubstring("lacks required scopes"))
 		})
 
 		It("redirects to login if no session", func() {

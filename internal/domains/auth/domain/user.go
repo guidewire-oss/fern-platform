@@ -28,8 +28,9 @@ type User struct {
 type UserRole string
 
 const (
-	RoleAdmin UserRole = "admin"
-	RoleUser  UserRole = "user"
+	RoleAdmin   UserRole = "admin"
+	RoleManager UserRole = "manager"
+	RoleUser    UserRole = "user"
 )
 
 // UserStatus represents the status of a user account
@@ -62,6 +63,11 @@ func (u *User) IsAdmin() bool {
 	return u.Role == RoleAdmin
 }
 
+// IsManager checks if the user has manager role
+func (u *User) IsManager() bool {
+	return u.Role == RoleManager
+}
+
 // IsActive checks if the user account is active
 func (u *User) IsActive() bool {
 	return u.Status == StatusActive
@@ -90,10 +96,17 @@ func (u *User) GetTeams() []string {
 
 // IsTeamManager checks if user is a manager for any team
 func (u *User) IsTeamManager() bool {
+	// Admins have all permissions
 	if u.IsAdmin() {
 		return true
 	}
 
+	// Users with manager role are managers
+	if u.IsManager() {
+		return true
+	}
+
+	// Check if user belongs to team-specific manager groups
 	for _, group := range u.Groups {
 		if isManagerGroup(group.GroupName) {
 			return true
@@ -104,10 +117,17 @@ func (u *User) IsTeamManager() bool {
 
 // IsManagerForTeam checks if user is a manager for a specific team
 func (u *User) IsManagerForTeam(team string) bool {
+	// Admins have all permissions
 	if u.IsAdmin() {
 		return true
 	}
 
+	// Users with manager role can manage all teams
+	if u.IsManager() {
+		return true
+	}
+
+	// Check if user belongs to team-specific manager group
 	managerGroup := team + "-managers"
 	return u.HasGroup(managerGroup)
 }

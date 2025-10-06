@@ -78,10 +78,14 @@ type OAuthConfig struct {
 	JWKSUrl     string `mapstructure:"jwksUrl"`     // JWKS endpoint for token validation
 	IssuerURL   string `mapstructure:"issuerUrl"`   // OpenID Connect Discovery URL (optional)
 	LogoutURL   string `mapstructure:"logoutUrl"`   // Logout endpoint (optional)
+	IntrospectionURL string `mapstructure:"introspectionUrl"` // Token introspection endpoint (RFC 7662, optional)
+	IntrospectionClientID string `mapstructure:"introspectionClientId"` // Client ID for introspection (optional, defaults to ClientID)
+	IntrospectionClientSecret string `mapstructure:"introspectionClientSecret"` // Client Secret for introspection (optional, defaults to ClientSecret)
 
 	// User and role mapping
 	AdminUsers       []string          `mapstructure:"adminUsers"`       // List of admin user emails/IDs
 	AdminGroups      []string          `mapstructure:"adminGroups"`      // List of admin groups from token claims
+	ManagerGroups    []string          `mapstructure:"managerGroups"`    // List of manager groups from token claims
 	UserRoleMapping  map[string]string `mapstructure:"userRoleMapping"`  // Map specific users to roles
 	GroupRoleMapping map[string]string `mapstructure:"groupRoleMapping"` // Map groups to roles
 
@@ -382,6 +386,9 @@ func (m *Manager) bindEnvVars() error {
 		return err
 	}
 	if err := viper.BindEnv("auth.oauth.adminGroups", "OAUTH_ADMIN_GROUPS"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.managerGroups", "OAUTH_MANAGER_GROUPS"); err != nil {
 		return err
 	}
 	if err := viper.BindEnv("auth.oauth.userIdField", "OAUTH_USER_ID_FIELD"); err != nil {

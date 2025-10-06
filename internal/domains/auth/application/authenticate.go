@@ -203,11 +203,22 @@ func (s *AuthenticationService) createSession(ctx context.Context, user *domain.
 	return session, nil
 }
 
+func (s *AuthenticationService) DetermineUserRole(userInfo UserInfo) domain.UserRole {
+	return s.determineUserRole(userInfo)
+}
+
 func (s *AuthenticationService) determineUserRole(userInfo UserInfo) domain.UserRole {
-	// Check for admin groups
+	// Check for admin groups (highest priority)
 	for _, group := range userInfo.Groups {
 		if group == "admin" || group == "/admin" || stringSliceContains(viper.GetStringSlice("auth.oauth.adminGroups"), group) {
 			return domain.RoleAdmin
+		}
+	}
+
+	// Check for manager groups
+	for _, group := range userInfo.Groups {
+		if group == "manager" || group == "/manager" || stringSliceContains(viper.GetStringSlice("auth.oauth.managerGroups"), group) {
+			return domain.RoleManager
 		}
 	}
 

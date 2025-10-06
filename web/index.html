@@ -2316,12 +2316,12 @@
                 managerGroup: 'manager',
                 userGroup: 'user'
             };
-            
-            const isManager = user?.groups?.some(group => 
+
+            const isManager = user?.groups?.some(group =>
                 group === roleGroups.managerGroup || group === roleGroups.adminGroup
-            ) || user?.role === 'admin';
-            
-            const isAdmin = user?.groups?.some(group => 
+            ) || user?.role === 'manager' || user?.role === 'admin';
+
+            const isAdmin = user?.groups?.some(group =>
                 group === roleGroups.adminGroup
             ) || user?.role === 'admin';
             

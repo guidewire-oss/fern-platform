@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -141,6 +142,9 @@ func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
 
 	// Static file serving
 	router.Static("/web", "./web")
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/web/")
+	})
 }
 
 // Helper function to check if user is authenticated
@@ -539,21 +543,61 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 	projectID := c.Query("projectId")
 	_ = c.Query("status") // status filtering not implemented yet
 
-	// Get test runs - simplified version
+	// Get authenticated user from context
+	user, exists := c.Get("user")
+	if !exists || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	authUser, ok := user.(*authDomain.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user data"})
+		return
+	}
+
+	// Check if this is a service account token
+	isServiceAccount, _ := c.Get("is_service_account")
+
+	// Get test runs
 	var testRuns []*testingDomain.TestRun
 	var err error
 
 	if projectID != "" {
+		// Get test runs for specific project
 		testRuns, err = h.testingService.GetProjectTestRuns(c.Request.Context(), projectID, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Filter by user's groups unless it's a service account with fern-read scope
+		if isServiceAccount == true {
+			// Service account with fern-read scope - no filtering needed
+			h.logger.Debug("Service account request - returning all test runs for project")
+		} else {
+			// Regular user - filter by groups
+			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+		}
 	} else {
+		// Get all recent test runs
 		testRuns, err = h.testingService.GetRecentTestRuns(c.Request.Context(), limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Filter by user's groups unless it's a service account with fern-read scope
+		if isServiceAccount == true {
+			// Service account with fern-read scope - return all test runs
+			h.logger.Debug("Service account request - returning all test runs")
+		} else {
+			// Regular user - filter by groups
+			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+		}
 	}
 
 	total := int64(len(testRuns))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	// Convert to API response
 	response := make([]gin.H, len(testRuns))
@@ -567,6 +611,47 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// filterTestRunsByUserGroups filters test runs to only include those from projects
+// whose team matches any of the user's groups
+func (h *DomainHandler) filterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.TestRun, user *authDomain.User) []*testingDomain.TestRun {
+	// Extract user's group names
+	userGroups := make(map[string]bool)
+	for _, group := range user.Groups {
+		userGroups[group.GroupName] = true
+	}
+
+	// Get unique project IDs from test runs
+	projectIDs := make(map[string]bool)
+	for _, tr := range testRuns {
+		projectIDs[tr.ProjectID] = true
+	}
+
+	// Check which projects the user has access to
+	allowedProjects := make(map[string]bool)
+	for projectID := range projectIDs {
+		project, err := h.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
+		if err != nil {
+			h.logger.WithError(err).Warnf("Failed to get project %s", projectID)
+			continue
+		}
+
+		// Check if project's team matches any of user's groups
+		if userGroups[string(project.Team())] {
+			allowedProjects[projectID] = true
+		}
+	}
+
+	// Filter test runs to only include allowed projects
+	filtered := make([]*testingDomain.TestRun, 0)
+	for _, tr := range testRuns {
+		if allowedProjects[tr.ProjectID] {
+			filtered = append(filtered, tr)
+		}
+	}
+
+	return filtered
 }
 
 // getCurrentUser returns the current authenticated user information

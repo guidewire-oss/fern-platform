@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
@@ -480,31 +479,12 @@ func (r *projectResolver) CanManage(ctx context.Context, obj *model.Project) (bo
 		return true, nil
 	}
 
-	// Get role group names from context
-	roleGroups := getRoleGroupNamesFromContext(ctx)
-
-	// Check if user has team + manager group combination
-	if obj.Team != nil && *obj.Team != "" {
-		hasTeamGroup := false
-		hasManagerGroup := false
-
-		for _, group := range user.Groups {
-			groupName := strings.TrimPrefix(group.GroupName, "/")
-			if groupName == *obj.Team {
-				hasTeamGroup = true
-			}
-			if groupName == roleGroups.ManagerGroup {
-				hasManagerGroup = true
-			}
-		}
-
-		// If user is in both team and manager groups, they can manage
-		if hasTeamGroup && hasManagerGroup {
-			return true, nil
-		}
+	// Manager role can manage all projects they can see
+	if user.Role == authDomain.RoleManager {
+		return true, nil
 	}
 
-	// Check scopes for management permissions
+	// Check scopes for management permissions (for non-admin, non-manager users)
 	requiredScopes := []string{
 		fmt.Sprintf("project:write:%s", obj.ProjectID),
 		fmt.Sprintf("project:delete:%s", obj.ProjectID),

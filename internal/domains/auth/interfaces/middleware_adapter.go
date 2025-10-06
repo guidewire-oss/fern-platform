@@ -31,6 +31,7 @@ type OAuthAdapterIface interface {
 	ExchangeCodeForToken(code, verifier string) (*application.TokenInfo, error)
 	GetUserInfo(accessToken string) (*application.UserInfo, error)
 	BuildProviderLogoutURL(idToken string) string
+	ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error)
 }
 
 // AuthMiddlewareAdapter provides Gin middleware using auth domain services
@@ -75,15 +76,61 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 		authHeaderLower := strings.ToLower(authHeader)
 		if strings.HasPrefix(authHeaderLower, "bearer ") {
 			accessToken := authHeader[7:]
-			// Extract user info and craete session
-			// Get user info
+
+			// Try to get user info (works for user tokens with openid scope)
 			userInfo, err := m.oauthAdapter.GetUserInfo(accessToken)
+
 			if err != nil {
-				m.logger.WithError(err).Error("Failed to get user info due to: " + err.Error())
-				c.JSON(400, gin.H{"error": "Failed to get user information"})
+				// UserInfo failed - check if it's a service account token with fern-read scope
+				m.logger.WithError(err).Debug("GetUserInfo failed, checking for service account token")
+
+				// SECURITY: Use ValidateAndCheckScope to verify token signature and expiry
+				hasScope, validationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-read")
+				if validationErr != nil {
+					tokenPreview := accessToken
+					if len(accessToken) > 20 {
+						tokenPreview = accessToken[:20] + "..."
+					}
+					m.logger.WithError(validationErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
+					c.JSON(401, gin.H{"error": "Invalid token: validation failed"})
+					c.Abort()
+					return
+				}
+
+				if hasScope {
+					// Service account token with fern-read scope
+					m.logger.Info("Service account token detected with fern-read scope")
+
+					// Create a special user object to indicate service account access
+					serviceAccountUser := &domain.User{
+						UserID: "service-account",
+						Email:  "service-account@fern-platform",
+						Name:   "Service Account",
+						Role:   domain.RoleUser,
+						Status: domain.StatusActive,
+						Groups: []domain.UserGroup{
+							{
+								UserID:    "service-account",
+								GroupName: "fern-read-all", // Special group to indicate full read access
+							},
+						},
+					}
+
+					// Set the service account user in context
+					c.Set("user", serviceAccountUser)
+					c.Set("is_service_account", true)
+					c.Next()
+					return
+				}
+
+				// Neither user token nor valid service account token
+				m.logger.WithError(err).Error("Failed to get user info and token lacks fern-read scope")
+				c.JSON(401, gin.H{"error": "Invalid token: Failed to get user information and token lacks required scopes"})
+				c.Abort()
 				return
 			}
 
+			// User token - proceed with normal authentication
 			tokenInfo := application.TokenInfo{AccessToken: accessToken}
 
 			//Authenticate user

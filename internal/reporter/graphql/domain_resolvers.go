@@ -18,6 +18,11 @@ import (
 
 // convertTestRunToGraphQL converts a domain test run to GraphQL model
 func (r *Resolver) convertTestRunToGraphQL(testRun *testingDomain.TestRun) *model.TestRun {
+	return r.ConvertTestRunToGraphQL(testRun)
+}
+
+// ConvertTestRunToGraphQL is an exported wrapper for testing
+func (r *Resolver) ConvertTestRunToGraphQL(testRun *testingDomain.TestRun) *model.TestRun {
 	// Convert suite runs
 	suiteRuns := make([]*model.SuiteRun, len(testRun.SuiteRuns))
 	for i, suite := range testRun.SuiteRuns {
@@ -36,8 +41,8 @@ func (r *Resolver) convertTestRunToGraphQL(testRun *testingDomain.TestRun) *mode
 			Color:       nil,
 			// Use zero time for now to maintain cache consistency across runs
 			// TODO: Look up domain tag by ID to get actual timestamps
-			CreatedAt:   time.Time{},
-			UpdatedAt:   time.Time{},
+			CreatedAt: time.Time{},
+			UpdatedAt: time.Time{},
 		}
 	}
 
@@ -85,6 +90,11 @@ func (r *Resolver) convertTestRunToGraphQL(testRun *testingDomain.TestRun) *mode
 
 // convertSuiteRunToGraphQL converts a domain suite run to GraphQL model
 func (r *Resolver) convertSuiteRunToGraphQL(suite *testingDomain.SuiteRun) *model.SuiteRun {
+	return r.ConvertSuiteRunToGraphQL(suite)
+}
+
+// ConvertSuiteRunToGraphQL is an exported wrapper for testing
+func (r *Resolver) ConvertSuiteRunToGraphQL(suite *testingDomain.SuiteRun) *model.SuiteRun {
 	// Convert spec runs
 	specRuns := make([]*model.SpecRun, len(suite.SpecRuns))
 	for i, spec := range suite.SpecRuns {
@@ -103,8 +113,8 @@ func (r *Resolver) convertSuiteRunToGraphQL(suite *testingDomain.SuiteRun) *mode
 			Color:       nil,
 			// Use zero time for now to maintain cache consistency across runs
 			// TODO: Look up domain tag by ID to get actual timestamps
-			CreatedAt:   time.Time{},
-			UpdatedAt:   time.Time{},
+			CreatedAt: time.Time{},
+			UpdatedAt: time.Time{},
 		}
 	}
 
@@ -129,6 +139,11 @@ func (r *Resolver) convertSuiteRunToGraphQL(suite *testingDomain.SuiteRun) *mode
 
 // convertSpecRunToGraphQL converts a domain spec run to GraphQL model
 func (r *Resolver) convertSpecRunToGraphQL(spec *testingDomain.SpecRun) *model.SpecRun {
+	return r.ConvertSpecRunToGraphQL(spec)
+}
+
+// ConvertSpecRunToGraphQL is an exported wrapper for testing
+func (r *Resolver) ConvertSpecRunToGraphQL(spec *testingDomain.SpecRun) *model.SpecRun {
 	var errorMessage *string
 	if spec.ErrorMessage != "" {
 		errorMessage = &spec.ErrorMessage
@@ -151,8 +166,8 @@ func (r *Resolver) convertSpecRunToGraphQL(spec *testingDomain.SpecRun) *model.S
 			Color:       nil,
 			// Use zero time for now to maintain cache consistency across runs
 			// TODO: Look up domain tag by ID to get actual timestamps
-			CreatedAt:   time.Time{},
-			UpdatedAt:   time.Time{},
+			CreatedAt: time.Time{},
+			UpdatedAt: time.Time{},
 		}
 	}
 
@@ -206,8 +221,21 @@ func (r *queryResolver) RecentTestRuns_domain(ctx context.Context, projectID *st
 }
 
 // convertProjectToGraphQL converts a domain project to GraphQL model
-func (r *Resolver) convertProjectToGraphQL(project *projectsDomain.Project) *model.Project {
+func (r *Resolver) convertProjectToGraphQL(ctx context.Context, project *projectsDomain.Project) *model.Project {
+	return r.ConvertProjectToGraphQL(ctx, project)
+}
+
+// ConvertProjectToGraphQL is an exported wrapper for testing
+func (r *Resolver) ConvertProjectToGraphQL(ctx context.Context, project *projectsDomain.Project) *model.Project {
 	snapshot := project.ToSnapshot()
+
+	// Determine if user can manage this project
+	// Admins and Managers can manage all projects they can see
+	canManage := false
+	if user, err := getCurrentUser(ctx); err == nil {
+		canManage = user.Role == authDomain.RoleAdmin || user.Role == authDomain.RoleManager
+	}
+
 	return &model.Project{
 		ID:            strconv.FormatUint(uint64(snapshot.ID), 10),
 		ProjectID:     string(snapshot.ProjectID),
@@ -217,6 +245,7 @@ func (r *Resolver) convertProjectToGraphQL(project *projectsDomain.Project) *mod
 		DefaultBranch: snapshot.DefaultBranch,
 		IsActive:      snapshot.IsActive,
 		Team:          convertStringPtr(string(snapshot.Team)),
+		CanManage:     canManage,
 		CreatedAt:     snapshot.CreatedAt,
 		UpdatedAt:     snapshot.UpdatedAt,
 	}
@@ -224,6 +253,11 @@ func (r *Resolver) convertProjectToGraphQL(project *projectsDomain.Project) *mod
 
 // convertTagToGraphQL converts a domain tag to GraphQL model
 func (r *Resolver) convertTagToGraphQL(tag *tagsDomain.Tag) *model.Tag {
+	return r.ConvertTagToGraphQL(tag)
+}
+
+// ConvertTagToGraphQL is an exported wrapper for testing
+func (r *Resolver) ConvertTagToGraphQL(tag *tagsDomain.Tag) *model.Tag {
 	// Convert TagID string to numeric ID for GraphQL
 	id := string(tag.ID())
 
@@ -241,6 +275,11 @@ func (r *Resolver) convertTagToGraphQL(tag *tagsDomain.Tag) *model.Tag {
 
 // Helper function to convert duration to int pointer (milliseconds)
 func convertDurationPtr(d time.Duration) *int {
+	return ConvertDurationPtr(d)
+}
+
+// ConvertDurationPtr is an exported wrapper for testing
+func ConvertDurationPtr(d time.Duration) *int {
 	ms := int(d.Milliseconds())
 	return &ms
 }
@@ -266,7 +305,7 @@ func (r *queryResolver) GetProject_domain(ctx context.Context, projectID string)
 	if err != nil {
 		return nil, err
 	}
-	return r.convertProjectToGraphQL(project), nil
+	return r.convertProjectToGraphQL(ctx, project), nil
 }
 
 // ListProjects implementation using domain service
@@ -295,7 +334,7 @@ func (r *queryResolver) ListProjects_domain(ctx context.Context, limit *int, off
 	// Convert to GraphQL models
 	result := make([]*model.Project, len(projects))
 	for i, project := range projects {
-		result[i] = r.convertProjectToGraphQL(project)
+		result[i] = r.convertProjectToGraphQL(ctx, project)
 	}
 
 	return result, nil
@@ -329,7 +368,7 @@ func (r *mutationResolver) CreateProject_domain(ctx context.Context, input model
 	// Check if user has permission to create projects
 	// Only admins and managers can create projects
 	roleGroups := getRoleGroupNamesFromContext(ctx)
-	canCreate := user.Role == authDomain.RoleAdmin || hasManagerRole(user, roleGroups)
+	canCreate := user.Role == authDomain.RoleAdmin || user.Role == authDomain.RoleManager || hasManagerRole(user, roleGroups)
 
 	if !canCreate {
 		return nil, fmt.Errorf("insufficient permissions to create project")
@@ -391,7 +430,7 @@ func (r *mutationResolver) CreateProject_domain(ctx context.Context, input model
 		}
 	}
 
-	return r.convertProjectToGraphQL(project), nil
+	return r.convertProjectToGraphQL(ctx, project), nil
 }
 
 // CreateTag implementation using domain service
@@ -407,6 +446,11 @@ func (r *mutationResolver) CreateTag_domain(ctx context.Context, input model.Cre
 
 // Helper to get string value from pointer
 func getStringValue(ptr *string) string {
+	return GetStringValue(ptr)
+}
+
+// GetStringValue is an exported wrapper for testing
+func GetStringValue(ptr *string) string {
 	if ptr != nil {
 		return *ptr
 	}
@@ -463,6 +507,9 @@ func (r *mutationResolver) UpdateProject_domain(ctx context.Context, id string, 
 	// Check if user can update this project
 	canUpdate := false
 	if user.Role == authDomain.RoleAdmin {
+		canUpdate = true
+	} else if user.Role == authDomain.RoleManager {
+		// Managers with RoleManager can update projects
 		canUpdate = true
 	} else {
 		// Get role group names from context
@@ -571,7 +618,7 @@ func (r *mutationResolver) UpdateProject_domain(ctx context.Context, id string, 
 		"updated_by": user.UserID,
 	}).Info("Project updated successfully")
 
-	return r.convertProjectToGraphQL(updatedProject), nil
+	return r.convertProjectToGraphQL(ctx, updatedProject), nil
 }
 
 // DeleteProject implementation using domain service
@@ -623,6 +670,9 @@ func (r *mutationResolver) DeleteProject_domain(ctx context.Context, id string) 
 	// Check if user can delete this project
 	canDelete := false
 	if user.Role == authDomain.RoleAdmin {
+		canDelete = true
+	} else if user.Role == authDomain.RoleManager {
+		// Managers with RoleManager can delete projects
 		canDelete = true
 	} else {
 		// Get role group names from context
@@ -713,7 +763,7 @@ func (r *queryResolver) Project_domain(ctx context.Context, id string) (*model.P
 
 	for _, p := range projects {
 		if p.ID() == uint(idUint) {
-			return r.convertProjectToGraphQL(p), nil
+			return r.convertProjectToGraphQL(ctx, p), nil
 		}
 	}
 
@@ -727,7 +777,7 @@ func (r *queryResolver) ProjectByProjectID_domain(ctx context.Context, projectID
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
-	return r.convertProjectToGraphQL(project), nil
+	return r.convertProjectToGraphQL(ctx, project), nil
 }
 
 // Projects implementation using domain service with pagination
@@ -816,7 +866,7 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 	edges := make([]*model.ProjectEdge, len(filteredProjects))
 	for i, project := range filteredProjects {
 		edges[i] = &model.ProjectEdge{
-			Node:   r.convertProjectToGraphQL(project),
+			Node:   r.convertProjectToGraphQL(ctx, project),
 			Cursor: fmt.Sprintf("%d", offset+i), // Simple cursor
 		}
 	}
@@ -974,7 +1024,7 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 		}
 
 		// Convert to GraphQL project model
-		gqlProject := r.convertProjectToGraphQL(project)
+		gqlProject := r.convertProjectToGraphQL(ctx, project)
 
 		// Aggregate suite data across all runs for this project
 		suiteMap := make(map[string]*model.SuiteTreemapNode)

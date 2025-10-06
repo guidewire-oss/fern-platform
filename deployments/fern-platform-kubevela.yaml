@@ -177,7 +177,8 @@ spec:
                     "openid",
                     "web-origins",
                     "profile",
-                    "email"
+                    "email",
+                    "groups"
                   ],
                   "optionalClientScopes": [
                     "address",
@@ -270,9 +271,139 @@ spec:
                       }
                     }
                   ]
+                },
+                {
+                  "clientId": "fern-platform-introspection",
+                  "name": "Fern Platform Token Introspection Service",
+                  "description": "Service account for token introspection",
+                  "enabled": true,
+                  "clientAuthenticatorType": "client-secret",
+                  "secret": "fern-introspection-secret",
+                  "directAccessGrantsEnabled": false,
+                  "standardFlowEnabled": false,
+                  "implicitFlowEnabled": false,
+                  "serviceAccountsEnabled": true,
+                  "publicClient": false,
+                  "bearerOnly": false,
+                  "consentRequired": false,
+                  "frontchannelLogout": false,
+                  "protocol": "openid-connect",
+                  "fullScopeAllowed": false,
+                  "nodeReRegistrationTimeout": -1,
+                  "attributes": {
+                    "oauth2.device.authorization.grant.enabled": "false",
+                    "oidc.ciba.grant.enabled": "false"
+                  },
+                  "authorizationServicesEnabled": false,
+                  "access": {
+                    "view": true,
+                    "configure": true,
+                    "manage": true
+                  }
+                },
+                {
+                  "clientId": "fern-platform-service",
+                  "name": "Fern Platform API Service",
+                  "description": "Service account for API access (e.g., test runs)",
+                  "enabled": true,
+                  "clientAuthenticatorType": "client-secret",
+                  "secret": "fern-service-secret",
+                  "directAccessGrantsEnabled": false,
+                  "standardFlowEnabled": false,
+                  "implicitFlowEnabled": false,
+                  "serviceAccountsEnabled": true,
+                  "publicClient": false,
+                  "bearerOnly": false,
+                  "consentRequired": false,
+                  "frontchannelLogout": false,
+                  "protocol": "openid-connect",
+                  "fullScopeAllowed": true,
+                  "nodeReRegistrationTimeout": -1,
+                  "defaultClientScopes": [
+                    "openid",
+                    "profile",
+                    "email"
+                  ],
+                  "optionalClientScopes": [
+                    "fern-read",
+                    "fern-write"
+                  ],
+                  "attributes": {
+                    "oauth2.device.authorization.grant.enabled": "false",
+                    "oidc.ciba.grant.enabled": "false",
+                    "client.secret.creation.time": "0"
+                  },
+                  "authorizationServicesEnabled": false,
+                  "access": {
+                    "view": true,
+                    "configure": true,
+                    "manage": true
+                  },
+                  "protocolMappers": [
+                    {
+                      "name": "fern-read-scope",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-audience-mapper",
+                      "config": {
+                        "included.custom.audience": "fern-platform-api",
+                        "access.token.claim": "true"
+                      }
+                    }
+                  ]
                 }
               ],
               "clientScopes": [
+                {
+                  "name": "openid",
+                  "description": "OpenID Connect built-in scope",
+                  "protocol": "openid-connect",
+                  "attributes": {
+                    "include.in.token.scope": "true",
+                    "display.on.consent.screen": "false"
+                  }
+                },
+                {
+                  "name": "fern-read",
+                  "description": "Read access to Fern Platform API",
+                  "protocol": "openid-connect",
+                  "attributes": {
+                    "include.in.token.scope": "true",
+                    "display.on.consent.screen": "true",
+                    "consent.screen.text": "Read access to Fern Platform API"
+                  },
+                  "protocolMappers": [
+                    {
+                      "name": "fern-read-scope-mapper",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-audience-mapper",
+                      "config": {
+                        "included.custom.audience": "fern-platform-api",
+                        "access.token.claim": "true"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "fern-write",
+                  "description": "Write access to Fern Platform API",
+                  "protocol": "openid-connect",
+                  "attributes": {
+                    "include.in.token.scope": "true",
+                    "display.on.consent.screen": "true",
+                    "consent.screen.text": "Write access to Fern Platform API"
+                  },
+                  "protocolMappers": [
+                    {
+                      "name": "fern-write-scope-mapper",
+                      "protocol": "openid-connect",
+                      "protocolMapper": "oidc-audience-mapper",
+                      "config": {
+                        "included.custom.audience": "fern-platform-api",
+                        "access.token.claim": "true"
+                      }
+                    }
+                  ]
+                },
                 {
                   "name": "groups",
                   "description": "User groups",
@@ -409,14 +540,17 @@ spec:
                 "profile",
                 "email",
                 "web-origins",
-                "acr"
+                "acr",
+                "openid"
               ],
               "defaultOptionalClientScopes": [
                 "offline_access",
                 "address",
                 "phone",
                 "microprofile-jwt",
-                "groups"
+                "groups",
+                "fern-read",
+                "fern-write"
               ],
               "groups": [
                 {
@@ -468,8 +602,30 @@ spec:
                   {
                     "name": "user",
                     "description": "Team user role - read-only access to team projects"
+                  },
+                  {
+                    "name": "introspection",
+                    "description": "Service account role for token introspection"
                   }
-                ]
+                ],
+                "client": {
+                  "fern-platform-introspection": [
+                    {
+                      "name": "token-introspection",
+                      "description": "Permission to introspect tokens",
+                      "composite": false,
+                      "clientRole": true
+                    }
+                  ],
+                  "fern-platform-service": [
+                    {
+                      "name": "api-access",
+                      "description": "Permission to access Fern Platform API",
+                      "composite": false,
+                      "clientRole": true
+                    }
+                  ]
+                }
               },
               "otpPolicyType": "totp",
               "otpPolicyAlgorithm": "HmacSHA1",
@@ -582,6 +738,18 @@ spec:
                   ],
                   "groups": ["/atmos", "/user"],
                   "realmRoles": ["user"]
+                },
+                {
+                  "username": "service-account-fern-platform-service",
+                  "email": "service-account-fern-platform-service@fern.com",
+                  "firstName": "Service",
+                  "lastName": "Account",
+                  "enabled": true,
+                  "emailVerified": true,
+                  "serviceAccountClientId": "fern-platform-service",
+                  "clientRoles": {
+                    "fern-platform-service": ["api-access"]
+                  }
                 }
               ]
             }
@@ -605,7 +773,7 @@ spec:
           - name: LOG_LEVEL
             value: debug
           - name: FERN_USE_SPLIT_HANDLERS
-            value: "true"
+            value: "false"
           - name: REDIS_HOST
             value: redis
           - name: REDIS_PORT
@@ -647,6 +815,12 @@ spec:
             value: "http://keycloak:8080/realms/fern-platform"
           - name: OAUTH_LOGOUT_URL
             value: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/logout"
+          - name: OAUTH_INTROSPECTION_URL
+            value: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/token/introspect"
+          - name: OAUTH_INTROSPECTION_CLIENT_ID
+            value: "fern-platform-introspection"
+          - name: OAUTH_INTROSPECTION_CLIENT_SECRET
+            value: "fern-introspection-secret"
 
           # Debug OAuth issues
           - name: DEBUG_OAUTH

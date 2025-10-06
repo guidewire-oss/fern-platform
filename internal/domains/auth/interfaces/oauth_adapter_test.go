@@ -487,7 +487,8 @@ var _ = Describe("OAuthAdapter", Label("auth"), func() {
 
 			info, err := adapter.GetUserInfo("token")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("userinfo request failed with status 403"))
+			Expect(err.Error()).To(ContainSubstring("userinfo request forbidden (403)"))
+			Expect(err.Error()).To(ContainSubstring("Using ID token instead of access token"))
 			Expect(info).To(BeNil())
 		})
 
@@ -679,6 +680,223 @@ var _ = Describe("OAuthAdapter", Label("auth"), func() {
 			longState := strings.Repeat("a", 1000)
 			url := adapter.BuildAuthURL(longState)
 			Expect(url).To(ContainSubstring("state=" + longState))
+		})
+	})
+
+	Describe("ValidateAndCheckScope", func() {
+		Context("with introspection endpoint configured", func() {
+			BeforeEach(func() {
+				authConfig.OAuth.IntrospectionURL = "http://authserver/introspect"
+				authConfig.OAuth.IntrospectionClientID = "introspection-client-id"
+				authConfig.OAuth.IntrospectionClientSecret = "introspection-client-secret"
+			})
+
+			It("validates token and checks scope successfully with introspection credentials", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// Verify request
+					Expect(r.Method).To(Equal("POST"))
+					Expect(r.Header.Get("Content-Type")).To(Equal("application/x-www-form-urlencoded"))
+
+					// Check basic auth uses introspection credentials
+					user, pass, ok := r.BasicAuth()
+					Expect(ok).To(BeTrue())
+					Expect(user).To(Equal("introspection-client-id"))
+					Expect(pass).To(Equal("introspection-client-secret"))
+
+					// Parse form
+					r.ParseForm()
+					Expect(r.Form.Get("token")).To(Equal("test-token"))
+					Expect(r.Form.Get("token_type_hint")).To(Equal("access_token"))
+
+					// Return introspection response with active token and scopes
+					response := map[string]interface{}{
+						"active":    true,
+						"scope":     "fern-read fern-write",
+						"client_id": "service-account",
+						"exp":       1234567890,
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeTrue())
+			})
+
+			It("falls back to main client credentials when introspection credentials not set", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// Check basic auth uses main client credentials
+					user, pass, ok := r.BasicAuth()
+					Expect(ok).To(BeTrue())
+					Expect(user).To(Equal("client-id"))
+					Expect(pass).To(Equal("client-secret"))
+
+					response := map[string]interface{}{
+						"active": true,
+						"scope":  "fern-read fern-write",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				// Don't set introspection-specific credentials
+				authConfig.OAuth.IntrospectionClientID = ""
+				authConfig.OAuth.IntrospectionClientSecret = ""
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeTrue())
+			})
+
+			It("returns false when scope is missing", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active": true,
+						"scope":  "fern-write other-scope",
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeFalse())
+			})
+
+			It("returns error when token is not active", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active": false,
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).ToNot(BeNil())
+				Expect(err.Error()).To(ContainSubstring("not active"))
+				Expect(hasScope).To(BeFalse())
+			})
+
+			It("handles scp array format", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active": true,
+						"scp":    []string{"fern-read", "fern-write"},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeTrue())
+			})
+
+			It("returns error when introspection URL not configured", func() {
+				authConfig.OAuth.IntrospectionURL = ""
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).ToNot(BeNil())
+				Expect(err.Error()).To(ContainSubstring("introspection URL not configured"))
+				Expect(hasScope).To(BeFalse())
+			})
+
+			It("returns error when introspection fails", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte("invalid token"))
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).ToNot(BeNil())
+				Expect(err.Error()).To(ContainSubstring("introspection failed"))
+				Expect(hasScope).To(BeFalse())
+			})
+
+			It("handles non-string items in scp array", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active": true,
+						"scp":    []interface{}{"fern-read", 123, "fern-write"}, // Mixed types
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeTrue())
+			})
+
+			It("handles both scp and scope fields", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active": true,
+						"scp":    []interface{}{"openid"},
+						"scope":  "profile fern-read", // Both fields present
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeTrue())
+			})
+
+			It("returns false when token has no scope fields", func() {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					response := map[string]interface{}{
+						"active":    true,
+						"client_id": "test-client",
+						// No scope or scp field
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(response)
+				}))
+				defer server.Close()
+
+				authConfig.OAuth.IntrospectionURL = server.URL
+				adapter = NewOAuthAdapter(authConfig, logger)
+
+				hasScope, err := adapter.ValidateAndCheckScope("test-token", "fern-read")
+				Expect(err).To(BeNil())
+				Expect(hasScope).To(BeFalse())
+			})
 		})
 	})
 })

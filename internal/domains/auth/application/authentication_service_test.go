@@ -409,4 +409,74 @@ var _ = Describe("AuthenticationService", func() {
 			Expect(result.User.Role).To(Equal(domain.RoleAdmin))
 		})
 	})
+
+	Describe("determineUserRole", func() {
+		var (
+			authService     *application.AuthenticationService
+			mockUserRepo    *MockUserRepository
+			mockSessionRepo *MockSessionRepository
+		)
+
+		BeforeEach(func() {
+			mockUserRepo = new(MockUserRepository)
+			mockSessionRepo = new(MockSessionRepository)
+			authService = application.NewAuthenticationService(mockUserRepo, mockSessionRepo)
+		})
+
+		It("should return RoleAdmin for admin group", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"admin"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleAdmin))
+		})
+
+		It("should return RoleAdmin for /admin group", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"/admin"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleAdmin))
+		})
+
+		It("should return RoleManager for manager group", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"manager"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleManager))
+		})
+
+		It("should return RoleManager for /manager group", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"/manager"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleManager))
+		})
+
+		It("should prioritize admin over manager", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"manager", "admin"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleAdmin))
+		})
+
+		It("should return RoleUser for no special groups", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{"some-other-group"},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleUser))
+		})
+
+		It("should return RoleUser for empty groups", func() {
+			userInfo := application.UserInfo{
+				Groups: []string{},
+			}
+			role := authService.DetermineUserRole(userInfo)
+			Expect(role).To(Equal(domain.RoleUser))
+		})
+	})
 })

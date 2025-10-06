@@ -33,3 +33,4 @@ ignore:
   - "ci/**"
   - "scripts/**"
   - "docs/**"
+  - "**/mocks.go"
