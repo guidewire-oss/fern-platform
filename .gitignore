@@ -39,6 +39,9 @@ bin/fern-platform
 # Temporary Dockerfile created by Makefile
 Dockerfile.fern-platform
 
+# ide
+*.idea
+
 # Git files
 .git-authors
 

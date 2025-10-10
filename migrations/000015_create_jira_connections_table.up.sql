@@ -45,6 +45,5 @@ COMMENT ON COLUMN jira_connections.is_active IS 'Whether the connection is activ
 COMMENT ON COLUMN jira_connections.last_tested_at IS 'Timestamp of last connection test';
 COMMENT ON COLUMN jira_connections.deleted_at IS 'Soft delete timestamp';
 
--- Grant permissions to app user
-ALTER TABLE jira_connections OWNER TO app;
-GRANT ALL PRIVILEGES ON TABLE jira_connections TO app;
+-- Note: Table ownership and privileges are handled by the database connection user
+-- The table will be owned by the user running the migration (configured in config.yaml)
