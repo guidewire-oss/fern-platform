@@ -220,7 +220,7 @@ open http://fern-platform.local:8080
 
 **Perfect for:** Developers who want to contribute to making Fern great!
 
-### Prerequisites (5 minutes)
+### Step 1: Prerequisites (5 minutes)
 
 #### 1. Install Required Tools
 
@@ -294,26 +294,50 @@ Get-Content $env:windir\System32\drivers\etc\hosts | Select-String "fern-platfor
 
 > ⚠️ **Important**: Without these /etc/hosts entries, OAuth login will fail with redirect errors.
 
-### One-Command Setup (10 minutes)
+### Step 2: Build Fern Platform Locally and Deploy using Kubevela (10 minutes)
 ```bash
 # Clone and setup everything
 git clone https://github.com/guidewire-oss/fern-platform
 cd fern-platform
-
-# This single command:
-# 1. Check/create k3d cluster"
-# 2. Install prerequisites (KubeVela, CNPG)"
-# 3. Deploys PostgreSQL, Redis, and Keycloak"
-# 4. Setup PostgreSQL access from host and create necessary Keyclock realms and users for authentication"
-make deploy-infra
-
-# After deployment completes, the terminal will show the PostgreSQL credentials and terminal will hang (Due to port forwarding).
-
-# Notes: 
-# - OAuth authentication requires the /etc/hosts entries configured above.
-# - Users can also deploy PostgreSQL using Docker via `docker run --name postgres-local -e POSTGRES_USER=fern -e POSTGRES_PASSWORD=fern -e POSTGRES_DB=fern -p 5432:5432 -d postgres` and add the DB connection in `config/config.yaml`.
 ```
-### Setup up development environment (5 minutes)
+In the file `deployments/fern-platform-kubevela.yaml`, update the lines:
+```
+image: ghcr.io/guidewire-oss/fern-platform:0.1.0
+imagePullPolicy: Always
+```
+To:
+```
+image: docker.io/library/fern-platform:latest
+imagePullPolicy: Never
+```
+And run the command:
+```bash
+make deploy-all
+```
+
+### Step 3: Verify Everything Works
+```bash
+# 1. Check all pods are running
+kubectl get pods -n fern-platform
+
+# 2. Test health endpoint  
+curl http://localhost:8080/health
+
+# 3. Access the application
+open http://localhost:8080
+```
+
+### Step 4: Setup up development environment for IDE Debugging (5 minutes)
+In this step, we will be starting the Fern Platform in IDE, and connecting to the Keycloak and Postgres deployed in Step 2.
+
+#### Expose port 5432 on the K3d cluster
+This will allow connecting to Postgres from host machine
+```bash
+# Open a new terminal. The next command will block; we will need to keep the terminal open
+kubectl port-forward -n fern-platform svc/postgres-rw 5432:5432
+```
+
+#### Set Fern Platform config to connect to Keycloak and Postgres
 ```
 # open the `fern-platform` project in your favorite IDE
 
@@ -355,6 +379,7 @@ auth:
     jwksUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/certs"
     logoutUrl: "http://keycloak:8080/realms/fern-platform/protocol/openid-connect/logout"
 ```
+#### Run/debug Fern Platform from IDE
 ```bash
 # Start Fern Platform by running
 go run cmd/fern-platform/main.go
@@ -382,34 +407,6 @@ User: fern-user@fern.com / test123 (read-only access to fern team)
 - ✅ **Modern web UI** with treemap visualization
 - ✅ **Multi-framework test data** support
 - 🚧 **AI features planned** (not yet implemented)
-
-#### Note: This setup may be over engineered for local development. To quickly validate the changes on local deployment, follow the steps below
-In the file `deployments/fern-platform-kubevela.yaml`, update the lines:
-```
-image: ghcr.io/guidewire-oss/fern-platform:0.1.0
-imagePullPolicy: Always
-```
-To:
-```
-image: docker.io/library/fern-platform:latest
-imagePullPolicy: Never
-```
-And run the command:
-```bash
-make deploy-all
-```
-
-### Verify Everything Works
-```bash
-# 1. Check all pods are running
-kubectl get pods -n fern-platform
-
-# 2. Test health endpoint  
-curl http://localhost:8080/health
-
-# 3. Access the application
-open http://localhost:8080
-```
 ---
 
 ## 🏢 30-Minute Production Setup
