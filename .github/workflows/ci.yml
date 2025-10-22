@@ -206,3 +206,4 @@ jobs:
           flags: unittests
           name: main-coverage
           fail_ci_if_error: false
+          slug: guidewire-oss/fern-platform
