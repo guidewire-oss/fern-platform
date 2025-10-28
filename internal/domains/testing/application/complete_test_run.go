@@ -48,10 +48,18 @@ func (h *CompleteTestRunHandler) Handle(ctx context.Context, cmd CompleteTestRun
 
 	// Complete the test run
 	now := time.Now()
+	// Always set EndTime and Status
 	testRun.EndTime = &now
 	testRun.Status = "completed"
-	if testRun.StartTime.After(time.Time{}) {
-		testRun.Duration = now.Sub(testRun.StartTime)
+
+	// If StartTime is zero, set it to now (fallback)
+	if testRun.StartTime.IsZero() {
+		testRun.StartTime = now
+	}
+
+	// Calculate duration if both times are set
+	if testRun.EndTime != nil && !testRun.StartTime.IsZero() {
+		testRun.Duration = testRun.EndTime.Sub(testRun.StartTime)
 	}
 
 	// Update flaky test statistics

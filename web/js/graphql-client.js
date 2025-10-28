@@ -108,6 +108,7 @@ const QUERIES = {
                 branch
                 status
                 startTime
+                endTime
                 duration
                 totalTests
                 passedTests
