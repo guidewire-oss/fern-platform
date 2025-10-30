@@ -60,6 +60,11 @@ func NewDomainHandler(
 
 // RegisterRoutes registers all domain handler routes
 func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
+	// Root route - redirect to web interface
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/web/")
+	})
+
 	// Health check route
 	router.GET("/health", h.healthCheck)
 
