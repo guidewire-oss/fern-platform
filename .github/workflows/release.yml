@@ -54,6 +54,9 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Install mockgen
+      run: go install github.com/golang/mock/mockgen@v1.6.0
+
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v6
       with:
