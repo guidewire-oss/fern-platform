@@ -165,6 +165,7 @@ docker run -d \
   -e AUTH_OAUTH_CLIENT_SECRET=your-client-secret \
   -e AUTH_OAUTH_AUTH_URL=https://auth.example.com/oauth2/authorize \
   -e AUTH_OAUTH_TOKEN_URL=https://auth.example.com/oauth2/token \
+  -e AUTH_OAUTH_INTROSPECTION_URL=https://auth.example.com/oauth2/introspect \
   -e AUTH_OAUTH_USER_INFO_URL=https://auth.example.com/oauth2/userinfo \
   -e AUTH_OAUTH_ISSUER_URL=https://auth.example.com \
   -e AUTH_OAUTH_REDIRECT_URL=http://localhost:8080/auth/callback \

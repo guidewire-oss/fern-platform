@@ -72,14 +72,14 @@ type OAuthConfig struct {
 	Scopes       []string `mapstructure:"scopes"`
 
 	// OAuth 2.0/OpenID Connect endpoints (required for any provider)
-	AuthURL     string `mapstructure:"authUrl"`     // Authorization endpoint
-	TokenURL    string `mapstructure:"tokenUrl"`    // Token endpoint
-	UserInfoURL string `mapstructure:"userInfoUrl"` // UserInfo endpoint
-	JWKSUrl     string `mapstructure:"jwksUrl"`     // JWKS endpoint for token validation
-	IssuerURL   string `mapstructure:"issuerUrl"`   // OpenID Connect Discovery URL (optional)
-	LogoutURL   string `mapstructure:"logoutUrl"`   // Logout endpoint (optional)
-	IntrospectionURL string `mapstructure:"introspectionUrl"` // Token introspection endpoint (RFC 7662, optional)
-	IntrospectionClientID string `mapstructure:"introspectionClientId"` // Client ID for introspection (optional, defaults to ClientID)
+	AuthURL                   string `mapstructure:"authUrl"`                   // Authorization endpoint
+	TokenURL                  string `mapstructure:"tokenUrl"`                  // Token endpoint
+	UserInfoURL               string `mapstructure:"userInfoUrl"`               // UserInfo endpoint
+	JWKSUrl                   string `mapstructure:"jwksUrl"`                   // JWKS endpoint for token validation
+	IssuerURL                 string `mapstructure:"issuerUrl"`                 // OpenID Connect Discovery URL (optional)
+	LogoutURL                 string `mapstructure:"logoutUrl"`                 // Logout endpoint (optional)
+	IntrospectionURL          string `mapstructure:"introspectionUrl"`          // Token introspection endpoint (RFC 7662, optional)
+	IntrospectionClientID     string `mapstructure:"introspectionClientId"`     // Client ID for introspection (optional, defaults to ClientID)
 	IntrospectionClientSecret string `mapstructure:"introspectionClientSecret"` // Client Secret for introspection (optional, defaults to ClientSecret)
 
 	// User and role mapping
@@ -369,6 +369,9 @@ func (m *Manager) bindEnvVars() error {
 		return err
 	}
 	if err := viper.BindEnv("auth.oauth.userInfoUrl", "OAUTH_USERINFO_URL"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.introspectionUrl", "OAUTH_INTROSPECTION_URL"); err != nil {
 		return err
 	}
 	if err := viper.BindEnv("auth.oauth.jwksUrl", "OAUTH_JWKS_URL"); err != nil {
