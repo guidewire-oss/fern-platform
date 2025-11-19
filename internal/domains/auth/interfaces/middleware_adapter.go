@@ -81,23 +81,51 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 			userInfo, err := m.oauthAdapter.GetUserInfo(accessToken)
 
 			if err != nil {
-				// UserInfo failed - check if it's a service account token with fern-read scope
+				// UserInfo failed - check if it's a service account token with fern-admin or fern-read scope
 				m.logger.WithError(err).Debug("GetUserInfo failed, checking for service account token")
 
-				// SECURITY: Use ValidateAndCheckScope to verify token signature and expiry
-				hasScope, validationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-read")
-				if validationErr != nil {
+				// SECURITY: First check for fern-admin scope (higher privilege)
+				hasAdminScope, adminValidationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-admin")
+				if adminValidationErr == nil && hasAdminScope {
+					// Service account token with fern-admin scope
+					m.logger.Info("Service account token detected with fern-admin scope")
+
+					// Create a special admin user object to indicate service account access
+					serviceAccountUser := &domain.User{
+						UserID: "service-account-admin",
+						Email:  "service-account-admin@fern-platform",
+						Name:   "Service Account Admin",
+						Role:   domain.RoleAdmin,
+						Status: domain.StatusActive,
+						Groups: []domain.UserGroup{
+							{
+								UserID:    "service-account-admin",
+								GroupName: "fern-admin-all", // Special group to indicate full admin access
+							},
+						},
+					}
+
+					// Set the service account user in context
+					c.Set("user", serviceAccountUser)
+					c.Set("is_service_account", true)
+					c.Next()
+					return
+				}
+
+				// SECURITY: Check for fern-read scope as fallback
+				hasReadScope, readValidationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-read")
+				if readValidationErr != nil {
 					tokenPreview := accessToken
 					if len(accessToken) > 20 {
 						tokenPreview = accessToken[:20] + "..."
 					}
-					m.logger.WithError(validationErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
+					m.logger.WithError(readValidationErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
 					c.JSON(401, gin.H{"error": "Invalid token: validation failed"})
 					c.Abort()
 					return
 				}
 
-				if hasScope {
+				if hasReadScope {
 					// Service account token with fern-read scope
 					m.logger.Info("Service account token detected with fern-read scope")
 
@@ -124,7 +152,7 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 				}
 
 				// Neither user token nor valid service account token
-				m.logger.WithError(err).Error("Failed to get user info and token lacks fern-read scope")
+				m.logger.WithError(err).Error("Failed to get user info and token lacks fern-read or fern-admin scope")
 				c.JSON(401, gin.H{"error": "Invalid token: Failed to get user information and token lacks required scopes"})
 				c.Abort()
 				return
