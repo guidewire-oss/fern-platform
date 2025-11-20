@@ -46,9 +46,12 @@ type fakeOAuthAdapter struct {
 	user                      *application.UserInfo
 	userErr                   error
 	logoutURL                 string
+	tokenScopes               []string
+	tokenScopesErr            error
 	validateScopeRes          bool
 	validateScopeErr          error
 	validateAndCheckScopeFunc func(accessToken string, requiredScope string) (bool, error)
+	getTokenScopesFunc        func(accessToken string) ([]string, error)
 }
 
 func (f *fakeOAuthAdapter) GenerateState() (string, error) { return f.state, f.stateErr }
@@ -65,6 +68,12 @@ func (f *fakeOAuthAdapter) GetUserInfo(accessToken string) (*application.UserInf
 	return f.user, f.userErr
 }
 func (f *fakeOAuthAdapter) BuildProviderLogoutURL(idToken string) string { return f.logoutURL }
+func (f *fakeOAuthAdapter) GetTokenScopes(accessToken string) ([]string, error) {
+	if f.getTokenScopesFunc != nil {
+		return f.getTokenScopesFunc(accessToken)
+	}
+	return f.tokenScopes, f.tokenScopesErr
+}
 func (f *fakeOAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
 	if f.validateAndCheckScopeFunc != nil {
 		return f.validateAndCheckScopeFunc(accessToken, requiredScope)
@@ -139,12 +148,9 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("authenticates service account token with fern-read scope", func() {
 			// GetUserInfo fails (service account token doesn't have openid scope)
 			oauth.userErr = errors.New("no userinfo for service account")
-			// Mock ValidateAndCheckScope to return true only for fern-read scope
-			oauth.validateAndCheckScopeFunc = func(accessToken string, requiredScope string) (bool, error) {
-				if requiredScope == "fern-read" {
-					return true, nil
-				}
-				return false, nil
+			// Mock GetTokenScopes to return fern-read scope
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern-read"}, nil
 			}
 
 			c.Request.Header.Set("Authorization", "Bearer service-token")
@@ -164,13 +170,11 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 			// GetUserInfo fails (service account token doesn't have openid scope)
 			oauth.userErr = errors.New("no userinfo for service account")
 			
-			// Mock the ValidateAndCheckScope to return true for fern-admin
-			oauth.validateAndCheckScopeFunc = func(accessToken string, requiredScope string) (bool, error) {
-				if requiredScope == "fern-admin" {
-					return true, nil
-				}
-				return false, nil
+			// Mock GetTokenScopes to return admin scope from config
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern.admin"}, nil
 			}
+			cfg.OAuth.AdminScopes = []string{"fern.admin"}
 
 			c.Request.Header.Set("Authorization", "Bearer admin-service-token")
 			mw := adapter.RequireAuth()
@@ -189,8 +193,9 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("fails with service account token that fails validation", func() {
 			oauth.userErr = errors.New("no userinfo")
 			// Token validation fails (invalid signature or expired)
-			oauth.validateScopeRes = false
-			oauth.validateScopeErr = errors.New("token signature invalid")
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return nil, errors.New("token signature invalid")
+			}
 
 			c.Request.Header.Set("Authorization", "Bearer forged-token")
 			mw := adapter.RequireAuth()
@@ -203,8 +208,9 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("fails with service account token that lacks fern-read scope", func() {
 			oauth.userErr = errors.New("no userinfo")
 			// Token is valid but doesn't have the required scope
-			oauth.validateScopeRes = false
-			oauth.validateScopeErr = nil
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"some-other-scope"}, nil
+			}
 
 			c.Request.Header.Set("Authorization", "Bearer token-without-scope")
 			mw := adapter.RequireAuth()
@@ -393,12 +399,10 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("allows service account with fern-admin scope", func() {
 			// Mock the OAuth adapter to support fern-admin scope
 			oauth.userErr = errors.New("no userinfo for service account")
-			oauth.validateAndCheckScopeFunc = func(accessToken string, requiredScope string) (bool, error) {
-				if requiredScope == "fern-admin" {
-					return true, nil
-				}
-				return false, nil
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern.admin"}, nil
 			}
+			cfg.OAuth.AdminScopes = []string{"fern.admin"}
 
 			req := httptest.NewRequest("GET", "/api/admin", nil)
 			req.Header.Set("Authorization", "Bearer admin-service-token")

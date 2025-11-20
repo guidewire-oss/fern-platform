@@ -72,20 +72,22 @@ type OAuthConfig struct {
 	Scopes       []string `mapstructure:"scopes"`
 
 	// OAuth 2.0/OpenID Connect endpoints (required for any provider)
-	AuthURL     string `mapstructure:"authUrl"`     // Authorization endpoint
-	TokenURL    string `mapstructure:"tokenUrl"`    // Token endpoint
-	UserInfoURL string `mapstructure:"userInfoUrl"` // UserInfo endpoint
-	JWKSUrl     string `mapstructure:"jwksUrl"`     // JWKS endpoint for token validation
-	IssuerURL   string `mapstructure:"issuerUrl"`   // OpenID Connect Discovery URL (optional)
-	LogoutURL   string `mapstructure:"logoutUrl"`   // Logout endpoint (optional)
-	IntrospectionURL string `mapstructure:"introspectionUrl"` // Token introspection endpoint (RFC 7662, optional)
-	IntrospectionClientID string `mapstructure:"introspectionClientId"` // Client ID for introspection (optional, defaults to ClientID)
+	AuthURL                   string `mapstructure:"authUrl"`                   // Authorization endpoint
+	TokenURL                  string `mapstructure:"tokenUrl"`                  // Token endpoint
+	UserInfoURL               string `mapstructure:"userInfoUrl"`               // UserInfo endpoint
+	JWKSUrl                   string `mapstructure:"jwksUrl"`                   // JWKS endpoint for token validation
+	IssuerURL                 string `mapstructure:"issuerUrl"`                 // OpenID Connect Discovery URL (optional)
+	LogoutURL                 string `mapstructure:"logoutUrl"`                 // Logout endpoint (optional)
+	IntrospectionURL          string `mapstructure:"introspectionUrl"`          // Token introspection endpoint (RFC 7662, optional)
+	IntrospectionClientID     string `mapstructure:"introspectionClientId"`     // Client ID for introspection (optional, defaults to ClientID)
 	IntrospectionClientSecret string `mapstructure:"introspectionClientSecret"` // Client Secret for introspection (optional, defaults to ClientSecret)
 
 	// User and role mapping
 	AdminUsers       []string          `mapstructure:"adminUsers"`       // List of admin user emails/IDs
 	AdminGroups      []string          `mapstructure:"adminGroups"`      // List of admin groups from token claims
 	ManagerGroups    []string          `mapstructure:"managerGroups"`    // List of manager groups from token claims
+	AdminScopes      []string          `mapstructure:"adminScopes"`      // List of admin scopes for service accounts
+	ManagerScopes    []string          `mapstructure:"managerScopes"`    // List of manager scopes for service accounts
 	UserRoleMapping  map[string]string `mapstructure:"userRoleMapping"`  // Map specific users to roles
 	GroupRoleMapping map[string]string `mapstructure:"groupRoleMapping"` // Map groups to roles
 

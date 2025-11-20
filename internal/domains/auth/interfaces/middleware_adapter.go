@@ -31,6 +31,7 @@ type OAuthAdapterIface interface {
 	ExchangeCodeForToken(code, verifier string) (*application.TokenInfo, error)
 	GetUserInfo(accessToken string) (*application.UserInfo, error)
 	BuildProviderLogoutURL(idToken string) string
+	GetTokenScopes(accessToken string) ([]string, error)
 	ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error)
 }
 
@@ -81,80 +82,106 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 			userInfo, err := m.oauthAdapter.GetUserInfo(accessToken)
 
 			if err != nil {
-				// UserInfo failed - check if it's a service account token with fern-admin or fern-read scope
+				// UserInfo failed - check if it's a service account token
 				m.logger.WithError(err).Debug("GetUserInfo failed, checking for service account token")
 
-				// SECURITY: First check for fern-admin scope (higher privilege)
-				hasAdminScope, adminValidationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-admin")
-				if adminValidationErr == nil && hasAdminScope {
-					// Service account token with fern-admin scope
-					m.logger.Info("Service account token detected with fern-admin scope")
-
-					// Create a special admin user object to indicate service account access
-					serviceAccountUser := &domain.User{
-						UserID: "service-account-admin",
-						Email:  "service-account-admin@fern-platform",
-						Name:   "Service Account Admin",
-						Role:   domain.RoleAdmin,
-						Status: domain.StatusActive,
-						Groups: []domain.UserGroup{
-							{
-								UserID:    "service-account-admin",
-								GroupName: "fern-admin-all", // Special group to indicate full admin access
-							},
-						},
-					}
-
-					// Set the service account user in context
-					c.Set("user", serviceAccountUser)
-					c.Set("is_service_account", true)
-					c.Next()
-					return
-				}
-
-				// SECURITY: Check for fern-read scope as fallback
-				hasReadScope, readValidationErr := m.oauthAdapter.ValidateAndCheckScope(accessToken, "fern-read")
-				if readValidationErr != nil {
+				// Get all scopes from token in a single introspection call
+				scopes, scopeErr := m.oauthAdapter.GetTokenScopes(accessToken)
+				if scopeErr != nil {
 					tokenPreview := accessToken
 					if len(accessToken) > 20 {
 						tokenPreview = accessToken[:20] + "..."
 					}
-					m.logger.WithError(readValidationErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
+					m.logger.WithError(scopeErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
 					c.JSON(401, gin.H{"error": "Invalid token: validation failed"})
 					c.Abort()
 					return
 				}
 
-				if hasReadScope {
-					// Service account token with fern-read scope
-					m.logger.Info("Service account token detected with fern-read scope")
+				// Determine role based on scopes (check in order of privilege: admin > manager > user)
+				var role domain.UserRole
+				var userID, email, name, groupName string
 
-					// Create a special user object to indicate service account access
-					serviceAccountUser := &domain.User{
-						UserID: "service-account",
-						Email:  "service-account@fern-platform",
-						Name:   "Service Account",
-						Role:   domain.RoleUser,
-						Status: domain.StatusActive,
-						Groups: []domain.UserGroup{
-							{
-								UserID:    "service-account",
-								GroupName: "fern-read-all", // Special group to indicate full read access
-							},
-						},
+				// Check for admin scopes first (highest privilege)
+				for _, scope := range scopes {
+					for _, adminScope := range m.config.OAuth.AdminScopes {
+						if scope == adminScope {
+							role = domain.RoleAdmin
+							userID = "service-account-admin"
+							email = "service-account-admin@fern-platform"
+							name = "Service Account Admin"
+							groupName = "fern-admin-all"
+							m.logger.Info("Service account token detected with admin scope")
+							break
+						}
 					}
+					if role != "" {
+						break
+					}
+				}
 
-					// Set the service account user in context
-					c.Set("user", serviceAccountUser)
-					c.Set("is_service_account", true)
-					c.Next()
+				// If not admin, check for manager scopes
+				if role == "" {
+					for _, scope := range scopes {
+						for _, managerScope := range m.config.OAuth.ManagerScopes {
+							if scope == managerScope {
+								role = domain.RoleManager
+								userID = "service-account-manager"
+								email = "service-account-manager@fern-platform"
+								name = "Service Account Manager"
+								groupName = "fern-manager-all"
+								m.logger.Info("Service account token detected with manager scope")
+								break
+							}
+						}
+						if role != "" {
+							break
+						}
+					}
+				}
+
+				// If not admin or manager, check for read scope (user role)
+				if role == "" {
+					for _, scope := range scopes {
+						if scope == "fern-read" {
+							role = domain.RoleUser
+							userID = "service-account"
+							email = "service-account@fern-platform"
+							name = "Service Account"
+							groupName = "fern-read-all"
+							m.logger.Info("Service account token detected with read scope")
+							break
+						}
+					}
+				}
+
+				// If no valid role found, reject the token
+				if role == "" {
+					m.logger.WithError(err).Error("Failed to get user info and token lacks required scopes")
+					c.JSON(401, gin.H{"error": "Invalid token: Failed to get user information and token lacks required scopes"})
+					c.Abort()
 					return
 				}
 
-				// Neither user token nor valid service account token
-				m.logger.WithError(err).Error("Failed to get user info and token lacks fern-read or fern-admin scope")
-				c.JSON(401, gin.H{"error": "Invalid token: Failed to get user information and token lacks required scopes"})
-				c.Abort()
+				// Create service account user with determined role
+				serviceAccountUser := &domain.User{
+					UserID: userID,
+					Email:  email,
+					Name:   name,
+					Role:   role,
+					Status: domain.StatusActive,
+					Groups: []domain.UserGroup{
+						{
+							UserID:    userID,
+							GroupName: groupName,
+						},
+					},
+				}
+
+				// Set the service account user in context
+				c.Set("user", serviceAccountUser)
+				c.Set("is_service_account", true)
+				c.Next()
 				return
 			}
 
