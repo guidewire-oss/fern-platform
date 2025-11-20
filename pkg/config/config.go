@@ -402,6 +402,12 @@ func (m *Manager) bindEnvVars() error {
 	if err := viper.BindEnv("auth.oauth.managerGroups", "OAUTH_MANAGER_GROUPS"); err != nil {
 		return err
 	}
+	if err := viper.BindEnv("auth.oauth.adminScopes", "OAUTH_ADMIN_SCOPES"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("auth.oauth.managerScopes", "OAUTH_MANAGER_SCOPES"); err != nil {
+		return err
+	}
 	if err := viper.BindEnv("auth.oauth.userIdField", "OAUTH_USER_ID_FIELD"); err != nil {
 		return err
 	}
