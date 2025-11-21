@@ -101,7 +101,7 @@ const QUERIES = {
                 totalCount
             }
             
-            recentTestRuns(limit: 10) {
+            recentTestRuns(limit: 100) {
                 id
                 runId
                 projectId

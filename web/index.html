@@ -4711,40 +4711,15 @@
 
             const fetchData = async () => {
                 try {
+                    setLoading(true);
                     const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
                     
                     // Get projects to map project names
                     const projectList = data.projects.edges.map(edge => edge.node);
-                    console.log('Projects loaded:', projectList);
-                    console.log('Test runs:', data.recentTestRuns);
                     
                     // Enrich test runs with project names and calculate missing durations
                     const enrichedTestRuns = (data.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
-                        console.log(`Looking for project ${run.projectId}, found:`, project);
-                        console.log('Raw test run data from database:', {
-                            runId: run.runId,
-                            duration: run.duration,
-                            startTime: run.startTime,
-                            endTime: run.endTime,
-                            totalTests: run.totalTests,
-                            suiteRuns: run.suiteRuns ? run.suiteRuns.length : 0,
-                            fullData: run
-                        });
-                        
-                        // Debug: Log the raw run data to see what we actually have
-                        console.log(`Processing run ${run.runId}:`, {
-                            duration: run.duration,
-                            durationValue: run.duration,
-                            durationIsNull: run.duration === null,
-                            durationIsUndefined: run.duration === undefined,
-                            durationIsZero: run.duration === 0,
-                            startTime: run.startTime,
-                            endTime: run.endTime,
-                            status: run.status,
-                            suiteRuns: run.suiteRuns?.length || 0,
-                            rawFullRun: JSON.stringify(run, null, 2)
-                        });
                         
                         // Enhanced duration calculation with better fallback logic
                         let finalDuration = null;
@@ -4805,6 +4780,7 @@
                     setTestRuns(enrichedTestRuns);
                     setLoading(false);
                 } catch (err) {
+                    console.error('Error fetching test runs:', err);
                     setError(err.message);
                     setLoading(false);
                 }
