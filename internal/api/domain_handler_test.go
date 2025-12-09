@@ -2872,10 +2872,12 @@ var _ = Describe("createProject Method Tests", func() {
 				"team": "platform",
 			}
 
-			// Mock expectations - projectId should be auto-generated as "minimal-project"
-			projectRepo.On("ExistsByProjectID", mock.Anything, projectsDomain.ProjectID("minimal-project")).Return(false, nil).Once()
+			// Mock expectations - projectId should be auto-generated as a UUID
+			projectRepo.On("ExistsByProjectID", mock.Anything, mock.AnythingOfType("domain.ProjectID")).Return(false, nil).Once()
 			projectRepo.On("Save", mock.Anything, mock.MatchedBy(func(p *projectsDomain.Project) bool {
-				return p.ProjectID() == projectsDomain.ProjectID("minimal-project")
+				// Verify projectId is a valid UUID format
+				projectId := string(p.ProjectID())
+				return len(projectId) == 36 && projectId[8] == '-' && projectId[13] == '-'
 			})).Return(nil).Once()
 			permissionRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -2890,7 +2892,10 @@ var _ = Describe("createProject Method Tests", func() {
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["projectId"]).To(Equal("minimal-project"))
+			// Verify projectId is a valid UUID format
+			projectId := response["projectId"].(string)
+			Expect(projectId).To(HaveLen(36))
+			Expect(projectId[8:9]).To(Equal("-"))
 			Expect(response["name"]).To(Equal("Minimal Project"))
 			Expect(response["team"]).To(Equal("platform"))
 
@@ -2898,16 +2903,18 @@ var _ = Describe("createProject Method Tests", func() {
 			permissionRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should auto-generate projectId from name when not provided", func() {
+		It("should auto-generate UUID projectId when not provided", func() {
 			requestBody := map[string]interface{}{
 				"name": "Auto Generated ID Project",
 				"team": "data",
 			}
 
-			// projectId should be "auto-generated-id-project"
-			projectRepo.On("ExistsByProjectID", mock.Anything, projectsDomain.ProjectID("auto-generated-id-project")).Return(false, nil).Once()
+			// projectId should be a UUID
+			projectRepo.On("ExistsByProjectID", mock.Anything, mock.AnythingOfType("domain.ProjectID")).Return(false, nil).Once()
 			projectRepo.On("Save", mock.Anything, mock.MatchedBy(func(p *projectsDomain.Project) bool {
-				return p.ProjectID() == projectsDomain.ProjectID("auto-generated-id-project")
+				// Verify projectId is a valid UUID format
+				projectId := string(p.ProjectID())
+				return len(projectId) == 36 && projectId[8] == '-' && projectId[13] == '-'
 			})).Return(nil).Once()
 			permissionRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -2922,7 +2929,10 @@ var _ = Describe("createProject Method Tests", func() {
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["projectId"]).To(Equal("auto-generated-id-project"))
+			// Verify projectId is a valid UUID format
+			projectId := response["projectId"].(string)
+			Expect(projectId).To(HaveLen(36))
+			Expect(projectId[8:9]).To(Equal("-"))
 
 			projectRepo.AssertExpectations(GinkgoT())
 			permissionRepo.AssertExpectations(GinkgoT())
@@ -2960,14 +2970,18 @@ var _ = Describe("createProject Method Tests", func() {
 	})
 
 	Describe("Project ID Generation", func() {
-		It("should convert spaces to dashes in auto-generated projectId", func() {
+		It("should generate UUID projectId when not provided", func() {
 			requestBody := map[string]interface{}{
 				"name": "Project With Spaces",
 				"team": "frontend",
 			}
 
-			projectRepo.On("ExistsByProjectID", mock.Anything, projectsDomain.ProjectID("project-with-spaces")).Return(false, nil).Once()
-			projectRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
+			projectRepo.On("ExistsByProjectID", mock.Anything, mock.AnythingOfType("domain.ProjectID")).Return(false, nil).Once()
+			projectRepo.On("Save", mock.Anything, mock.MatchedBy(func(p *projectsDomain.Project) bool {
+				// Verify projectId is a valid UUID format
+				projectId := string(p.ProjectID())
+				return len(projectId) == 36 && projectId[8] == '-' && projectId[13] == '-'
+			})).Return(nil).Once()
 			permissionRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
 
 			body, _ := json.Marshal(requestBody)
@@ -2981,20 +2995,27 @@ var _ = Describe("createProject Method Tests", func() {
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["projectId"]).To(Equal("project-with-spaces"))
+			// Verify projectId is a valid UUID format (not derived from name)
+			projectId := response["projectId"].(string)
+			Expect(projectId).To(HaveLen(36))
+			Expect(projectId[8:9]).To(Equal("-"))
 
 			projectRepo.AssertExpectations(GinkgoT())
 			permissionRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should convert to lowercase in auto-generated projectId", func() {
+		It("should generate UUID projectId regardless of name format", func() {
 			requestBody := map[string]interface{}{
 				"name": "UPPERCASE PROJECT",
 				"team": "backend",
 			}
 
-			projectRepo.On("ExistsByProjectID", mock.Anything, projectsDomain.ProjectID("uppercase-project")).Return(false, nil).Once()
-			projectRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
+			projectRepo.On("ExistsByProjectID", mock.Anything, mock.AnythingOfType("domain.ProjectID")).Return(false, nil).Once()
+			projectRepo.On("Save", mock.Anything, mock.MatchedBy(func(p *projectsDomain.Project) bool {
+				// Verify projectId is a valid UUID format
+				projectId := string(p.ProjectID())
+				return len(projectId) == 36 && projectId[8] == '-' && projectId[13] == '-'
+			})).Return(nil).Once()
 			permissionRepo.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
 
 			body, _ := json.Marshal(requestBody)
@@ -3008,7 +3029,10 @@ var _ = Describe("createProject Method Tests", func() {
 			var response map[string]interface{}
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["projectId"]).To(Equal("uppercase-project"))
+			// Verify projectId is a valid UUID format (not derived from name)
+			projectId := response["projectId"].(string)
+			Expect(projectId).To(HaveLen(36))
+			Expect(projectId[8:9]).To(Equal("-"))
 
 			projectRepo.AssertExpectations(GinkgoT())
 			permissionRepo.AssertExpectations(GinkgoT())

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -732,7 +731,7 @@ func (h *DomainHandler) createProject(c *gin.Context) {
 	// Generate project ID if not provided
 	projectID := req.ProjectID
 	if projectID == "" {
-		projectID = strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
+		projectID = uuid.New().String()
 	}
 
 	// Get current user ID for creator

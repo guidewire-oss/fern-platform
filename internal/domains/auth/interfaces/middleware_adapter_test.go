@@ -38,16 +38,20 @@ func (f *fakeAuthService) Logout(ctx context.Context, sid string) error {
 }
 
 type fakeOAuthAdapter struct {
-	state            string
-	stateErr         error
-	authURL          string
-	token            *application.TokenInfo
-	tokenErr         error
-	user             *application.UserInfo
-	userErr          error
-	logoutURL        string
-	validateScopeRes bool
-	validateScopeErr error
+	state                     string
+	stateErr                  error
+	authURL                   string
+	token                     *application.TokenInfo
+	tokenErr                  error
+	user                      *application.UserInfo
+	userErr                   error
+	logoutURL                 string
+	tokenScopes               []string
+	tokenScopesErr            error
+	validateScopeRes          bool
+	validateScopeErr          error
+	validateAndCheckScopeFunc func(accessToken string, requiredScope string) (bool, error)
+	getTokenScopesFunc        func(accessToken string) ([]string, error)
 }
 
 func (f *fakeOAuthAdapter) GenerateState() (string, error) { return f.state, f.stateErr }
@@ -64,7 +68,16 @@ func (f *fakeOAuthAdapter) GetUserInfo(accessToken string) (*application.UserInf
 	return f.user, f.userErr
 }
 func (f *fakeOAuthAdapter) BuildProviderLogoutURL(idToken string) string { return f.logoutURL }
+func (f *fakeOAuthAdapter) GetTokenScopes(accessToken string) ([]string, error) {
+	if f.getTokenScopesFunc != nil {
+		return f.getTokenScopesFunc(accessToken)
+	}
+	return f.tokenScopes, f.tokenScopesErr
+}
 func (f *fakeOAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
+	if f.validateAndCheckScopeFunc != nil {
+		return f.validateAndCheckScopeFunc(accessToken, requiredScope)
+	}
 	return f.validateScopeRes, f.validateScopeErr
 }
 
@@ -135,9 +148,10 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("authenticates service account token with fern-read scope", func() {
 			// GetUserInfo fails (service account token doesn't have openid scope)
 			oauth.userErr = errors.New("no userinfo for service account")
-			// But ValidateAndCheckScope succeeds (token is valid and has fern-read scope)
-			oauth.validateScopeRes = true
-			oauth.validateScopeErr = nil
+			// Mock GetTokenScopes to return fern-read scope
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern-read"}, nil
+			}
 
 			c.Request.Header.Set("Authorization", "Bearer service-token")
 			mw := adapter.RequireAuth()
@@ -147,6 +161,31 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 			user, exists := c.Get("user")
 			Expect(exists).To(BeTrue())
 			Expect(user.(*domain.User).UserID).To(Equal("service-account"))
+			Expect(user.(*domain.User).Role).To(Equal(domain.RoleUser))
+			isServiceAccount, _ := c.Get("is_service_account")
+			Expect(isServiceAccount).To(BeTrue())
+		})
+
+		It("authenticates service account token with fern-admin scope as admin", func() {
+			// GetUserInfo fails (service account token doesn't have openid scope)
+			oauth.userErr = errors.New("no userinfo for service account")
+			
+			// Mock GetTokenScopes to return admin scope from config
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern.admin"}, nil
+			}
+			cfg.OAuth.AdminScopes = []string{"fern.admin"}
+
+			c.Request.Header.Set("Authorization", "Bearer admin-service-token")
+			mw := adapter.RequireAuth()
+			mw(c)
+
+			Expect(c.IsAborted()).To(BeFalse())
+			user, exists := c.Get("user")
+			Expect(exists).To(BeTrue())
+			Expect(user.(*domain.User).UserID).To(Equal("service-account-admin"))
+			Expect(user.(*domain.User).Role).To(Equal(domain.RoleAdmin))
+			Expect(user.(*domain.User).IsAdmin()).To(BeTrue())
 			isServiceAccount, _ := c.Get("is_service_account")
 			Expect(isServiceAccount).To(BeTrue())
 		})
@@ -154,8 +193,9 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("fails with service account token that fails validation", func() {
 			oauth.userErr = errors.New("no userinfo")
 			// Token validation fails (invalid signature or expired)
-			oauth.validateScopeRes = false
-			oauth.validateScopeErr = errors.New("token signature invalid")
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return nil, errors.New("token signature invalid")
+			}
 
 			c.Request.Header.Set("Authorization", "Bearer forged-token")
 			mw := adapter.RequireAuth()
@@ -168,8 +208,9 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		It("fails with service account token that lacks fern-read scope", func() {
 			oauth.userErr = errors.New("no userinfo")
 			// Token is valid but doesn't have the required scope
-			oauth.validateScopeRes = false
-			oauth.validateScopeErr = nil
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"some-other-scope"}, nil
+			}
 
 			c.Request.Header.Set("Authorization", "Bearer token-without-scope")
 			mw := adapter.RequireAuth()
@@ -353,6 +394,35 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 
 			Expect(w.Code).To(Equal(200))
 			Expect(w.Body.String()).To(Equal("ok"))
+		})
+
+		It("allows service account with fern-admin scope", func() {
+			// Mock the OAuth adapter to support fern-admin scope
+			oauth.userErr = errors.New("no userinfo for service account")
+			oauth.getTokenScopesFunc = func(accessToken string) ([]string, error) {
+				return []string{"fern.admin"}, nil
+			}
+			cfg.OAuth.AdminScopes = []string{"fern.admin"}
+
+			req := httptest.NewRequest("GET", "/api/admin", nil)
+			req.Header.Set("Authorization", "Bearer admin-service-token")
+
+			w := httptest.NewRecorder()
+			r := gin.New()
+			r.Use(adapter.RequireAdmin())
+			r.GET("/api/admin", func(c *gin.Context) {
+				user, _ := c.Get("user")
+				c.JSON(200, gin.H{
+					"user_id": user.(*domain.User).UserID,
+					"role":    user.(*domain.User).Role,
+				})
+			})
+
+			r.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(200))
+			Expect(w.Body.String()).To(ContainSubstring("service-account-admin"))
+			Expect(w.Body.String()).To(ContainSubstring("admin"))
 		})
 	})
 

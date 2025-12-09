@@ -302,13 +302,12 @@ func (a *OAuthAdapter) applyAdminOverrides(userInfo *application.UserInfo) {
 	}
 }
 
-// ValidateAndCheckScope validates a service account token and checks if it has a specific scope.
-// This function assumes the token is from a service account (not a user account).
-// It uses OAuth token introspection (RFC 7662) to validate the token with the authorization server.
-func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
+// GetTokenScopes validates a token and returns all its scopes.
+// This function uses OAuth token introspection (RFC 7662) to validate the token with the authorization server.
+func (a *OAuthAdapter) GetTokenScopes(accessToken string) ([]string, error) {
 	// Check if introspection URL is configured
 	if a.config.OAuth.IntrospectionURL == "" {
-		return false, fmt.Errorf("introspection URL not configured")
+		return nil, fmt.Errorf("introspection URL not configured")
 	}
 
 	// Build introspection request
@@ -318,7 +317,7 @@ func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope s
 
 	req, err := http.NewRequest("POST", a.config.OAuth.IntrospectionURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return false, fmt.Errorf("failed to create introspection request: %w", err)
+		return nil, fmt.Errorf("failed to create introspection request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -342,30 +341,30 @@ func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope s
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("failed to introspect token: %w", err)
+		return nil, fmt.Errorf("failed to introspect token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("token introspection failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("token introspection failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse introspection response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, fmt.Errorf("failed to read introspection response: %w", err)
+		return nil, fmt.Errorf("failed to read introspection response: %w", err)
 	}
 
 	var introspectionData map[string]interface{}
 	if err := json.Unmarshal(body, &introspectionData); err != nil {
-		return false, fmt.Errorf("failed to parse introspection response: %w", err)
+		return nil, fmt.Errorf("failed to parse introspection response: %w", err)
 	}
 
 	// Check if token is active
 	active, ok := introspectionData["active"].(bool)
 	if !ok || !active {
-		return false, fmt.Errorf("token is not active")
+		return nil, fmt.Errorf("token is not active")
 	}
 
 	// Extract scopes from introspection response
@@ -383,6 +382,18 @@ func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope s
 				scopes = append(scopes, scopeStr)
 			}
 		}
+	}
+
+	return scopes, nil
+}
+
+// ValidateAndCheckScope validates a service account token and checks if it has a specific scope.
+// This function assumes the token is from a service account (not a user account).
+// It uses OAuth token introspection (RFC 7662) to validate the token with the authorization server.
+func (a *OAuthAdapter) ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error) {
+	scopes, err := a.GetTokenScopes(accessToken)
+	if err != nil {
+		return false, err
 	}
 
 	// Check if required scope is present
