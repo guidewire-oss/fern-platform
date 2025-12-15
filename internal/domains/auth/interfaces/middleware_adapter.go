@@ -64,7 +64,14 @@ func NewAuthMiddlewareAdapter(
 // RequireAuth middleware validates OAuth sessions and ensures user is authenticated
 func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !m.config.Enabled || !m.config.OAuth.Enabled {
+		if !m.config.Enabled {
+			// Auth disabled - create dummy admin user
+			m.setDummyAdminUser(c)
+			c.Next()
+			return
+		}
+		
+		if !m.config.OAuth.Enabled {
 			c.Next()
 			return
 		}
@@ -232,6 +239,13 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 // RequireAdmin middleware ensures user has admin role
 func (m *AuthMiddlewareAdapter) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !m.config.Enabled {
+			// Auth disabled - create dummy admin user
+			m.setDummyAdminUser(c)
+			c.Next()
+			return
+		}
+		
 		// First ensure user is authenticated
 		m.RequireAuth()(c)
 		if c.IsAborted() {
@@ -267,6 +281,13 @@ func (m *AuthMiddlewareAdapter) RequireAdmin() gin.HandlerFunc {
 // RequireManager middleware ensures user has manager privileges
 func (m *AuthMiddlewareAdapter) RequireManager() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !m.config.Enabled {
+			// Auth disabled - create dummy admin user
+			m.setDummyAdminUser(c)
+			c.Next()
+			return
+		}
+		
 		// First ensure user is authenticated
 		m.RequireAuth()(c)
 		if c.IsAborted() {
@@ -310,6 +331,11 @@ func GenerateCodeChallenge(verifier string) string {
 // StartOAuthFlow initiates the OAuth authentication flow
 func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !m.config.Enabled {
+			c.JSON(400, gin.H{"error": "Authentication is disabled"})
+			return
+		}
+		
 		if !m.config.OAuth.Enabled {
 			c.JSON(400, gin.H{"error": "OAuth not enabled"})
 			return
@@ -357,6 +383,11 @@ func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 // HandleOAuthCallback handles the OAuth callback
 func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !m.config.Enabled {
+			c.JSON(400, gin.H{"error": "Authentication is disabled"})
+			return
+		}
+		
 		if !m.config.OAuth.Enabled {
 			c.JSON(400, gin.H{"error": "OAuth not enabled"})
 			return
@@ -442,6 +473,11 @@ func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 // Logout handles user logout
 func (m *AuthMiddlewareAdapter) Logout() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !m.config.Enabled {
+			c.JSON(200, gin.H{"message": "Authentication is disabled"})
+			return
+		}
+		
 		sessionID, err := c.Cookie("session_id")
 		if err == nil && sessionID != "" {
 			// Get session for ID token
@@ -588,4 +624,30 @@ func CanAccessTeamProjects(c *gin.Context, team string) bool {
 	}
 
 	return false
+}
+
+// setDummyAdminUser creates and sets an in-memory admin user when auth is disabled
+func (m *AuthMiddlewareAdapter) setDummyAdminUser(c *gin.Context) {
+	dummyAdmin := &domain.User{
+		UserID:        "admin",
+		Email:         "admin@fern-platform.local",
+		Name:          "Admin User",
+		FirstName:     "Admin",
+		LastName:      "User",
+		Role:          domain.RoleAdmin,
+		Status:        domain.StatusActive,
+		EmailVerified: true,
+		Groups: []domain.UserGroup{
+			{
+				UserID:    "admin",
+				GroupName: "fern-admins",
+			},
+		},
+	}
+
+	// Set the dummy admin user in context
+	c.Set("user", dummyAdmin)
+	c.Set("user_id", dummyAdmin.UserID)
+	c.Set("user_role", string(dummyAdmin.Role))
+	c.Set("auth_disabled", true)
 }

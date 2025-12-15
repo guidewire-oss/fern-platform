@@ -52,6 +52,11 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AuthConfiguration struct {
+		Enabled      func(childComplexity int) int
+		OauthEnabled func(childComplexity int) int
+	}
+
 	DashboardSummary struct {
 		ActiveProjectCount  func(childComplexity int) int
 		AverageTestDuration func(childComplexity int) int
@@ -302,6 +307,7 @@ type ComplexityRoot struct {
 	}
 
 	SystemConfig struct {
+		AuthConfig func(childComplexity int) int
 		RoleGroups func(childComplexity int) int
 	}
 
@@ -495,6 +501,20 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AuthConfiguration.enabled":
+		if e.complexity.AuthConfiguration.Enabled == nil {
+			break
+		}
+
+		return e.complexity.AuthConfiguration.Enabled(childComplexity), true
+
+	case "AuthConfiguration.oauthEnabled":
+		if e.complexity.AuthConfiguration.OauthEnabled == nil {
+			break
+		}
+
+		return e.complexity.AuthConfiguration.OauthEnabled(childComplexity), true
 
 	case "DashboardSummary.activeProjectCount":
 		if e.complexity.DashboardSummary.ActiveProjectCount == nil {
@@ -1976,6 +1996,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.SuiteTreemapNode.TotalSpecs(childComplexity), true
 
+	case "SystemConfig.authConfig":
+		if e.complexity.SystemConfig.AuthConfig == nil {
+			break
+		}
+
+		return e.complexity.SystemConfig.AuthConfig(childComplexity), true
+
 	case "SystemConfig.roleGroups":
 		if e.complexity.SystemConfig.RoleGroups == nil {
 			break
@@ -2929,12 +2956,18 @@ type UserPreferences {
 # System Configuration Type
 type SystemConfig {
   roleGroups: RoleGroupConfig!
+  authConfig: AuthConfiguration!
 }
 
 type RoleGroupConfig {
   adminGroup: String!
   managerGroup: String!
   userGroup: String!
+}
+
+type AuthConfiguration {
+  enabled: Boolean!
+  oauthEnabled: Boolean!
 }
 
 # JIRA Integration Types
@@ -3818,6 +3851,94 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AuthConfiguration_enabled(ctx context.Context, field graphql.CollectedField, obj *model.AuthConfiguration) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_AuthConfiguration_enabled(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Enabled, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_AuthConfiguration_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthConfiguration",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AuthConfiguration_oauthEnabled(ctx context.Context, field graphql.CollectedField, obj *model.AuthConfiguration) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_AuthConfiguration_oauthEnabled(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.OauthEnabled, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_AuthConfiguration_oauthEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthConfiguration",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _DashboardSummary_health(ctx context.Context, field graphql.CollectedField, obj *model.DashboardSummary) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_DashboardSummary_health(ctx, field)
@@ -9398,6 +9519,8 @@ func (ec *executionContext) fieldContext_Query_systemConfig(_ context.Context, f
 			switch field.Name {
 			case "roleGroups":
 				return ec.fieldContext_SystemConfig_roleGroups(ctx, field)
+			case "authConfig":
+				return ec.fieldContext_SystemConfig_authConfig(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemConfig", field.Name)
 		},
@@ -13802,6 +13925,56 @@ func (ec *executionContext) fieldContext_SystemConfig_roleGroups(_ context.Conte
 				return ec.fieldContext_RoleGroupConfig_userGroup(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoleGroupConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemConfig_authConfig(ctx context.Context, field graphql.CollectedField, obj *model.SystemConfig) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SystemConfig_authConfig(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.AuthConfig, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.AuthConfiguration)
+	fc.Result = res
+	return ec.marshalNAuthConfiguration2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐAuthConfiguration(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SystemConfig_authConfig(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_AuthConfiguration_enabled(ctx, field)
+			case "oauthEnabled":
+				return ec.fieldContext_AuthConfiguration_oauthEnabled(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AuthConfiguration", field.Name)
 		},
 	}
 	return fc, nil
@@ -19671,6 +19844,50 @@ func (ec *executionContext) unmarshalInputUpdateUserPreferencesInput(ctx context
 
 // region    **************************** object.gotpl ****************************
 
+var authConfigurationImplementors = []string{"AuthConfiguration"}
+
+func (ec *executionContext) _AuthConfiguration(ctx context.Context, sel ast.SelectionSet, obj *model.AuthConfiguration) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, authConfigurationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AuthConfiguration")
+		case "enabled":
+			out.Values[i] = ec._AuthConfiguration_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "oauthEnabled":
+			out.Values[i] = ec._AuthConfiguration_oauthEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var dashboardSummaryImplementors = []string{"DashboardSummary"}
 
 func (ec *executionContext) _DashboardSummary(ctx context.Context, sel ast.SelectionSet, obj *model.DashboardSummary) graphql.Marshaler {
@@ -21844,6 +22061,11 @@ func (ec *executionContext) _SystemConfig(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "authConfig":
+			out.Values[i] = ec._SystemConfig_authConfig(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22901,6 +23123,16 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
+
+func (ec *executionContext) marshalNAuthConfiguration2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐAuthConfiguration(ctx context.Context, sel ast.SelectionSet, v *model.AuthConfiguration) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AuthConfiguration(ctx, sel, v)
+}
 
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)

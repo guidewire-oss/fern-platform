@@ -478,6 +478,67 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 		})
 	})
 
+	Describe("Auth Disabled", func() {
+		BeforeEach(func() {
+			cfg.Enabled = false
+		})
+
+		It("sets dummy admin user when auth is disabled in RequireAuth", func() {
+			mw := adapter.RequireAuth()
+			mw(c)
+
+			Expect(c.IsAborted()).To(BeFalse())
+			user, exists := c.Get("user")
+			Expect(exists).To(BeTrue())
+			Expect(user.(*domain.User).UserID).To(Equal("admin"))
+			Expect(user.(*domain.User).Role).To(Equal(domain.RoleAdmin))
+			Expect(user.(*domain.User).Email).To(Equal("admin@fern-platform.local"))
+			authDisabled, _ := c.Get("auth_disabled")
+			Expect(authDisabled).To(BeTrue())
+		})
+
+		It("sets dummy admin user when auth is disabled in RequireAdmin", func() {
+			mw := adapter.RequireAdmin()
+			mw(c)
+
+			Expect(c.IsAborted()).To(BeFalse())
+			user, exists := c.Get("user")
+			Expect(exists).To(BeTrue())
+			Expect(user.(*domain.User).IsAdmin()).To(BeTrue())
+		})
+
+		It("sets dummy admin user when auth is disabled in RequireManager", func() {
+			mw := adapter.RequireManager()
+			mw(c)
+
+			Expect(c.IsAborted()).To(BeFalse())
+			user, exists := c.Get("user")
+			Expect(exists).To(BeTrue())
+			Expect(user.(*domain.User).IsAdmin()).To(BeTrue())
+		})
+
+		It("returns error on StartOAuthFlow when auth is disabled", func() {
+			mw := adapter.StartOAuthFlow()
+			mw(c)
+			Expect(recorder.Code).To(Equal(400))
+			Expect(recorder.Body.String()).To(ContainSubstring("Authentication is disabled"))
+		})
+
+		It("returns error on HandleOAuthCallback when auth is disabled", func() {
+			mw := adapter.HandleOAuthCallback()
+			mw(c)
+			Expect(recorder.Code).To(Equal(400))
+			Expect(recorder.Body.String()).To(ContainSubstring("Authentication is disabled"))
+		})
+
+		It("returns message on Logout when auth is disabled", func() {
+			mw := adapter.Logout()
+			mw(c)
+			Expect(recorder.Code).To(Equal(200))
+			Expect(recorder.Body.String()).To(ContainSubstring("Authentication is disabled"))
+		})
+	})
+
 	// -----------------Nimish -----------------
 
 	Describe("CanAccessTeamProjects", func() {

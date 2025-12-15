@@ -2237,9 +2237,47 @@
             
             const checkAuth = async () => {
                 try {
-                    // Fetch both user and system config
-                    const query = `
-                        query GetAuthData {
+                    // Always fetch system config first - this should work even without auth
+                    const configQuery = `
+                        query GetSystemConfig {
+                            systemConfig {
+                                roleGroups {
+                                    adminGroup
+                                    managerGroup
+                                    userGroup
+                                }
+                                authConfig {
+                                    enabled
+                                    oauthEnabled
+                                }
+                            }
+                        }
+                    `;
+                    
+                    const configData = await graphqlClient.query({ query: configQuery });
+                    if (configData && configData.systemConfig) {
+                        setSystemConfig(configData.systemConfig);
+                    }
+                } catch (error) {
+                    console.log('Failed to fetch system config:', error);
+                    // Set default system config if fetch fails
+                    setSystemConfig({
+                        roleGroups: {
+                            adminGroup: 'admin',
+                            managerGroup: 'manager',
+                            userGroup: 'user'
+                        },
+                        authConfig: {
+                            enabled: false,  // Default to disabled for safety
+                            oauthEnabled: false
+                        }
+                    });
+                }
+                
+                // Then try to fetch current user (only works if auth is enabled)
+                try {
+                    const userQuery = `
+                        query GetCurrentUser {
                             currentUser {
                                 id
                                 userId
@@ -2253,22 +2291,12 @@
                                 createdAt
                                 lastLoginAt
                             }
-                            systemConfig {
-                                roleGroups {
-                                    adminGroup
-                                    managerGroup
-                                    userGroup
-                                }
-                            }
                         }
                     `;
                     
-                    const data = await graphqlClient.query({ query });
-                    if (data && data.currentUser) {
-                        setUser(data.currentUser);
-                    }
-                    if (data && data.systemConfig) {
-                        setSystemConfig(data.systemConfig);
+                    const userData = await graphqlClient.query({ query: userQuery });
+                    if (userData && userData.currentUser) {
+                        setUser(userData.currentUser);
                     }
                 } catch (error) {
                     console.log('Not authenticated:', error);
@@ -2333,6 +2361,10 @@
                        group !== roleGroups.userGroup;
             }) || [];
             
+            // Get auth configuration
+            const authConfig = systemConfig?.authConfig || { enabled: false, oauthEnabled: false };
+            const isAuthEnabled = authConfig.enabled;
+            
             return { 
                 user, 
                 systemConfig,
@@ -2341,7 +2373,8 @@
                 logout, 
                 isAdmin,
                 isManager,
-                userTeams
+                userTeams,
+                isAuthEnabled
             };
         }
 
@@ -2578,7 +2611,7 @@
         // Modern Header component
         function Header({ health, projects, testRuns, onOpenSettings }) {
             const { theme, toggleTheme } = useUserPreferences();
-            const { user, loading, login, logout } = useAuth();
+            const { user, loading, login, logout, isAuthEnabled } = useAuth();
             const activeProjects = projects.filter(p => p.isActive).length;
             const recentRuns = testRuns.filter(tr => {
                 const runDate = new Date(tr.startTime);
@@ -2649,7 +2682,10 @@
                             </button>
 
                             {/* Authentication UI */}
-                            {loading ? (
+                            {!isAuthEnabled ? (
+                                // Auth is disabled - show nothing or a simple indicator
+                                null
+                            ) : loading ? (
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',

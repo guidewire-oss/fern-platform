@@ -312,12 +312,18 @@ type UserPreferences {
 # System Configuration Type
 type SystemConfig {
   roleGroups: RoleGroupConfig!
+  authConfig: AuthConfiguration!
 }
 
 type RoleGroupConfig {
   adminGroup: String!
   managerGroup: String!
   userGroup: String!
+}
+
+type AuthConfiguration {
+  enabled: Boolean!
+  oauthEnabled: Boolean!
 }
 
 # JIRA Integration Types

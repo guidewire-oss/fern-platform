@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+type AuthConfiguration struct {
+	Enabled      bool `json:"enabled"`
+	OauthEnabled bool `json:"oauthEnabled"`
+}
+
 type CreateJiraConnectionInput struct {
 	ProjectID          string `json:"projectId"`
 	Name               string `json:"name"`
@@ -259,7 +264,8 @@ type SuiteTreemapNode struct {
 }
 
 type SystemConfig struct {
-	RoleGroups *RoleGroupConfig `json:"roleGroups"`
+	RoleGroups *RoleGroupConfig   `json:"roleGroups"`
+	AuthConfig *AuthConfiguration `json:"authConfig"`
 }
 
 type Tag struct {

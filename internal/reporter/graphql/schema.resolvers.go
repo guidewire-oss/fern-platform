@@ -16,6 +16,7 @@ import (
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/generated"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
+	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
 )
@@ -629,11 +630,18 @@ func (r *queryResolver) SystemConfig(ctx context.Context) (*model.SystemConfig, 
 	// Get role group names from context
 	roleGroups := getRoleGroupNamesFromContext(ctx)
 
+	// Get auth configuration from config package
+	authConfig := config.GetAuthConfig()
+
 	return &model.SystemConfig{
 		RoleGroups: &model.RoleGroupConfig{
 			AdminGroup:   roleGroups.AdminGroup,
 			ManagerGroup: roleGroups.ManagerGroup,
 			UserGroup:    roleGroups.UserGroup,
+		},
+		AuthConfig: &model.AuthConfiguration{
+			Enabled:      authConfig.Enabled,
+			OauthEnabled: authConfig.OAuth.Enabled,
 		},
 	}, nil
 }
