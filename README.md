@@ -203,23 +203,27 @@ See [integration guide](docs/developers/integration-guide.md) for more examples.
 
 Fern Platform uses domain-driven design with a hexagonal architecture:
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Web UI        │     │   REST API      │     │   GraphQL API   │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         └──────────────────────┬┴──────────────────────────┘
-                                │
-                    ┌───────────┴────────────┐
-                    │   Business Domains     │
-                    │  ┌─────┐ ┌─────────┐  │
-                    │  │Tests│ │Analytics│  │
-                    │  └─────┘ └─────────┘  │
-                    └───────────┬────────────┘
-                                │
-                    ┌───────────┴────────────┐
-                    │   Infrastructure       │
-                    │  PostgreSQL + Redis    │
-                    └────────────────────────┘
+```mermaid
+graph TD
+    subgraph Clients [" "]
+        direction LR
+        UI["Web UI"]
+        REST["REST API"]
+        GQL["GraphQL API"]
+    end
+
+    subgraph Domains ["Business Domains"]
+        direction LR
+        Tests["Tests"]
+        Analytics["Analytics"]
+    end
+
+    subgraph Storage ["Infrastructure"]
+        DB["PostgreSQL + Redis"]
+    end
+
+    UI & REST & GQL --> Domains
+    Domains --> Storage
 ```
 
 ## The Vision: Where We're Heading
