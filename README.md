@@ -222,8 +222,8 @@ graph TD
         DB["PostgreSQL + Redis"]
     end
 
-    UI & REST & GQL --> Domains
-    Domains --> Storage
+    UI & REST & GQL --- Domains
+    Domains --- Storage
 ```
 
 ## The Vision: Where We're Heading
