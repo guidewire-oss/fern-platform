@@ -9,6 +9,7 @@ The acceptance tests are organized by use case:
 - `auth/` - Authentication tests (UC-00)
 - `testsummaries/` - Test Summaries and Visualization tests (UC-02)
 - `testruns/` - Test Runs and Drill-Down tests (UC-03)
+- `performance/` - GraphQL query performance and regression tests
 - `helpers/` - Shared helper functions for authentication, navigation, etc.
 
 Each package has its own test suite and can be run independently.
@@ -34,6 +35,7 @@ make test
 make test-auth         # Authentication tests only
 make test-summaries    # Test summaries tests only
 make test-runs         # Test runs tests only
+make test-performance  # GraphQL performance tests only
 ```
 
 ### Run with visible browser (debugging)

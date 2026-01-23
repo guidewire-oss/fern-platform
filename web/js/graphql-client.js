@@ -63,24 +63,10 @@ class GraphQLClient {
 
 // Export queries
 const QUERIES = {
-    GET_DASHBOARD_DATA: `
-        query GetDashboardData {
-            dashboardSummary {
-                health {
-                    status
-                    service
-                    timestamp
-                }
-                projectCount
-                activeProjectCount
-                totalTestRuns
-                recentTestRuns
-                overallPassRate
-                totalTestsExecuted
-                averageTestDuration
-            }
-            
-            projects(first: 100) {
+    // Optimized queries for better performance
+    GET_PROJECTS_LIST: `
+        query GetProjectsList($first: Int) {
+            projects(first: $first) {
                 edges {
                     node {
                         id
@@ -100,8 +86,56 @@ const QUERIES = {
                 }
                 totalCount
             }
-            
-            recentTestRuns(limit: 100) {
+        }
+    `,
+
+    GET_DASHBOARD_SUMMARY: `
+        query GetDashboardSummary {
+            dashboardSummary {
+                health {
+                    status
+                    service
+                    timestamp
+                }
+                projectCount
+                activeProjectCount
+                totalTestRuns
+                recentTestRuns
+                overallPassRate
+                totalTestsExecuted
+                averageTestDuration
+            }
+        }
+    `,
+
+    GET_RECENT_TEST_RUNS_SUMMARY: `
+        query GetRecentTestRunsSummary($limit: Int) {
+            recentTestRuns(limit: $limit) {
+                id
+                runId
+                projectId
+                branch
+                status
+                startTime
+                endTime
+                duration
+                totalTests
+                passedTests
+                failedTests
+                skippedTests
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
+            }
+        }
+    `,
+
+    GET_RECENT_TEST_RUNS_DETAILED: `
+        query GetRecentTestRunsDetailed($limit: Int) {
+            recentTestRuns(limit: $limit) {
                 id
                 runId
                 projectId

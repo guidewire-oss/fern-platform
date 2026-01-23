@@ -3829,17 +3829,23 @@
 
             const fetchData = async () => {
                 try {
-                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
+                    // Fetch only what's needed for the dashboard - no deep nested test run data
+                    const [summaryData, projectsData, testRunsData] = await Promise.all([
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_SUMMARY),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 }),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 })
+                    ]);
                     
                     // Extract data from GraphQL response
-                    setHealth(data.dashboardSummary.health);
+                    setHealth(summaryData.dashboardSummary.health);
+                    setDashboardSummary(summaryData.dashboardSummary);
                     
                     // Convert projects from edges format
-                    const projectList = data.projects.edges.map(edge => edge.node);
+                    const projectList = projectsData.projects.edges.map(edge => edge.node);
                     setProjects(projectList);
                     
                     // Set test runs with project names
-                    const testRunsWithProjects = (data.recentTestRuns || []).map(run => {
+                    const testRunsWithProjects = (testRunsData.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
                         return {
                             ...run,
@@ -3847,9 +3853,6 @@
                         };
                     });
                     setTestRuns(testRunsWithProjects);
-                    
-                    // Store dashboard summary for later use
-                    setDashboardSummary(data.dashboardSummary);
                     
                     setLoading(false);
                 } catch (err) {
@@ -4378,18 +4381,19 @@
 
             const fetchData = async () => {
                 try {
-                    // Fetch both dashboard data and treemap data
-                    const [dashboardData, treemapResponse] = await Promise.all([
-                        graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA),
-                        graphqlClient.query(GRAPHQL_QUERIES.GET_TREEMAP_DATA, { days: timeRange })
+                    // Fetch critical data in parallel (projects and test runs)
+                    // TestHistoryChart needs test runs, but only summary data (not full nested details)
+                    const [projectsData, testRunsData] = await Promise.all([
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 }),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 })
                     ]);
                     
                     // Convert projects from edges format
-                    const projectList = dashboardData.projects.edges.map(edge => edge.node);
+                    const projectList = projectsData.projects.edges.map(edge => edge.node);
                     setProjects(projectList);
                     
-                    // Set test runs with project names
-                    const testRunsWithProjects = (dashboardData.recentTestRuns || []).map(run => {
+                    // Set test runs with project names - needed for TestHistoryChart
+                    const testRunsWithProjects = (testRunsData.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
                         return {
                             ...run,
@@ -4398,8 +4402,15 @@
                     });
                     setTestRuns(testRunsWithProjects);
                     
-                    // Store treemap data for accurate counts
-                    setTreemapData(treemapResponse.treemapData);
+                    // Fetch treemap data separately so it doesn't block rendering
+                    // If treemap fails, projects and test runs can still render
+                    try {
+                        const treemapResponse = await graphqlClient.query(GRAPHQL_QUERIES.GET_TREEMAP_DATA, { days: timeRange });
+                        setTreemapData(treemapResponse.treemapData);
+                    } catch (treemapErr) {
+                        console.warn('Failed to load treemap data:', treemapErr);
+                        // Continue without treemap - component will handle missing data
+                    }
                     
                     setLoading(false);
                 } catch (err) {
@@ -4712,24 +4723,24 @@
             const fetchData = async () => {
                 try {
                     setLoading(true);
-                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
+                    // Use lightweight summary query - drill-down will load details on demand
+                    const [testRunsData, projectsData] = await Promise.all([
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 }),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 })
+                    ]);
                     
                     // Get projects to map project names
-                    const projectList = data.projects.edges.map(edge => edge.node);
+                    const projectList = projectsData.projects.edges.map(edge => edge.node);
                     
-                    // Enrich test runs with project names and calculate missing durations
-                    const enrichedTestRuns = (data.recentTestRuns || []).map(run => {
+                    // Enrich test runs with project names and use database duration
+                    const enrichedTestRuns = (testRunsData.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
                         
-                        // Enhanced duration calculation with better fallback logic
-                        let finalDuration = null;
+                        // Use database duration or calculate from timestamps
+                        let finalDuration = run.duration;
                         
-                        // First priority: Use database duration if it exists and is > 0
-                        if (run.duration && run.duration > 0) {
-                            finalDuration = run.duration;
-                        }
-                        // Second priority: Calculate from startTime and endTime
-                        else if (run.startTime && run.endTime) {
+                        // Fallback: Calculate from startTime and endTime if duration is missing
+                        if ((!finalDuration || finalDuration <= 0) && run.startTime && run.endTime) {
                             try {
                                 const start = new Date(run.startTime);
                                 const end = new Date(run.endTime);
@@ -4741,30 +4752,7 @@
                                 // Failed to parse timestamps
                             }
                         }
-                        // Third priority: Sum up suite run durations
-                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
-                            const suiteDuration = run.suiteRuns.reduce((total, suite) => {
-                                return total + (suite.duration || 0);
-                            }, 0);
-                            if (suiteDuration > 0) {
-                                finalDuration = suiteDuration;
-                            }
-                        }
-                        // Fourth priority: Sum up spec run durations within suites
-                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
-                            const specDuration = run.suiteRuns.reduce((total, suite) => {
-                                if (suite.specRuns && suite.specRuns.length > 0) {
-                                    const suiteTotal = suite.specRuns.reduce((specTotal, spec) => {
-                                        return specTotal + (spec.duration || 0);
-                                    }, 0);
-                                    return total + suiteTotal;
-                                }
-                                return total;
-                            }, 0);
-                            if (specDuration > 0) {
-                                finalDuration = specDuration;
-                            }
-                        }
+                        
                         // Last resort: Reasonable estimate based on test count
                         if (!finalDuration && run.totalTests && run.totalTests > 0) {
                             finalDuration = run.totalTests * 100; // 100ms per test average
@@ -5397,19 +5385,22 @@
 
             const fetchData = async () => {
                 try {
-                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
-                    console.log('Manager Dashboard Data:', data);
+                    // Fetch critical data in parallel (projects and test runs)
+                    const [projectsData, testRunsData] = await Promise.all([
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 }),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 })
+                    ]);
+                    
+                    console.log('Manager Dashboard - Projects Data:', projectsData);
                     
                     // Convert projects from edges format
-                    const projectList = data.projects.edges.map(edge => edge.node);
+                    const projectList = projectsData.projects.edges.map(edge => edge.node);
                     console.log('Projects:', projectList);
                     setProjects(projectList);
                     
                     // Set test runs with project names
-                    const testRunsWithProjects = (data.recentTestRuns || []).map(run => {
+                    const testRunsWithProjects = (testRunsData.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
-                        console.log('Test run:', run);
-                        console.log('Suite runs for test run:', run.suiteRuns);
                         return {
                             ...run,
                             projectName: project?.name || run.projectId
@@ -5417,11 +5408,11 @@
                     });
                     setTestRuns(testRunsWithProjects);
                     
-                    // Fetch treemap data
+                    // Fetch treemap data separately so it doesn't block rendering
+                    // If treemap fails, projects and test runs can still render
                     try {
-                        console.log(`Fetching treemap data for ${timeRange} days...`);
                         const treemapResponse = await graphqlClient.query(GRAPHQL_QUERIES.GET_TREEMAP_DATA, { days: timeRange });
-                        console.log('Treemap data response:', treemapResponse);
+                        console.log('Manager Dashboard - Treemap Response:', treemapResponse);
                         if (treemapResponse && treemapResponse.treemapData) {
                             console.log('Setting treemap data:', treemapResponse.treemapData);
                             setTreemapData(treemapResponse.treemapData);
@@ -5429,8 +5420,8 @@
                             console.log('No treemap data in response');
                         }
                     } catch (treemapErr) {
-                        console.error('Error fetching treemap data:', treemapErr);
-                        // Continue without treemap data
+                        console.warn('Failed to load treemap data:', treemapErr);
+                        // Continue without treemap - component will handle missing data
                     }
                     
                     setLoading(false);
@@ -5939,7 +5930,11 @@
             const fetchProjects = async () => {
                 try {
                     setLoading(true);
-                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
+                    // Use lightweight query that only fetches projects list
+                    const data = await graphqlClient.query(
+                        GRAPHQL_QUERIES.GET_PROJECTS_LIST,
+                        { first: 100 }
+                    );
                     const projectList = data.projects.edges.map(edge => edge.node);
                     setProjects(projectList);
                     setLoading(false);
@@ -8751,15 +8746,20 @@
 
             const fetchAppData = async () => {
                 try {
-                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
+                    // Only fetch minimal data needed for global app state (header/nav)
+                    // Individual pages will load their own data
+                    const [summaryData, projectsData] = await Promise.all([
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_SUMMARY),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 })
+                    ]);
                     
                     // Convert projects from edges format
-                    const projectList = data.projects.edges.map(edge => edge.node);
+                    const projectList = projectsData.projects.edges.map(edge => edge.node);
                     
                     setAppData({
-                        health: data.dashboardSummary.health,
+                        health: summaryData.dashboardSummary.health,
                         projects: projectList,
-                        testRuns: data.recentTestRuns || []
+                        testRuns: [] // Pages will load their own test runs as needed
                     });
                 } catch (err) {
                     console.error('Failed to fetch app data:', err);
