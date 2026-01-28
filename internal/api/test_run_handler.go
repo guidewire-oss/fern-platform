@@ -61,7 +61,7 @@ func (h *TestRunHandler) createTestRun(c *gin.Context) {
 	}
 
 	// Create test run using domain service
-	if err := h.testingService.CreateTestRun(c.Request.Context(), testRun); err != nil {
+	if _, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun); err != nil {
 		h.logger.WithError(err).Error("Failed to create test run")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -309,6 +309,7 @@ func (h *TestRunHandler) convertTestRunToAPI(tr *domain.TestRun) gin.H {
 		"skippedTests": tr.SkippedTests,
 		"duration":     tr.Duration.Milliseconds(),
 		"environment":  tr.Environment,
+		"tags":         tr.Tags,
 		"metadata":     tr.Metadata,
 		"createdAt":    tr.StartTime,
 		"updatedAt":    tr.EndTime,

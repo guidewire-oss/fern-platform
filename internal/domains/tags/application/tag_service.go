@@ -13,6 +13,19 @@ type TagService struct {
 	tagRepo domain.TagRepository
 }
 
+//go:generate mockgen -destination=../mocks/mock_tag_service.go -package=mocks github.com/guidewire-oss/fern-platform/internal/domains/tags/application TagServiceInterface
+
+type TagServiceInterface interface {
+	CreateTag(ctx context.Context, name string) (*domain.Tag, error)
+	GetTag(ctx context.Context, id domain.TagID) (*domain.Tag, error)
+	GetTagByName(ctx context.Context, name string) (*domain.Tag, error)
+	ListTags(ctx context.Context) ([]*domain.Tag, error)
+	DeleteTag(ctx context.Context, id domain.TagID) error
+	AssignTagsToTestRun(ctx context.Context, testRunID string, tagIDs []domain.TagID) error
+	CreateMultipleTags(ctx context.Context, tagNames []string) ([]*domain.Tag, error)
+	GetOrCreateTag(ctx context.Context, name string) (*domain.Tag, error)
+}
+
 // NewTagService creates a new tag service
 func NewTagService(tagRepo domain.TagRepository) *TagService {
 	return &TagService{

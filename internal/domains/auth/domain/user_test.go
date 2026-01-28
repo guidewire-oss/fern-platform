@@ -54,6 +54,32 @@ var _ = Describe("User", Label("unit", "domain", "auth"), func() {
 		})
 	})
 
+	Describe("IsManager", func() {
+		It("should return true for manager users", func() {
+			managerUser := &domain.User{
+				UserID: "manager-123",
+				Role:   domain.RoleManager,
+			}
+			Expect(managerUser.IsManager()).To(BeTrue())
+		})
+
+		It("should return false for non-manager users", func() {
+			regularUser := &domain.User{
+				UserID: "user-123",
+				Role:   domain.RoleUser,
+			}
+			Expect(regularUser.IsManager()).To(BeFalse())
+		})
+
+		It("should return false for admin users (different role)", func() {
+			adminUser := &domain.User{
+				UserID: "admin-123",
+				Role:   domain.RoleAdmin,
+			}
+			Expect(adminUser.IsManager()).To(BeFalse())
+		})
+	})
+
 	Describe("IsActive", func() {
 		It("should return true for active users", func() {
 			activeUser := &domain.User{
@@ -182,6 +208,14 @@ var _ = Describe("User", Label("unit", "domain", "auth"), func() {
 			Expect(adminUser.IsTeamManager()).To(BeTrue())
 		})
 
+		It("should return true for manager role users", func() {
+			managerUser := &domain.User{
+				UserID: "manager-123",
+				Role:   domain.RoleManager,
+			}
+			Expect(managerUser.IsTeamManager()).To(BeTrue())
+		})
+
 		It("should return true for users in manager groups", func() {
 			user := &domain.User{
 				UserID: "user-123",
@@ -212,6 +246,14 @@ var _ = Describe("User", Label("unit", "domain", "auth"), func() {
 				Role:   domain.RoleAdmin,
 			}
 			Expect(adminUser.IsManagerForTeam("any-team")).To(BeTrue())
+		})
+
+		It("should return true for manager role users regardless of team", func() {
+			managerUser := &domain.User{
+				UserID: "manager-123",
+				Role:   domain.RoleManager,
+			}
+			Expect(managerUser.IsManagerForTeam("any-team")).To(BeTrue())
 		})
 
 		It("should check specific team manager group", func() {
@@ -279,6 +321,7 @@ var _ = Describe("User", Label("unit", "domain", "auth"), func() {
 	Describe("UserRole Constants", func() {
 		It("should have correct values", func() {
 			Expect(string(domain.RoleAdmin)).To(Equal("admin"))
+			Expect(string(domain.RoleManager)).To(Equal("manager"))
 			Expect(string(domain.RoleUser)).To(Equal("user"))
 		})
 	})

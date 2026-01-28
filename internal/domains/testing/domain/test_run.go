@@ -24,7 +24,8 @@ type TestRun struct {
 	Environment  string                 `json:"environment"`
 	Source       string                 `json:"source"`
 	SessionID    string                 `json:"session_id"`
-	Metadata     map[string]interface{} `json:"metadata"`
+	Metadata     map[string]interface{} `json:"metadata" gorm:"-"` // 👈 ignore in ORM
+	Tags         []Tag                  `json:"tags"`
 	SuiteRuns    []SuiteRun             `json:"suite_runs"`
 }
 
@@ -43,6 +44,7 @@ type SuiteRun struct {
 	FailedTests  int           `json:"failed_tests"`
 	SkippedTests int           `json:"skipped_tests"`
 	Duration     time.Duration `json:"duration"`
+	Tags         []Tag         `json:"tags"`
 	SpecRuns     []*SpecRun    `json:"spec_runs"`
 }
 
@@ -61,6 +63,15 @@ type SpecRun struct {
 	StackTrace     string        `json:"stack_trace"`
 	RetryCount     int           `json:"retry_count"`
 	IsFlaky        bool          `json:"is_flaky"`
+	Tags           []Tag         `json:"tags"`
+}
+
+// Tag represents a test tag for categorization
+type Tag struct {
+	ID       uint   `json:"id"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Value    string `json:"value"`
 }
 
 // TestRunSummary represents aggregated test run statistics

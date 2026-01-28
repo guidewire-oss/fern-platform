@@ -210,6 +210,7 @@ type SpecRun struct {
 	StackTrace   *string    `json:"stackTrace,omitempty"`
 	RetryCount   int        `json:"retryCount"`
 	IsFlaky      bool       `json:"isFlaky"`
+	Tags         []*Tag     `json:"tags"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
 }
@@ -241,6 +242,7 @@ type SuiteRun struct {
 	FailedSpecs  int        `json:"failedSpecs"`
 	SkippedSpecs int        `json:"skippedSpecs"`
 	Duration     int        `json:"duration"`
+	Tags         []*Tag     `json:"tags"`
 	SpecRuns     []*SpecRun `json:"specRuns"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
@@ -263,6 +265,8 @@ type SystemConfig struct {
 type Tag struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
+	Category    *string   `json:"category,omitempty"`
+	Value       *string   `json:"value,omitempty"`
 	Description *string   `json:"description,omitempty"`
 	Color       *string   `json:"color,omitempty"`
 	UsageCount  *int      `json:"usageCount,omitempty"`

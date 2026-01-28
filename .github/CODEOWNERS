@@ -2,57 +2,57 @@
 # Order matters - the last matching pattern takes precedence
 
 # Default owners for everything in the repository
-* @anoop2811 @bsekar
+* @anoop2811 @bsekar @sundarok
 
 # Domain-specific ownership
 # Auth domain - security sensitive
-/internal/domains/auth/ @anoop2811 @bsekar
-/pkg/middleware/auth.go @anoop2811 @bsekar
+/internal/domains/auth/ @anoop2811 @bsekar @sundarok
+/pkg/middleware/auth.go @anoop2811 @bsekar @sundarok
 
 # Analytics domain
-/internal/domains/analytics/ @anoop2811 @bsekar
+/internal/domains/analytics/ @anoop2811 @bsekar @sundarok
 
 # Testing domain
-/internal/domains/testing/ @anoop2811 @bsekar
+/internal/domains/testing/ @anoop2811 @bsekar @sundarok
 
 # Projects and Tags domains
-/internal/domains/projects/ @anoop2811 @bsekar
-/internal/domains/tags/ @anoop2811 @bsekar
+/internal/domains/projects/ @anoop2811 @bsekar @sundarok
+/internal/domains/tags/ @anoop2811 @bsekar @sundarok
 
 # GraphQL API changes need careful review
-/internal/reporter/graphql/ @anoop2811 @bsekar
-/internal/graphql/ @anoop2811 @bsekar
-*.graphql @anoop2811 @bsekar
+/internal/reporter/graphql/ @anoop2811 @bsekar @sundarok
+/internal/graphql/ @anoop2811 @bsekar @sundarok
+*.graphql @anoop2811 @bsekar @sundarok
 
 # Infrastructure, deployment and CI/CD
-/deployments/ @anoop2811 @bsekar
-/ci/ @anoop2811 @bsekar
-/.github/ @anoop2811
-Dockerfile @anoop2811
-docker-compose*.yml @anoop2811 @bsekar
+/deployments/ @anoop2811 @bsekar @sundarok
+/ci/ @anoop2811 @bsekar @sundarok
+/.github/ @anoop2811 @sundarok
+Dockerfile @anoop2811 @sundarok
+docker-compose*.yml @anoop2811 @bsekar @sundarok
 
 # Database migrations and models
-/migrations/ @anoop2811 @bsekar
-/pkg/database/ @anoop2811 @bsekar
+/migrations/ @anoop2811 @bsekar @sundarok
+/pkg/database/ @anoop2811 @bsekar @sundarok
 
 # Configuration and security-sensitive files
-/pkg/config/ @anoop2811 @bsekar
-go.mod @anoop2811
-go.sum @anoop2811
-.golangci.yml @anoop2811
+/pkg/config/ @anoop2811 @bsekar @sundarok
+go.mod @anoop2811 @sundarok
+go.sum @anoop2811 @sundarok
+.golangci.yml @anoop2811 @sundarok
 
 # Documentation
-*.md @anoop2811 @bsekar
-/docs/ @anoop2811 @bsekar
+*.md @anoop2811 @bsekar @sundarok
+/docs/ @anoop2811 @bsekar @sundarok
 LICENSE @anoop2811
 
 # Frontend
-/web/ @anoop2811 @bsekar
+/web/ @anoop2811 @bsekar @sundarok
 
 # Scripts and tooling
-/scripts/ @anoop2811
-Makefile @anoop2811
+/scripts/ @anoop2811 @sundarok
+Makefile @anoop2811 @sundarok
 
 # Kubernetes and deployment configurations
-*.yaml @anoop2811 @bsekar
-*.yml @anoop2811 @bsekar
+*.yaml @anoop2811 @bsekar @sundarok
+*.yml @anoop2811 @bsekar @sundarok

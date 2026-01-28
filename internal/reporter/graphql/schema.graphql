@@ -39,6 +39,7 @@ type SuiteRun {
   failedSpecs: Int!
   skippedSpecs: Int!
   duration: Int! # Duration in milliseconds
+  tags: [Tag!]!
   specRuns: [SpecRun!]!
   createdAt: Time!
   updatedAt: Time!
@@ -56,6 +57,7 @@ type SpecRun {
   stackTrace: String
   retryCount: Int!
   isFlaky: Boolean!
+  tags: [Tag!]!
   createdAt: Time!
   updatedAt: Time!
 }
@@ -90,6 +92,8 @@ type ProjectStats {
 type Tag {
   id: ID!
   name: String!
+  category: String
+  value: String
   description: String
   color: String
   usageCount: Int

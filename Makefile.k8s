@@ -151,6 +151,8 @@ mock-jira-deploy: ## Build and deploy mock-jira service
 	@cd mock-jira && docker build -t mock-jira:latest .
 	@echo "📥 Importing mock-jira image into k3d cluster..."
 	@k3d image import mock-jira:latest -c fern-platform
+	@echo "📁 Ensuring namespace exists..."
+	@kubectl create namespace fern-platform 2>/dev/null || echo "✅ Namespace already exists"
 	@echo "☸️ Deploying mock-jira to Kubernetes..."
 	@kubectl apply -f deployments/mock-jira-deployment.yaml
 	@echo "✅ Mock-jira deployed successfully"

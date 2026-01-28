@@ -8,6 +8,13 @@ on:
     - cron: '30 1 * * 6'
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - '.github/CODEOWNERS'
+      - '.github/SECURITY.md'
+      - '.slsa-goreleaser/**'
+      - '.gitignore'
+      - 'docs/**'
+      - '**.md'
 
 # Declare default permissions as read only.
 permissions: read-all

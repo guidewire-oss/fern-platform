@@ -3,6 +3,13 @@ name: PR Validation
 on:
   pull_request:
     types: [opened, edited, synchronize]
+    paths-ignore:
+      - '.github/CODEOWNERS'
+      - '.github/SECURITY.md'
+      - '.slsa-goreleaser/**'
+      - '.gitignore'
+      - 'docs/**'
+      - '**.md'
 
 jobs:
   validate-pr:

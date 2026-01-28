@@ -26,7 +26,9 @@ func (r *GormTagRepository) Save(ctx context.Context, tag *domain.Tag) error {
 	// Convert domain model to database model
 	snapshot := tag.ToSnapshot()
 	dbTag := &database.Tag{
-		Name: snapshot.Name,
+		Name:     snapshot.Name,
+		Category: snapshot.Category,
+		Value:    snapshot.Value,
 	}
 
 	if err := r.db.WithContext(ctx).Create(dbTag).Error; err != nil {
@@ -159,24 +161,14 @@ func (r *GormTagRepository) AssignToTestRun(ctx context.Context, testRunID strin
 
 // toDomainModel converts a database model to a domain model
 func (r *GormTagRepository) toDomainModel(dbTag *database.Tag) (*domain.Tag, error) {
-	// Create tag using constructor
-	tag, err := domain.NewTag(dbTag.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Note: This is a limitation of the current domain design
-	// We can't set the ID or CreatedAt on the domain model after creation
-	// In a real implementation, we might:
-	// 1. Add a factory method that accepts these values
-	// 2. Add setter methods (though this breaks immutability)
-	// 3. Use reflection (not recommended)
-	// 4. Store metadata separately
-
-	// For now, we'll return the tag with the limitation that the ID won't match
-	// This should be addressed in a future refactoring
-
-	return tag, nil
+	// Use ReconstructTag to create domain model with all fields from database
+	return domain.ReconstructTag(
+		domain.TagID(fmt.Sprintf("%d", dbTag.ID)),
+		dbTag.Name,
+		dbTag.Category,
+		dbTag.Value,
+		dbTag.CreatedAt,
+	), nil
 }
 
 // GetOrCreateTag gets an existing tag by name or creates a new one

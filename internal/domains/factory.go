@@ -27,6 +27,11 @@ import (
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	tagsInfra "github.com/guidewire-oss/fern-platform/internal/domains/tags/infrastructure"
 
+	// Summary domain
+	summaryApp "github.com/guidewire-oss/fern-platform/internal/domains/summary/application"
+	summaryInfra "github.com/guidewire-oss/fern-platform/internal/domains/summary/infrastructure"
+	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
+
 	// Integrations domain
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	integrationsInfra "github.com/guidewire-oss/fern-platform/internal/infrastructure/repositories"
@@ -60,6 +65,10 @@ type DomainFactory struct {
 	// Tags domain
 	tagService *tagsApp.TagService
 
+	// Summary domain
+	summaryService *summaryApp.SummaryService
+	summaryHandler *summaryInterfaces.SummaryHandler
+
 	// Integrations domain
 	jiraConnectionService *integrations.JiraConnectionService
 }
@@ -86,6 +95,9 @@ func NewDomainFactory(db *gorm.DB, logger *logging.Logger, authConfig *config.Au
 
 	// Initialize Tags domain
 	factory.initTagsDomain()
+
+	// Initialize Summary domain
+	factory.initSummaryDomain()
 
 	// Initialize Integrations domain
 	factory.initIntegrationsDomain()
@@ -153,6 +165,28 @@ func (f *DomainFactory) initTagsDomain() {
 // GetTagDomainService returns the new domain tag service
 func (f *DomainFactory) GetTagDomainService() *tagsApp.TagService {
 	return f.tagService
+}
+
+// initSummaryDomain initializes the summary domain components
+func (f *DomainFactory) initSummaryDomain() {
+	// Create repository
+	summaryRepo := summaryInfra.NewGormSummaryRepository(f.db)
+
+	// Create application service
+	f.summaryService = summaryApp.NewSummaryService(summaryRepo)
+
+	// Create handler
+	f.summaryHandler = summaryInterfaces.NewSummaryHandler(f.summaryService)
+}
+
+// GetSummaryService returns the summary service
+func (f *DomainFactory) GetSummaryService() *summaryApp.SummaryService {
+	return f.summaryService
+}
+
+// GetSummaryHandler returns the summary handler
+func (f *DomainFactory) GetSummaryHandler() *summaryInterfaces.SummaryHandler {
+	return f.summaryHandler
 }
 
 // initAuthDomain initializes the auth domain components

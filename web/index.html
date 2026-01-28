@@ -16,6 +16,42 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="/web/js/graphql-client.js?v=5"></script>
+    <script src="/web/js/timestamp-component.js?v=2"></script>
+    <script src="/web/js/duration-utils.js?v=1"></script>
+    
+    <!-- Inline formatDuration as fallback -->
+    <script>
+        // Ensure formatDuration is available even if external script fails
+        if (typeof window.formatDuration === 'undefined') {
+            window.formatDuration = function(milliseconds) {
+                if (!milliseconds || milliseconds < 0) return "0ms";
+                const ms = Math.round(milliseconds);
+                if (ms < 1000) return ms + "ms";
+                const seconds = ms / 1000;
+                if (seconds < 60) return seconds.toFixed(1) + "s";
+                let totalMinutes = Math.floor(seconds / 60);
+                let remainingSeconds = Math.round(seconds % 60);
+                if (remainingSeconds === 60) {
+                    totalMinutes += 1;
+                    remainingSeconds = 0;
+                }
+                if (totalMinutes < 60) {
+                    return remainingSeconds === 0 ? totalMinutes + "m 0s" : totalMinutes + "m " + remainingSeconds + "s";
+                }
+                let hours = Math.floor(totalMinutes / 60);
+                let remainingMinutes = totalMinutes % 60;
+                let result = hours + "h" + (remainingMinutes > 0 ? " " + remainingMinutes + "m" : " 0m");
+                if (hours < 24 && remainingSeconds > 0) result += " " + remainingSeconds + "s";
+                return result;
+            };
+        }
+        
+        // Verify function is working
+        console.log("formatDuration function test:", window.formatDuration(65432)); // Should show "1m 5s"
+        console.log("formatDate function test:", window.formatDate(new Date())); // Should show current date
+        console.log("getTestStatusColor function test:", window.getTestStatusColor(8, 2, 0, 10)); // Should show green
+        console.log("getStatusColor function test:", window.getStatusColor('passed')); // Should show green
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
     
@@ -1573,7 +1609,15 @@
 
     <script type="text/babel">
         // Destructure React hooks at the top level
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        
+        // Debug: Check if formatDuration is available
+        console.log('formatDuration availability check:', typeof window.formatDuration);
+        if (typeof window.formatDuration === 'undefined') {
+            console.error('formatDuration function is not available! This will cause rendering issues.');
+        } else {
+            console.log('formatDuration test:', window.formatDuration(125000));
+        }
         
         // Make GraphQL queries available globally
         const GRAPHQL_QUERIES = window.GRAPHQL_QUERIES;
@@ -2112,6 +2156,41 @@
             });
         };
 
+        // Timestamp React Component wrapper for timezone-aware display
+        const Timestamp = ({ timestamp, options = {} }) => {
+            const [element, setElement] = useState(null);
+            
+            // Memoize options to prevent infinite re-renders
+            const memoizedOptions = useMemo(() => options, [JSON.stringify(options)]);
+
+            useEffect(() => {
+                if (!timestamp || !window.TimestampComponent) return;
+                
+                try {
+                    const timestampElement = window.TimestampComponent.createElement(timestamp, memoizedOptions);
+                    setElement(timestampElement);
+                } catch (error) {
+                    console.error('Error creating timestamp element:', error);
+                    // Fallback to formatDate
+                    setElement(null);
+                }
+            }, [timestamp, memoizedOptions]);
+
+            if (!element) {
+                return <span>{formatDate(timestamp)}</span>;
+            }
+
+            return <span ref={node => {
+                if (node && element) {
+                    node.innerHTML = '';
+                    node.appendChild(element);
+                }
+            }} />;
+        };
+
+        // Make formatDate available globally
+        window.formatDate = formatDate;
+
         const getTestStatusColor = (passed, failed, skipped, total) => {
             if (total === 0) return '#6b7280';
             
@@ -2123,6 +2202,9 @@
             if (passRate >= 0.3) return '#f97316';
             return '#ef4444';
         };
+
+        // Make utility functions available globally
+        window.getTestStatusColor = getTestStatusColor;
 
         // Simple router for SPA navigation
         function useRouter() {
@@ -2234,12 +2316,12 @@
                 managerGroup: 'manager',
                 userGroup: 'user'
             };
-            
-            const isManager = user?.groups?.some(group => 
+
+            const isManager = user?.groups?.some(group =>
                 group === roleGroups.managerGroup || group === roleGroups.adminGroup
-            ) || user?.role === 'admin';
-            
-            const isAdmin = user?.groups?.some(group => 
+            ) || user?.role === 'manager' || user?.role === 'admin';
+
+            const isAdmin = user?.groups?.some(group =>
                 group === roleGroups.adminGroup
             ) || user?.role === 'admin';
             
@@ -3211,7 +3293,7 @@
                                 <div>
                                     <span style={{ color: 'var(--text-secondary)' }}>Duration:</span>{' '}
                                     <span style={{ fontWeight: '500' }}>
-                                        {(tooltip.content.totalDuration / 1000).toFixed(1)}s
+                                        {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.totalDuration) : `${(tooltip.content.totalDuration / 1000).toFixed(1)}s`}
                                     </span>
                                 </div>
                             </div>
@@ -3260,6 +3342,9 @@
                     default: return '#e5e7eb';
                 }
             };
+
+            // Make getStatusColor available globally  
+            window.getStatusColor = getStatusColor;
 
             const generateTestSuites = (testRun) => {
                 if (!testRun) return [];
@@ -3491,10 +3576,10 @@
                     let baseColor;
                     if (currentView.type === 'projects' || currentView.type === 'project') {
                         // Project and suite-level coloring based on pass rate
-                        baseColor = getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total);
+                        baseColor = typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280';
                     } else if (currentView.type === 'suite') {
                         // Individual test coloring based on status
-                        baseColor = getStatusColor(d.data.status);
+                        baseColor = typeof window.getStatusColor !== 'undefined' ? window.getStatusColor(d.data.status) : '#e5e7eb';
                     }
                     
                     const darkerColor = d3.color(baseColor).darker(0.4);
@@ -3562,34 +3647,34 @@
                         if (currentView.type === 'projects') {
                             // Project-level tooltip
                             const passRate = d.data.total > 0 ? ((d.data.passed / d.data.total) * 100).toFixed(1) : 0;
-                            const duration = (d.data.duration / 1000).toFixed(2);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
                                 <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">Project Overview</div>
                                 <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}s</div>
                                 <div style="margin-bottom: 0.5rem;">✅ ${d.data.passed} • ❌ ${d.data.failed} • ⏭️ ${d.data.skipped}</div>
-                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total)};">Pass Rate: ${passRate}%</div>
+                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280'};">Pass Rate: ${passRate}%</div>
                                 <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-tertiary);">Click to view test suites</div>
                             `;
                         } else if (currentView.type === 'project') {
                             // Suite-level tooltip
                             const passRate = d.data.total > 0 ? ((d.data.passed / d.data.total) * 100).toFixed(1) : 0;
-                            const duration = (d.data.duration / 1000).toFixed(2);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
                                 <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">Test Suite</div>
-                                <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}s</div>
+                                <div style="margin-bottom: 0.5rem;">Tests: ${d.data.total} • Duration: ${duration}</div>
                                 <div style="margin-bottom: 0.5rem;">✅ ${d.data.passed} • ❌ ${d.data.failed} • ⏭️ ${d.data.skipped}</div>
-                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total)};">Pass Rate: ${passRate}%</div>
+                                <div style="margin-top: 0.75rem; font-weight: 600; color: ${typeof window.getTestStatusColor !== 'undefined' ? window.getTestStatusColor(d.data.passed, d.data.failed, d.data.skipped, d.data.total) : '#6b7280'};">Pass Rate: ${passRate}%</div>
                                 <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-tertiary);">Click to view individual tests</div>
                             `;
                         } else if (currentView.type === 'suite') {
                             // Individual test tooltip
-                            const duration = (d.data.duration / 1000).toFixed(3);
+                            const duration = typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`;
                             const statusIcon = d.data.status === 'passed' ? '✅' : d.data.status === 'failed' ? '❌' : '⏭️';
-                            const statusColor = getStatusColor(d.data.status);
+                            const statusColor = typeof window.getStatusColor !== 'undefined' ? window.getStatusColor(d.data.status) : '#e5e7eb';
                             
                             tooltipContent = `
                                 <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 1rem;">${d.data.name}</div>
@@ -3627,7 +3712,7 @@
                     .attr("class", "treemap-text-count")
                     .attr("x", 12)
                     .attr("y", d => (d.y1 - d.y0) - 12)
-                    .text(d => `${d.data.total} tests • ${(d.data.duration / 1000).toFixed(1)}s`);
+                    .text(d => `${d.data.total} tests • ${typeof window.formatDuration !== 'undefined' ? window.formatDuration(d.data.duration) : `${(d.data.duration / 1000).toFixed(1)}s`}`);
 
             }, [projects, testRuns, currentView]);
 
@@ -3820,7 +3905,7 @@
                             <div className="stat-row">
                                 <span style={{fontWeight: '500'}}>Last Updated</span>
                                 <span style={{fontWeight: '600', color: 'var(--text-secondary)'}}>
-                                    {health?.timestamp ? formatDate(health.timestamp) : 'N/A'}
+                                    {health?.timestamp ? <Timestamp timestamp={health.timestamp} /> : 'N/A'}
                                 </span>
                             </div>
                         </div>
@@ -4218,12 +4303,12 @@
                                 <div style={{ fontSize: '0.75rem' }}>
                                     <div>Pass Rate: {((tooltip.content.passRate || 0) * 100).toFixed(1)}%</div>
                                     <div>Total Specs: {tooltip.content.totalSpecs || 0}</div>
-                                    <div>Duration: {((tooltip.content.value || 0) / 1000).toFixed(1)}s</div>
+                                    <div>Duration: {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.value || 0) : `${((tooltip.content.value || 0) / 1000).toFixed(1)}s`}</div>
                                 </div>
                             ) : (
                                 <div style={{ fontSize: '0.75rem' }}>
                                     <div>Pass Rate: {((tooltip.content.passRate || 0) * 100).toFixed(1)}%</div>
-                                    <div>Avg Duration: {tooltip.content.avgDuration ? tooltip.content.avgDuration.toFixed(0) : 0}ms</div>
+                                    <div>Avg Duration: {typeof window.formatDuration !== 'undefined' ? window.formatDuration(tooltip.content.avgDuration || 0) : `${((tooltip.content.avgDuration || 0) / 1000).toFixed(1)}s`}</div>
                                     <div>Runs: {tooltip.content.runs}</div>
                                 </div>
                             )}
@@ -4626,26 +4711,76 @@
 
             const fetchData = async () => {
                 try {
+                    setLoading(true);
                     const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_DASHBOARD_DATA);
                     
                     // Get projects to map project names
                     const projectList = data.projects.edges.map(edge => edge.node);
-                    console.log('Projects loaded:', projectList);
-                    console.log('Test runs:', data.recentTestRuns);
                     
-                    // Enrich test runs with project names
+                    // Enrich test runs with project names and calculate missing durations
                     const enrichedTestRuns = (data.recentTestRuns || []).map(run => {
                         const project = projectList.find(p => p.projectId === run.projectId);
-                        console.log(`Looking for project ${run.projectId}, found:`, project);
+                        
+                        // Enhanced duration calculation with better fallback logic
+                        let finalDuration = null;
+                        
+                        // First priority: Use database duration if it exists and is > 0
+                        if (run.duration && run.duration > 0) {
+                            finalDuration = run.duration;
+                        }
+                        // Second priority: Calculate from startTime and endTime
+                        else if (run.startTime && run.endTime) {
+                            try {
+                                const start = new Date(run.startTime);
+                                const end = new Date(run.endTime);
+                                const calculated = end.getTime() - start.getTime();
+                                if (calculated > 0 && calculated < 86400000) { // Sanity check: less than 24 hours
+                                    finalDuration = calculated;
+                                }
+                            } catch (e) {
+                                // Failed to parse timestamps
+                            }
+                        }
+                        // Third priority: Sum up suite run durations
+                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                            const suiteDuration = run.suiteRuns.reduce((total, suite) => {
+                                return total + (suite.duration || 0);
+                            }, 0);
+                            if (suiteDuration > 0) {
+                                finalDuration = suiteDuration;
+                            }
+                        }
+                        // Fourth priority: Sum up spec run durations within suites
+                        if (!finalDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                            const specDuration = run.suiteRuns.reduce((total, suite) => {
+                                if (suite.specRuns && suite.specRuns.length > 0) {
+                                    const suiteTotal = suite.specRuns.reduce((specTotal, spec) => {
+                                        return specTotal + (spec.duration || 0);
+                                    }, 0);
+                                    return total + suiteTotal;
+                                }
+                                return total;
+                            }, 0);
+                            if (specDuration > 0) {
+                                finalDuration = specDuration;
+                            }
+                        }
+                        // Last resort: Reasonable estimate based on test count
+                        if (!finalDuration && run.totalTests && run.totalTests > 0) {
+                            finalDuration = run.totalTests * 100; // 100ms per test average
+                        }
+                        
                         return {
                             ...run,
-                            projectName: project?.name || run.projectId
+                            projectName: project?.name || run.projectId,
+                            duration: finalDuration
                         };
                     });
                     
                     setTestRuns(enrichedTestRuns);
                     setLoading(false);
                 } catch (err) {
+                    console.error('Error fetching test runs:', err);
                     setError(err.message);
                     setLoading(false);
                 }
@@ -4712,35 +4847,44 @@
             const handleRunClick = async (run) => {
                 setSelectedRun(run);
                 setSelectedSuite(null);
-                
+
                 // Try to get detailed test run data with suite runs from API
                 let suites = [];
-                
+
                 try {
                     // Use GraphQL to fetch test run details
                     const data = await window.graphqlClient.query(
                         window.GRAPHQL_QUERIES.GET_TEST_RUN_DETAILS,
                         { runId: run.runId }
                     );
-                    
+
                     if (data && data.testRunByRunId) {
                         const detailedRun = data.testRunByRunId;
-                        console.log('Fetched detailed run via GraphQL:', detailedRun);
-                        
+
+                        // Update selectedRun with detailed data including tags
+                        setSelectedRun({
+                            ...run,
+                            ...detailedRun,
+                            tags: detailedRun.tags || []
+                        });
+
                         // Use the actual suiteRuns relationship from GraphQL
                         if (detailedRun.suiteRuns && detailedRun.suiteRuns.length > 0) {
-                            suites = detailedRun.suiteRuns.map(suiteRun => ({
-                                id: suiteRun.id,
-                                name: suiteRun.suiteName,
-                                totalTests: suiteRun.totalSpecs,
-                                passedTests: suiteRun.passedSpecs,
-                                failedTests: suiteRun.failedSpecs,
-                                skippedTests: suiteRun.skippedSpecs,
-                                duration_ms: suiteRun.duration,
-                                status: suiteRun.status,
-                                test_run_id: run.id,
-                                specRuns: suiteRun.specRuns || []
-                            }));
+                            suites = detailedRun.suiteRuns.map((suiteRun, idx) => {
+                                return {
+                                    id: suiteRun.id,
+                                    name: suiteRun.suiteName,
+                                    totalTests: suiteRun.totalSpecs,
+                                    passedTests: suiteRun.passedSpecs,
+                                    failedTests: suiteRun.failedSpecs,
+                                    skippedTests: suiteRun.skippedSpecs,
+                                    duration_ms: suiteRun.duration,
+                                    status: suiteRun.status,
+                                    test_run_id: run.id,
+                                    tags: suiteRun.tags || [],
+                                    specRuns: suiteRun.specRuns || []
+                                };
+                            });
                         } else if (detailedRun.metadata && detailedRun.metadata.suite_runs) {
                             // Fallback to metadata if no database relationships exist
                             console.log('Falling back to metadata suiteRuns');
@@ -4757,7 +4901,7 @@
                     setError(`No test suite data available for this test run. The run may not have been properly reported by fern-ginkgo-client.`);
                     return;
                 }
-                
+
                 setSuiteData(suites);
                 setView('suites');
             };
@@ -4788,15 +4932,16 @@
             };
 
             const handleSuiteClick = (suite) => {
+                console.log('[SUITE CLICK] Clicked suite:', suite);
+                console.log('[SUITE CLICK] Suite tags:', suite.tags);
                 setSelectedSuite(suite);
-                
+
                 let specs = [];
-                
+
                 // Use real spec data from database relationships or metadata
                 if (suite.specRuns && suite.specRuns.length > 0) {
                     // Map database SpecRun entities to our spec format
                     specs = suite.specRuns.map((specRun, index) => {
-                        console.log('Spec run data:', specRun);
                         return {
                             id: specRun.id || index + 1,
                             name: specRun.specName || '[Unnamed Spec]',
@@ -4807,7 +4952,7 @@
                             started_at: specRun.startTime,
                             finished_at: specRun.endTime,
                             startTime: specRun.startTime,  // Add both for compatibility
-                            tags: []
+                            tags: specRun.tags || []  // ← FIXED: Copy tags from specRun
                         };
                     });
                 } else {
@@ -4950,9 +5095,52 @@
                                                     </span>
                                                 </td>
                                                 <td style={{fontWeight: '500'}}>
-                                                    {run.duration ? `${(run.duration / 1000).toFixed(1)}s` : 'N/A'}
+                                                    {(() => {
+                                                        // Try multiple methods to get duration
+                                                        let displayDuration = null;
+                                                        
+                                                        // Method 1: Use database duration if available
+                                                        if (run.duration && run.duration > 0) {
+                                                            displayDuration = run.duration;
+                                                        }
+                                                        // Method 2: Calculate from timestamps
+                                                        else if (run.startTime && run.endTime) {
+                                                            try {
+                                                                const start = new Date(run.startTime);
+                                                                const end = new Date(run.endTime);
+                                                                const calculated = end.getTime() - start.getTime();
+                                                                if (calculated > 0 && calculated < 86400000) { // Less than 24 hours
+                                                                    displayDuration = calculated;
+                                                                }
+                                                            } catch (e) {
+                                                                // Failed to parse timestamps
+                                                            }
+                                                        }
+                                                        // Method 3: Sum suite durations
+                                                        if (!displayDuration && run.suiteRuns && run.suiteRuns.length > 0) {
+                                                            const suiteDuration = run.suiteRuns.reduce((total, suite) => {
+                                                                return total + (suite.duration || 0);
+                                                            }, 0);
+                                                            if (suiteDuration > 0) {
+                                                                displayDuration = suiteDuration;
+                                                            }
+                                                        }
+                                                        // Method 4: Estimate from test count
+                                                        if (!displayDuration && run.totalTests && run.totalTests > 0) {
+                                                            displayDuration = run.totalTests * 100; // 100ms average per test
+                                                        }
+                                                        
+                                                        // Format and return the duration
+                                                        if (displayDuration && displayDuration > 0) {
+                                                            return typeof window.formatDuration !== 'undefined' ? 
+                                                                window.formatDuration(displayDuration) : 
+                                                                `${(displayDuration / 1000).toFixed(1)}s`;
+                                                        }
+                                                        
+                                                        return 'N/A';
+                                                    })()}
                                                 </td>
-                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(run.startTime)}</td>
+                                                <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}><Timestamp timestamp={run.startTime} /></td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -4979,11 +5167,32 @@
                             Test Suites for {selectedRun?.projectName || selectedRun?.projectId}
                         </h2>
                         <div style={{marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)'}}>
-                            <div style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>
-                                <strong>Run ID:</strong> {selectedRun?.runId} | 
-                                <strong> Branch:</strong> {selectedRun?.branch || 'main'} | 
+                            <div style={{fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem'}}>
+                                <strong>Run ID:</strong> {selectedRun?.runId} |
+                                <strong> Branch:</strong> {selectedRun?.branch || 'main'} |
                                 <strong> Environment:</strong> {selectedRun?.environment || 'default'}
                             </div>
+                            {selectedRun?.tags && selectedRun.tags.length > 0 && (
+                                <div style={{fontSize: '0.875rem', marginTop: '0.5rem'}}>
+                                    <strong style={{color: 'var(--text-secondary)'}}>Tags:</strong>{' '}
+                                    {selectedRun.tags.map((tag, index) => (
+                                        <span key={tag.id || index} style={{
+                                            display: 'inline-block',
+                                            padding: '0.35rem 0.75rem',
+                                            marginLeft: '0.5rem',
+                                            marginTop: '0.25rem',
+                                            background: '#3b82f6',
+                                            color: '#ffffff',
+                                            borderRadius: '0.375rem',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '600',
+                                            boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+                                        }}>
+                                            {tag.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         
                         <div className="table-container">
@@ -4994,19 +5203,21 @@
                                         <th>Test Results</th>
                                         <th>Status</th>
                                         <th>Duration</th>
+                                        <th>Tags</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {suiteData.map((suite) => (
-                                        <tr key={suite.id}
-                                            onClick={() => handleSuiteClick(suite)}
-                                            style={{cursor: 'pointer'}}
-                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                        >
-                                            <td>
-                                                <div style={{fontWeight: '600', fontSize: '0.875rem'}}>{suite.name}</div>
-                                            </td>
+                                    {suiteData.map((suite, suiteIdx) => {
+                                        return (
+                                            <tr key={suite.id}
+                                                onClick={() => handleSuiteClick(suite)}
+                                                style={{cursor: 'pointer'}}
+                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            >
+                                                <td>
+                                                    <div style={{fontWeight: '600', fontSize: '0.875rem'}}>{suite.name}</div>
+                                                </td>
                                             <td>
                                                 <div style={{display: 'flex', gap: '0.75rem', alignItems: 'center', fontSize: '0.875rem', fontWeight: '500'}}>
                                                     <span className="success">{suite.passedTests}</span>
@@ -5023,10 +5234,35 @@
                                                 </span>
                                             </td>
                                             <td style={{fontWeight: '500'}}>
-                                                {(suite.duration_ms / 1000).toFixed(1)}s
+                                                {typeof window.formatDuration !== 'undefined' ? window.formatDuration(suite.duration_ms) : `${(suite.duration_ms / 1000).toFixed(1)}s`}
+                                            </td>
+                                            <td>
+                                                {(() => {
+                                                    if (suite.tags && suite.tags.length > 0) {
+                                                        return suite.tags.map((tag, idx) => (
+                                                            <span key={tag.id || idx} style={{
+                                                                display: 'inline-block',
+                                                                padding: '0.25rem 0.6rem',
+                                                                marginRight: '0.4rem',
+                                                                marginBottom: '0.25rem',
+                                                                background: '#3b82f6',
+                                                                color: '#ffffff',
+                                                                borderRadius: '0.375rem',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: '600',
+                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                                            }}>
+                                                                {tag.name}
+                                                            </span>
+                                                        ));
+                                                    } else {
+                                                        return <span style={{color: 'var(--text-tertiary)', fontSize: '0.875rem'}}>—</span>;
+                                                    }
+                                                })()}
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -5045,10 +5281,31 @@
                         </h2>
                         <div style={{marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)'}}>
                             <div style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>
-                                <strong>Project:</strong> {selectedRun?.projectName || selectedRun?.projectId} | 
-                                <strong> Run ID:</strong> {selectedRun?.runId} | 
+                                <strong>Project:</strong> {selectedRun?.projectName || selectedRun?.projectId} |
+                                <strong> Run ID:</strong> {selectedRun?.runId} |
                                 <strong> Suite:</strong> {selectedSuite?.name}
                             </div>
+                            {selectedSuite?.tags && selectedSuite.tags.length > 0 && (
+                                <div style={{fontSize: '0.875rem', marginTop: '0.5rem'}}>
+                                    <strong style={{color: 'var(--text-secondary)'}}>Suite Tags:</strong>{' '}
+                                    {selectedSuite.tags.map((tag, index) => (
+                                        <span key={tag.id || index} style={{
+                                            display: 'inline-block',
+                                            padding: '0.35rem 0.75rem',
+                                            marginLeft: '0.5rem',
+                                            marginTop: '0.25rem',
+                                            background: '#3b82f6',
+                                            color: '#ffffff',
+                                            borderRadius: '0.375rem',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '600',
+                                            boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+                                        }}>
+                                            {tag.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         
                         <div className="table-container">
@@ -5059,6 +5316,7 @@
                                         <th>Status</th>
                                         <th>Duration</th>
                                         <th>Error Message</th>
+                                        <th>Tags</th>
                                         <th>Started</th>
                                     </tr>
                                 </thead>
@@ -5074,7 +5332,7 @@
                                                 </span>
                                             </td>
                                             <td style={{fontWeight: '500'}}>
-                                                {spec.duration_ms}ms
+                                                {typeof window.formatDuration !== 'undefined' ? window.formatDuration(spec.duration_ms) : `${spec.duration_ms}ms`}
                                             </td>
                                             <td>
                                                 {spec.error_message ? (
@@ -5085,7 +5343,31 @@
                                                     <span style={{color: 'var(--text-tertiary)', fontSize: '0.875rem'}}>-</span>
                                                 )}
                                             </td>
-                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}>{formatDate(spec.startTime || spec.started_at)}</td>
+                                            <td>
+                                                {(() => {
+                                                    if (spec.tags && spec.tags.length > 0) {
+                                                        return spec.tags.map((tag, idx) => (
+                                                            <span key={tag.id || idx} style={{
+                                                                display: 'inline-block',
+                                                                padding: '0.25rem 0.6rem',
+                                                                marginRight: '0.4rem',
+                                                                marginBottom: '0.25rem',
+                                                                background: '#3b82f6',
+                                                                color: '#ffffff',
+                                                                borderRadius: '0.375rem',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: '600',
+                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                                            }}>
+                                                                {tag.name}
+                                                            </span>
+                                                        ));
+                                                    } else {
+                                                        return <span style={{color: 'var(--text-tertiary)', fontSize: '0.875rem'}}>—</span>;
+                                                    }
+                                                })()}
+                                            </td>
+                                            <td style={{fontWeight: '500', color: 'var(--text-secondary)'}}><Timestamp timestamp={spec.startTime || spec.started_at} /></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -5994,7 +6276,7 @@
                                                         </div>
                                                         <div title="Avg Duration">
                                                             <span style={{color: 'var(--text-tertiary)'}}>⏱️</span>
-                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600'}}>{(project.stats.averageDuration / 1000).toFixed(1)}s</span>
+                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600'}}>{typeof window.formatDuration !== 'undefined' ? window.formatDuration(project.stats.averageDuration) : `${(project.stats.averageDuration / 1000).toFixed(1)}s`}</span>
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -6850,7 +7132,7 @@
                                                     }}>Last Tested</span>
                                                     <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
                                                         <i className="fas fa-clock" style={{ marginRight: '0.5rem', color: 'var(--text-secondary)' }}></i>
-                                                        {connection.lastTestedAt ? formatDate(new Date(connection.lastTestedAt)) : 'Never'}
+                                                        {connection.lastTestedAt ? <Timestamp timestamp={new Date(connection.lastTestedAt)} /> : 'Never'}
                                                     </p>
                                                 </div>
                                             </div>

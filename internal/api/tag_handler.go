@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,15 +16,78 @@ import (
 // TagHandler handles tag related endpoints
 type TagHandler struct {
 	*BaseHandler
-	tagService *tagsApp.TagService
+	tagService tagsApp.TagService
 }
 
 // NewTagHandler creates a new tag handler
 func NewTagHandler(tagService *tagsApp.TagService, logger *logging.Logger) *TagHandler {
 	return &TagHandler{
 		BaseHandler: NewBaseHandler(logger),
-		tagService:  tagService,
+		tagService:  *tagService,
 	}
+}
+
+// ProcessTestRunTags processes tags for all suite runs and spec runs in a test run request
+func ProcessTestRunTags(c context.Context, tagService *tagsApp.TagService, req *TestRunRequest) error {
+	// Process run-level tags first
+	if len(req.Tags) > 0 {
+		processedTags, err := processTagList(c, tagService, req.Tags)
+		if err != nil {
+			return err
+		}
+		req.Tags = processedTags
+	}
+
+	// Process suite and spec tags
+	for i := range req.SuiteRuns {
+		// Process suite-level tags
+		if len(req.SuiteRuns[i].Tags) > 0 {
+			processedTags, err := processTagList(c, tagService, req.SuiteRuns[i].Tags)
+			if err != nil {
+				return err
+			}
+			req.SuiteRuns[i].Tags = processedTags
+		}
+
+		// Process spec-level tags
+		for j := range req.SuiteRuns[i].SpecRuns {
+			if len(req.SuiteRuns[i].SpecRuns[j].Tags) > 0 {
+				processedTags, err := processTagList(c, tagService, req.SuiteRuns[i].SpecRuns[j].Tags)
+				if err != nil {
+					return err
+				}
+				req.SuiteRuns[i].SpecRuns[j].Tags = processedTags
+			}
+		}
+	}
+	return nil
+}
+
+// processTagList processes a list of tags using the tag service
+func processTagList(c context.Context, tagService *tagsApp.TagService, tags []Tag) ([]Tag, error) {
+	result := make([]Tag, 0, len(tags))
+	for _, t := range tags {
+		// Use the tag service to get or create the tag
+		domainTag, err := tagService.GetOrCreateTag(c, t.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert domain tag ID to uint
+		tagIDStr := string(domainTag.ID())
+		tagID, err := strconv.ParseUint(tagIDStr, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, Tag{
+			ID:       tagID,
+			Name:     domainTag.Name(),
+			Category: domainTag.Category(),
+			Value:    domainTag.Value(),
+		})
+	}
+	return result, nil
 }
 
 // createTag handles POST /api/v1/admin/tags
@@ -49,6 +113,8 @@ func (h *TagHandler) createTag(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"id":          tag.ID(),
 		"name":        tag.Name(),
+		"category":    tag.Category(),
+		"value":       tag.Value(),
 		"description": input.Description,
 		"color":       input.Color,
 		"createdAt":   tag.CreatedAt(),
@@ -108,6 +174,8 @@ func (h *TagHandler) updateTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id":          tag.ID(),
 		"name":        tag.Name(),
+		"category":    tag.Category(),
+		"value":       tag.Value(),
 		"description": input.Description,
 		"color":       input.Color,
 		"updatedAt":   time.Now(),
@@ -190,6 +258,8 @@ func (h *TagHandler) convertTagToAPI(t *tagsDomain.Tag) gin.H {
 	return gin.H{
 		"id":          string(t.ID()),
 		"name":        t.Name(),
+		"category":    t.Category(),
+		"value":       t.Value(),
 		"description": "", // Domain tags don't have descriptions
 		"color":       "", // Domain tags don't have colors
 		"createdAt":   t.CreatedAt(),

@@ -1,6 +1,11 @@
 package interfaces
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -10,20 +15,40 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
+// AuthService defines the subset of AuthenticationService behavior the middleware needs.
+// Concrete application.AuthenticationService should implement these methods.
+type AuthService interface {
+	ValidateSession(ctx context.Context, sid string) (*domain.Session, error)
+	AuthenticateWithOAuth(ctx context.Context, userInfo application.UserInfo, t application.TokenInfo, ip, ua string) (*application.AuthenticateResult, error)
+	Logout(ctx context.Context, sid string) error
+}
+
+// OAuthAdapterIface defines the subset of OAuth adapter behavior the middleware needs.
+// The concrete OAuthAdapter should implement these methods.
+type OAuthAdapterIface interface {
+	GenerateState() (string, error)
+	BuildAuthURL(state string, codeChallenge ...string) string
+	ExchangeCodeForToken(code, verifier string) (*application.TokenInfo, error)
+	GetUserInfo(accessToken string) (*application.UserInfo, error)
+	BuildProviderLogoutURL(idToken string) string
+	GetTokenScopes(accessToken string) ([]string, error)
+	ValidateAndCheckScope(accessToken string, requiredScope string) (bool, error)
+}
+
 // AuthMiddlewareAdapter provides Gin middleware using auth domain services
 type AuthMiddlewareAdapter struct {
-	authService  *application.AuthenticationService
+	authService  AuthService
 	authzService *application.AuthorizationService
-	oauthAdapter *OAuthAdapter
+	oauthAdapter OAuthAdapterIface
 	config       *config.AuthConfig
 	logger       *logging.Logger
 }
 
 // NewAuthMiddlewareAdapter creates a new auth middleware adapter
 func NewAuthMiddlewareAdapter(
-	authService *application.AuthenticationService,
+	authService AuthService,
 	authzService *application.AuthorizationService,
-	oauthAdapter *OAuthAdapter,
+	oauthAdapter OAuthAdapterIface,
 	config *config.AuthConfig,
 	logger *logging.Logger,
 ) *AuthMiddlewareAdapter {
@@ -44,10 +69,150 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		sessionID, err := c.Cookie("session_id")
-		if err != nil || sessionID == "" {
-			m.handleUnauthenticated(c)
-			return
+		var sessionID string
+
+		// 1. Try to get token from Authorization header
+		authHeader := c.GetHeader("Authorization")
+
+		authHeaderLower := strings.ToLower(authHeader)
+		if strings.HasPrefix(authHeaderLower, "bearer ") {
+			accessToken := authHeader[7:]
+
+			// Try to get user info (works for user tokens with openid scope)
+			userInfo, err := m.oauthAdapter.GetUserInfo(accessToken)
+
+			if err != nil {
+				// UserInfo failed - check if it's a service account token
+				m.logger.WithError(err).Debug("GetUserInfo failed, checking for service account token")
+
+				// Get all scopes from token in a single introspection call
+				scopes, scopeErr := m.oauthAdapter.GetTokenScopes(accessToken)
+				if scopeErr != nil {
+					tokenPreview := accessToken
+					if len(accessToken) > 20 {
+						tokenPreview = accessToken[:20] + "..."
+					}
+					m.logger.WithError(scopeErr).WithField("token_preview", tokenPreview).Error("Token validation failed")
+					c.JSON(401, gin.H{"error": "Invalid token: validation failed"})
+					c.Abort()
+					return
+				}
+
+				// Determine role based on scopes (check in order of privilege: admin > manager > user)
+				var role domain.UserRole
+				var userID, email, name, groupName string
+
+				// Check for admin scopes first (highest privilege)
+				for _, scope := range scopes {
+					for _, adminScope := range m.config.OAuth.AdminScopes {
+						if scope == adminScope {
+							role = domain.RoleAdmin
+							userID = "service-account-admin"
+							email = "service-account-admin@fern-platform"
+							name = "Service Account Admin"
+							groupName = "fern-admin-all"
+							m.logger.Info("Service account token detected with admin scope")
+							break
+						}
+					}
+					if role != "" {
+						break
+					}
+				}
+
+				// If not admin, check for manager scopes
+				if role == "" {
+					for _, scope := range scopes {
+						for _, managerScope := range m.config.OAuth.ManagerScopes {
+							if scope == managerScope {
+								role = domain.RoleManager
+								userID = "service-account-manager"
+								email = "service-account-manager@fern-platform"
+								name = "Service Account Manager"
+								groupName = "fern-manager-all"
+								m.logger.Info("Service account token detected with manager scope")
+								break
+							}
+						}
+						if role != "" {
+							break
+						}
+					}
+				}
+
+				// If not admin or manager, check for read scope (user role)
+				if role == "" {
+					for _, scope := range scopes {
+						if scope == "fern-read" {
+							role = domain.RoleUser
+							userID = "service-account"
+							email = "service-account@fern-platform"
+							name = "Service Account"
+							groupName = "fern-read-all"
+							m.logger.Info("Service account token detected with read scope")
+							break
+						}
+					}
+				}
+
+				// If no valid role found, reject the token
+				if role == "" {
+					m.logger.WithError(err).Error("Failed to get user info and token lacks required scopes")
+					c.JSON(401, gin.H{"error": "Invalid token: Failed to get user information and token lacks required scopes"})
+					c.Abort()
+					return
+				}
+
+				// Create service account user with determined role
+				serviceAccountUser := &domain.User{
+					UserID: userID,
+					Email:  email,
+					Name:   name,
+					Role:   role,
+					Status: domain.StatusActive,
+					Groups: []domain.UserGroup{
+						{
+							UserID:    userID,
+							GroupName: groupName,
+						},
+					},
+				}
+
+				// Set the service account user in context
+				c.Set("user", serviceAccountUser)
+				c.Set("is_service_account", true)
+				c.Next()
+				return
+			}
+
+			// User token - proceed with normal authentication
+			tokenInfo := application.TokenInfo{AccessToken: accessToken}
+
+			//Authenticate user
+			result, err := m.authService.AuthenticateWithOAuth(
+				c.Request.Context(),
+				*userInfo,
+				tokenInfo,
+				c.ClientIP(),
+				c.GetHeader("User-Agent"),
+			)
+			if err != nil {
+				m.logger.WithError(err).Error("Failed to authenticate user")
+				c.JSON(500, gin.H{"error": "Authentication failed"})
+				return
+			}
+			sessionID = result.Session.SessionID
+		}
+
+		// 2. If not in header, try cookie
+		if sessionID == "" {
+			m.logger.Debug("Cookie header received")
+			cookie, err := c.Cookie("session_id")
+			if err != nil || cookie == "" {
+				m.handleUnauthenticated(c)
+				return
+			}
+			sessionID = cookie
 		}
 
 		session, err := m.authService.ValidateSession(c.Request.Context(), sessionID)
@@ -75,10 +240,16 @@ func (m *AuthMiddlewareAdapter) RequireAdmin() gin.HandlerFunc {
 
 		user, exists := m.getUserFromContext(c)
 		if !exists || !user.IsAdmin() {
-			m.logger.WithRequest(c.GetString("request_id"), c.Request.Method, c.Request.URL.Path).
-				WithField("user_id", user.UserID).
-				WithField("user_role", user.Role).
-				Warn("Admin access denied - insufficient privileges")
+			// guard against nil user fields in logs
+			if user != nil {
+				m.logger.WithRequest(c.GetString("request_id"), c.Request.Method, c.Request.URL.Path).
+					WithField("user_id", user.UserID).
+					WithField("user_role", user.Role).
+					Warn("Admin access denied - insufficient privileges")
+			} else {
+				m.logger.WithRequest(c.GetString("request_id"), c.Request.Method, c.Request.URL.Path).
+					Warn("Admin access denied - insufficient privileges (no user in context)")
+			}
 
 			if m.isAPIRequest(c) {
 				c.JSON(403, gin.H{"error": "Admin privileges required"})
@@ -120,6 +291,22 @@ func (m *AuthMiddlewareAdapter) RequireManager() gin.HandlerFunc {
 	}
 }
 
+// GenerateCodeVerifier creates a random 43-128 character string
+func GenerateCodeVerifier() (string, error) {
+	verifierBytes := make([]byte, 32)
+	_, err := rand.Read(verifierBytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(verifierBytes), nil
+}
+
+// GenerateCodeChallenge creates a base64url-encoded SHA256 hash of the verifier
+func GenerateCodeChallenge(verifier string) string {
+	hash := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
 // StartOAuthFlow initiates the OAuth authentication flow
 func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -140,8 +327,28 @@ func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 		isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 		c.SetCookie("oauth_state", state, 600, "/", "", isSecure, true) // 10 minutes
 
-		// Build authorization URL
-		authURL := m.oauthAdapter.BuildAuthURL(state)
+		authURL := ""
+		if m.config.OAuth.ClientSecret == "" {
+			// PKCE Auth Flow
+
+			// Generate code_verifier and code_challenge
+			codeVerifier, err := GenerateCodeVerifier()
+			if err != nil {
+				m.logger.WithError(err).Error("Failed to generate PKCE code_verifier")
+				c.JSON(500, gin.H{"error": "Failed to generate PKCE verifier"})
+				return
+			}
+			codeChallenge := GenerateCodeChallenge(codeVerifier)
+
+			// Store pkce_verifier in session/cookie for validation
+			c.SetCookie("pkce_verifier", codeVerifier, 600, "/", "", isSecure, true)
+
+			// Build auth URL with PKCE parameters
+			authURL = m.oauthAdapter.BuildAuthURL(state, codeChallenge)
+		} else {
+			// Build authorization URL
+			authURL = m.oauthAdapter.BuildAuthURL(state)
+		}
 
 		c.Redirect(302, authURL)
 	}
@@ -155,11 +362,18 @@ func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 			return
 		}
 
+		// Debug: see what cookies actually arrived
+		m.logger.Debug("OAuth callback invoked")
+
 		// Validate state parameter
 		state := c.Query("state")
 		expectedState, err := c.Cookie("oauth_state")
 		if err != nil || state != expectedState {
-			m.logger.WithField("state", state).Warn("OAuth state validation failed")
+			m.logger.WithFields(map[string]interface{}{
+				"query_state":  state,
+				"cookie_state": expectedState,
+				"cookie_err":   err,
+			}).Warn("OAuth state validation failed")
 			c.JSON(400, gin.H{"error": "Invalid state parameter"})
 			return
 		}
@@ -171,8 +385,11 @@ func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 			return
 		}
 
+		// Get code_verifier from cookie - this will dictate if we are using PKCE
+		codeVerifier, _ := c.Cookie("pkce_verifier")
+
 		// Exchange code for token
-		tokenInfo, err := m.oauthAdapter.ExchangeCodeForToken(code)
+		tokenInfo, err := m.oauthAdapter.ExchangeCodeForToken(code, codeVerifier)
 		if err != nil {
 			m.logger.WithError(err).Error("Failed to exchange code for token")
 			c.JSON(400, gin.H{"error": "Token exchange failed"})
@@ -218,7 +435,7 @@ func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 
 		// Redirect to dashboard or intended page
 		redirectURL := c.DefaultQuery("redirect", "/")
-		c.Redirect(302, redirectURL)
+		c.Redirect(http.StatusFound, redirectURL)
 	}
 }
 

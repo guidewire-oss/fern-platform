@@ -84,7 +84,7 @@ type TestRun struct {
 	SkippedTests int        `json:"skipped_tests"`
 	Duration     int64      `gorm:"column:duration_ms" json:"duration_ms"` // Duration in milliseconds
 	Environment  string     `gorm:"index" json:"environment"`
-	Tags         []Tag      `gorm:"many2many:test_run_tags;" json:"tags"`
+	Tags         []Tag      `gorm:"many2many:test_run_tags;" json:"tags,omitempty"`
 	SuiteRuns    []SuiteRun `gorm:"foreignKey:TestRunID" json:"suite_runs,omitempty"`
 	Metadata     JSONMap    `gorm:"type:jsonb" json:"metadata,omitempty"`
 }
@@ -102,6 +102,7 @@ type SuiteRun struct {
 	FailedSpecs  int        `json:"failed_specs"`
 	SkippedSpecs int        `json:"skipped_specs"`
 	Duration     int64      `gorm:"column:duration_ms" json:"duration_ms"`
+	Tags         []Tag      `gorm:"many2many:suite_run_tags;" json:"tags,omitempty"`
 	SpecRuns     []SpecRun  `gorm:"foreignKey:SuiteRunID" json:"spec_runs,omitempty"`
 }
 
@@ -118,12 +119,15 @@ type SpecRun struct {
 	StackTrace   string     `gorm:"type:text" json:"stack_trace,omitempty"`
 	RetryCount   int        `json:"retry_count"`
 	IsFlaky      bool       `gorm:"index" json:"is_flaky"`
+	Tags         []Tag      `gorm:"many2many:spec_run_tags;" json:"tags,omitempty"`
 }
 
 // Tag represents a test run tag for categorization
 type Tag struct {
 	BaseModel
 	Name        string    `gorm:"uniqueIndex;not null" json:"name"`
+	Category    string    `gorm:"index" json:"category"`
+	Value       string    `gorm:"index:idx_category_value" json:"value"`
 	Description string    `json:"description,omitempty"`
 	Color       string    `json:"color,omitempty"`
 	TestRuns    []TestRun `gorm:"many2many:test_run_tags;" json:"test_runs,omitempty"`

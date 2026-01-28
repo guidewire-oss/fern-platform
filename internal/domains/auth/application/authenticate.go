@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
+	"github.com/spf13/viper"
 )
 
 // AuthenticationService handles user authentication
@@ -138,6 +139,7 @@ func (s *AuthenticationService) findOrCreateUser(ctx context.Context, userInfo U
 		user.LastName = userInfo.LastName
 		user.ProfileURL = userInfo.Picture
 		user.EmailVerified = userInfo.EmailVerified
+		user.Role = s.determineUserRole(userInfo)
 
 		if err := s.userRepo.Update(ctx, user); err != nil {
 			return nil, false, err
@@ -201,11 +203,22 @@ func (s *AuthenticationService) createSession(ctx context.Context, user *domain.
 	return session, nil
 }
 
+func (s *AuthenticationService) DetermineUserRole(userInfo UserInfo) domain.UserRole {
+	return s.determineUserRole(userInfo)
+}
+
 func (s *AuthenticationService) determineUserRole(userInfo UserInfo) domain.UserRole {
-	// Check for admin groups
+	// Check for admin groups (highest priority)
 	for _, group := range userInfo.Groups {
-		if group == "admin" || group == "/admin" {
+		if group == "admin" || group == "/admin" || stringSliceContains(viper.GetStringSlice("auth.oauth.adminGroups"), group) {
 			return domain.RoleAdmin
+		}
+	}
+
+	// Check for manager groups
+	for _, group := range userInfo.Groups {
+		if group == "manager" || group == "/manager" || stringSliceContains(viper.GetStringSlice("auth.oauth.managerGroups"), group) {
+			return domain.RoleManager
 		}
 	}
 
@@ -221,4 +234,14 @@ func generateSessionID() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// stringSliceContains checks if a string is present in a slice
+func stringSliceContains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

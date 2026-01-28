@@ -3,9 +3,12 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
+	"github.com/guidewire-oss/fern-platform/pkg/database"
+	"gorm.io/gorm"
 )
 
 // TestRunService handles test run business logic
@@ -29,10 +32,11 @@ func NewTestRunService(
 }
 
 // CreateTestRun creates a new test run
-func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.TestRun) error {
+// Returns the test run (existing or newly created), a flag indicating if it already existed, and any error
+func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.TestRun) (*domain.TestRun, bool, error) {
 	// Validate test run
 	if testRun.ProjectID == "" {
-		return fmt.Errorf("project ID is required")
+		return nil, false, fmt.Errorf("project ID is required")
 	}
 
 	// Set default values
@@ -42,10 +46,25 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 
 	// Create the test run
 	if err := s.testRunRepo.Create(ctx, testRun); err != nil {
-		return fmt.Errorf("failed to create test run: %w", err)
+		// Check if it's a unique constraint violation (concurrent thread created it)
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
+			// Another thread already created this test run
+			// Try to fetch the existing one
+			fmt.Println("Duplicate found: fetching existing test run")
+			if testRun.RunID != "" {
+				existing, fetchErr := s.testRunRepo.GetByRunID(ctx, testRun.RunID)
+				if fetchErr == nil && existing != nil {
+					// Return the existing test run
+					return existing, true, nil // true = already existed
+				}
+			}
+		}
+		return nil, false, fmt.Errorf("failed to create test run: %w", err)
 	}
 
-	return nil
+	fmt.Println("New test run created with ID:", testRun.ID)
+	return testRun, false, nil // false = newly created
 }
 
 // CompleteTestRun marks a test run as completed
@@ -161,6 +180,19 @@ func (s *TestRunService) updateSuiteStatistics(ctx context.Context, suiteRunID u
 
 	for _, spec := range specRuns {
 		totalTests++
+		// Fallback: If EndTime is nil, set to now
+		if spec.EndTime == nil {
+			now := time.Now()
+			spec.EndTime = &now
+		}
+		// Fallback: If StartTime is zero, set to EndTime
+		if spec.StartTime.IsZero() && spec.EndTime != nil {
+			spec.StartTime = *spec.EndTime
+		}
+		// Calculate duration if missing
+		if spec.Duration == 0 && spec.EndTime != nil && !spec.StartTime.IsZero() {
+			spec.Duration = spec.EndTime.Sub(spec.StartTime)
+		}
 		totalDuration += spec.Duration
 
 		switch spec.Status {
@@ -186,9 +218,18 @@ func (s *TestRunService) updateSuiteStatistics(ctx context.Context, suiteRunID u
 // CreateTestRunWithSuites creates a test run with all its suites and specs in one transaction
 func (s *TestRunService) CreateTestRunWithSuites(ctx context.Context, testRun *domain.TestRun, suites []domain.SuiteRun) error {
 	// Create the test run
-	if err := s.CreateTestRun(ctx, testRun); err != nil {
+	createdTestRun, _, err := s.CreateTestRun(ctx, testRun)
+	if err != nil {
 		return err
 	}
+
+	// Use the returned test run (either new or existing)
+	if createdTestRun != nil {
+		testRun = createdTestRun
+	}
+
+	// Always add the suite runs, whether test run is new or existing
+	// This handles the concurrent creation case where another thread created the test run
 
 	// Create all suites
 	for _, suite := range suites {
@@ -232,6 +273,10 @@ func (s *TestRunService) CreateSuiteRun(ctx context.Context, suiteRun *domain.Su
 	if suiteRun.Status == "" {
 		suiteRun.Status = "running"
 	}
+	// Always set StartTime if zero
+	if suiteRun.StartTime.IsZero() {
+		suiteRun.StartTime = time.Now()
+	}
 
 	return s.suiteRunRepo.Create(ctx, suiteRun)
 }
@@ -246,10 +291,17 @@ func (s *TestRunService) CreateSpecRun(ctx context.Context, specRun *domain.Spec
 	if specRun.Status == "" {
 		specRun.Status = "pending"
 	}
+	
+	// Only auto-set StartTime if both StartTime and EndTime are zero
+	if specRun.StartTime.IsZero() && (specRun.EndTime == nil || specRun.EndTime.IsZero()) {
+		specRun.StartTime = time.Now()
+	}
 
-	// Calculate duration if not set
-	if specRun.EndTime != nil && !specRun.StartTime.IsZero() {
-		specRun.Duration = specRun.EndTime.Sub(specRun.StartTime)
+	// Calculate duration only if both times are set and EndTime is after StartTime
+	if specRun.EndTime != nil && !specRun.StartTime.IsZero() && !specRun.EndTime.IsZero() {
+		if specRun.EndTime.After(specRun.StartTime) {
+			specRun.Duration = specRun.EndTime.Sub(specRun.StartTime)
+		}
 	}
 
 	return s.specRunRepo.Create(ctx, specRun)
@@ -296,5 +348,34 @@ func (s *TestRunService) GetSuiteRunsByTestRunID(ctx context.Context, testRunID 
 
 // UpdateTestRun updates an existing test run
 func (s *TestRunService) UpdateTestRun(ctx context.Context, testRun *domain.TestRun) error {
-	return s.testRunRepo.Update(ctx, testRun)
+	if err := s.testRunRepo.Update(ctx, testRun); err != nil {
+		return err
+	}
+
+	if len(testRun.Tags) > 0 {
+		if db, ok := s.testRunRepo.(interface{ GetDB() *gorm.DB }); ok {
+			// Use DB model with embedded BaseModel
+			dbModel := database.TestRun{
+				BaseModel: database.BaseModel{ID: testRun.ID},
+			}
+
+			// Convert domain tags → database tags
+			dbTags := make([]database.Tag, len(testRun.Tags))
+			for i, t := range testRun.Tags {
+				dbTags[i] = database.Tag{
+					BaseModel: database.BaseModel{ID: t.ID},
+					Name:      t.Name,
+					Category:  t.Category,
+					Value:     t.Value,
+				}
+			}
+
+			// Replace associations
+			if err := db.GetDB().Model(&dbModel).Association("Tags").Replace(dbTags); err != nil {
+				return fmt.Errorf("failed to update test run tags: %w", err)
+			}
+		}
+	}
+
+	return nil
 }

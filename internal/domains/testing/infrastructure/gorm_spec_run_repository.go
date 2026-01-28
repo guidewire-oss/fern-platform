@@ -12,7 +12,8 @@ import (
 
 // GormSpecRunRepository implements domain.SpecRunRepository using GORM
 type GormSpecRunRepository struct {
-	db *gorm.DB
+	db        *gorm.DB
+	converter *DatabaseConverter
 }
 
 // NewGormSpecRunRepository creates a new GORM-based spec run repository
@@ -21,6 +22,8 @@ func NewGormSpecRunRepository(db *gorm.DB) *GormSpecRunRepository {
 }
 
 // Create creates a new spec run
+// This is used when adding spec runs to an existing suite run.
+// For new test runs, the entire hierarchy is saved via GormTestRunRepository.Create()
 func (r *GormSpecRunRepository) Create(ctx context.Context, specRun *domain.SpecRun) error {
 	dbSpecRun := &database.SpecRun{
 		SuiteRunID:   specRun.SuiteRunID,
@@ -33,6 +36,7 @@ func (r *GormSpecRunRepository) Create(ctx context.Context, specRun *domain.Spec
 		StackTrace:   specRun.StackTrace,
 		RetryCount:   specRun.RetryCount,
 		IsFlaky:      specRun.IsFlaky,
+		Tags:         r.converter.ConvertDomainTagsToDatabase(specRun.Tags),
 	}
 
 	if err := r.db.WithContext(ctx).Create(dbSpecRun).Error; err != nil {
@@ -62,6 +66,7 @@ func (r *GormSpecRunRepository) CreateBatch(ctx context.Context, specRuns []*dom
 			StackTrace:   specRun.StackTrace,
 			RetryCount:   specRun.RetryCount,
 			IsFlaky:      specRun.IsFlaky,
+			Tags:         r.converter.ConvertDomainTagsToDatabase(specRun.Tags),
 		}
 	}
 

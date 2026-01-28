@@ -55,6 +55,11 @@ func convertPtrString(s *string) string {
 
 // convertStringPtr converts a string to *string
 func convertStringPtr(s string) *string {
+	return ConvertStringPtr(s)
+}
+
+// ConvertStringPtr is an exported wrapper for testing
+func ConvertStringPtr(s string) *string {
 	if s == "" {
 		return nil
 	}

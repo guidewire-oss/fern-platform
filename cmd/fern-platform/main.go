@@ -65,6 +65,7 @@ func main() {
 	tagService := domainFactory.GetTagDomainService()
 	flakyDetectionService := domainFactory.GetFlakyDetectionService()
 	jiraConnectionService := domainFactory.GetJiraConnectionService()
+	summaryHandler := domainFactory.GetSummaryHandler()
 	authMiddleware := domainFactory.GetAuthMiddleware()
 
 	// Initialize HTTP server
@@ -117,6 +118,7 @@ func main() {
 			tagService,
 			flakyDetectionService,
 			jiraConnectionService,
+			summaryHandler,
 			authMiddleware,
 			logger,
 		)

@@ -101,18 +101,25 @@ const QUERIES = {
                 totalCount
             }
             
-            recentTestRuns(limit: 10) {
+            recentTestRuns(limit: 100) {
                 id
                 runId
                 projectId
                 branch
                 status
                 startTime
+                endTime
                 duration
                 totalTests
                 passedTests
                 failedTests
                 skippedTests
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
                 suiteRuns {
                     id
                     suiteName
@@ -122,6 +129,12 @@ const QUERIES = {
                     failedSpecs
                     skippedSpecs
                     duration
+                    tags {
+                        id
+                        name
+                        category
+                        value
+                    }
                     specRuns {
                         id
                         specName
@@ -132,6 +145,12 @@ const QUERIES = {
                         errorMessage
                         stackTrace
                         isFlaky
+                        tags {
+                            id
+                            name
+                            category
+                            value
+                        }
                     }
                 }
             }
@@ -202,6 +221,12 @@ const QUERIES = {
                 duration
                 environment
                 metadata
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
                 suiteRuns {
                     id
                     suiteName
@@ -211,6 +236,12 @@ const QUERIES = {
                     failedSpecs
                     skippedSpecs
                     duration
+                    tags {
+                        id
+                        name
+                        category
+                        value
+                    }
                     specRuns {
                         id
                         specName
@@ -221,6 +252,12 @@ const QUERIES = {
                         errorMessage
                         stackTrace
                         isFlaky
+                        tags {
+                            id
+                            name
+                            category
+                            value
+                        }
                     }
                 }
             }

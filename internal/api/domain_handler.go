@@ -2,24 +2,25 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
+	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	testingApp "github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
 	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
-	"github.com/google/uuid"
 )
 
 // DomainHandler handles all domain-related HTTP requests
@@ -29,6 +30,7 @@ type DomainHandler struct {
 	tagService            *tagsApp.TagService
 	flakyDetectionService *analyticsApp.FlakyDetectionService
 	jiraConnectionService *integrations.JiraConnectionService
+	summaryHandler        *summaryInterfaces.SummaryHandler
 	authMiddleware        *interfaces.AuthMiddlewareAdapter
 	logger                *logging.Logger
 }
@@ -40,6 +42,7 @@ func NewDomainHandler(
 	tagService *tagsApp.TagService,
 	flakyDetectionService *analyticsApp.FlakyDetectionService,
 	jiraConnectionService *integrations.JiraConnectionService,
+	summaryHandler *summaryInterfaces.SummaryHandler,
 	authMiddleware *interfaces.AuthMiddlewareAdapter,
 	logger *logging.Logger,
 ) *DomainHandler {
@@ -49,6 +52,7 @@ func NewDomainHandler(
 		tagService:            tagService,
 		flakyDetectionService: flakyDetectionService,
 		jiraConnectionService: jiraConnectionService,
+		summaryHandler:        summaryHandler,
 		authMiddleware:        authMiddleware,
 		logger:                logger,
 	}
@@ -56,6 +60,11 @@ func NewDomainHandler(
 
 // RegisterRoutes registers all domain handler routes
 func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
+	// Root route - redirect to web interface
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/web/")
+	})
+
 	// Health check route
 	router.GET("/health", h.healthCheck)
 
@@ -93,6 +102,9 @@ func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
 			protected.GET("/projects", h.getProjects)
 			protected.GET("/projects/:id", h.getProject)
 			protected.GET("/projects/by-project-id/:projectId", h.getProjectByProjectId)
+
+			// Summary
+			protected.GET("/summary/:projectId/:seed", h.summaryHandler.GetSummary)
 
 			// Manager-only routes
 			managerRoutes := protected.Group("/")
@@ -134,9 +146,6 @@ func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
 
 	// Static file serving
 	router.Static("/web", "./web")
-	router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/web/")
-	})
 }
 
 // Helper function to check if user is authenticated
@@ -184,49 +193,140 @@ func (h *DomainHandler) healthCheck(c *gin.Context) {
 // Test Run Handlers
 
 func (h *DomainHandler) recordTestRun(c *gin.Context) {
-	var req struct {
-		ProjectID   string                 `json:"projectId" binding:"required"`
-		RunID       string                 `json:"runId"`
-		Branch      string                 `json:"branch"`
-		CommitSHA   string                 `json:"commitSha"`
-		Environment string                 `json:"environment"`
-		Metadata    map[string]interface{} `json:"metadata"`
-		Status      string                 `json:"status"`
+	var req TestRunRequest
+
+	if c.Request.Body == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body is empty"})
+		return
 	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Generate a unique run ID if not provided
-	if req.RunID == "" {
-		req.RunID = uuid.New().String()
-	}
-
-	// Set defaults
-	if req.Status == "" {
-		req.Status = "pending"
-	}
-
-	// Create test run object
-	testRun := &testingDomain.TestRun{
-		RunID:       req.RunID,
-		ProjectID:   req.ProjectID,
-		Branch:      req.Branch,
-		GitCommit:   req.CommitSHA,
-		Environment: req.Environment,
-		Metadata:    req.Metadata,
-		Status:      req.Status,
-		StartTime:   time.Now(),
-	}
-
-	err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Process tags before converting to domain objects
+	if err := ProcessTestRunTags(c.Request.Context(), h.tagService, &req); err != nil {
+		h.logger.WithError(err).Error("Failed to process tags")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error processing tags"})
 		return
 	}
 
-	response := h.convertTestRunToAPI(testRun)
+	// Convert request SuiteRuns to domain SuiteRuns
+	domainSuiteRuns := h.convertApiSuiteRunstoDomain(req.SuiteRuns)
+
+	runLevelTags := h.convertApiTagsToDomain(req.Tags)
+
+	// Calculate counts and status for this batch
+	status := h.calculateOverallStatus(req.SuiteRuns)
+	// Use client-provided environment if present, otherwise default
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+	totalTests, passedTests, failedTests, skippedTests :=
+		h.calculateOverallTestCounts(domainSuiteRuns)
+
+	// Determine runID
+	var runID string
+	if req.TestSeed != 0 {
+		runID = strconv.FormatUint(req.TestSeed, 10)
+	} else {
+		runID = uuid.New().String()
+	}
+
+	// Look up existing run if seed provided
+	var testRun *testingDomain.TestRun
+	if req.TestSeed != 0 {
+		existing, err := h.testingService.GetTestRunByRunID(c.Request.Context(), runID)
+		if err == nil && existing != nil {
+			testRun = existing
+			fmt.Println("Test run exists, runID:", runID)
+		}
+	}
+
+	if testRun == nil {
+		// brand new run
+		newTestRun := &testingDomain.TestRun{
+			RunID:        runID,
+			ProjectID:    req.TestProjectID,
+			Branch:       req.GitBranch,
+			GitCommit:    req.GitSha,
+			Environment:  environment,
+			Metadata:     map[string]interface{}{},
+			Status:       status,
+			StartTime:    time.Now(),
+			Tags:         runLevelTags,
+			SuiteRuns:    domainSuiteRuns,
+			TotalTests:   totalTests,
+			PassedTests:  passedTests,
+			FailedTests:  failedTests,
+			SkippedTests: skippedTests,
+		}
+
+		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
+		fmt.Println("alreadyExisted:", alreadyExisted)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		testRun = createdTestRun
+
+		// If it was newly created (not a duplicate), return immediately
+		if !alreadyExisted {
+			response := h.convertDomainTestRunToAPI(testRun)
+			c.JSON(http.StatusCreated, response)
+			return
+		}
+		// If it already existed (concurrent creation), continue to add suite runs below
+	}
+
+	// At this point, testRun exists (either was already there or was concurrently created)
+	// Add the new suite runs to the existing test run
+	if testRun != nil {
+		// Reset TestRunID on new suites
+		for _, suite := range domainSuiteRuns {
+			suite.TestRunID = testRun.ID
+			if err := h.testingService.CreateSuiteRun(c.Request.Context(), &suite); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// now insert spec runs for this suite
+			for _, spec := range suite.SpecRuns {
+				spec.SuiteRunID = suite.ID
+				if err := h.testingService.CreateSpecRun(c.Request.Context(), spec); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+		}
+		// Update existing run: accumulate suite runs + counts + tags
+		testRun.SuiteRuns = append(testRun.SuiteRuns, domainSuiteRuns...)
+		testRun.TotalTests += totalTests
+		testRun.PassedTests += passedTests
+		testRun.FailedTests += failedTests
+		testRun.SkippedTests += skippedTests
+
+		// ✅ Merge run-level tags
+		testRun.Tags = h.mergeUniqueTags(testRun.Tags, runLevelTags)
+
+		// mark overall status as failed if any failed
+		if status == "failed" || testRun.Status == "failed" {
+			testRun.Status = "failed"
+		} else if status == "partial" || testRun.Status == "partial" {
+			testRun.Status = "partial"
+		} else {
+			testRun.Status = "passed"
+		}
+
+		if err := h.testingService.UpdateTestRun(c.Request.Context(), testRun); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	response := h.convertDomainTestRunToAPI(testRun)
 	c.JSON(http.StatusCreated, response)
 }
 
@@ -251,19 +351,25 @@ func (h *DomainHandler) startTestRun(c *gin.Context) {
 		req.RunID = uuid.New().String()
 	}
 
+	// Use client-provided environment if present, otherwise default
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+
 	// Create the test run object
 	testRun := &testingDomain.TestRun{
 		ProjectID:   req.ProjectID,
 		RunID:       req.RunID,
 		Branch:      req.Branch,
 		GitCommit:   req.CommitSha,
-		Environment: req.Environment,
+		Environment: environment,
 		Status:      "running",
 		StartTime:   time.Now(),
 		Metadata:    req.Metadata,
 	}
 
-	err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
+	_, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -395,13 +501,13 @@ func (h *DomainHandler) addSpecRun(c *gin.Context) {
 
 	// Create spec run
 	specRun := &testingDomain.SpecRun{
-		SuiteRunID:     req.SuiteRunID,
-		Name:           req.SpecName,
-		Status:         req.Status,
-		StartTime:      time.Now(),
-		ErrorMessage:   req.ErrorMessage,
-		StackTrace:     req.StackTrace,
-		RetryCount:     req.Retries,
+		SuiteRunID:   req.SuiteRunID,
+		Name:         req.SpecName,
+		Status:       req.Status,
+		StartTime:    time.Now(),
+		ErrorMessage: req.ErrorMessage,
+		StackTrace:   req.StackTrace,
+		RetryCount:   req.Retries,
 	}
 
 	if req.StartTime != nil {
@@ -438,26 +544,66 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 	projectID := c.Query("projectId")
 	_ = c.Query("status") // status filtering not implemented yet
 
-	// Get test runs - simplified version
+	// Get authenticated user from context
+	user, exists := c.Get("user")
+	if !exists || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
+	authUser, ok := user.(*authDomain.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user data"})
+		return
+	}
+
+	// Check if this is a service account token
+	isServiceAccount, _ := c.Get("is_service_account")
+
+	// Get test runs
 	var testRuns []*testingDomain.TestRun
 	var err error
 
 	if projectID != "" {
+		// Get test runs for specific project
 		testRuns, err = h.testingService.GetProjectTestRuns(c.Request.Context(), projectID, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Filter by user's groups unless it's a service account with fern-read scope
+		if isServiceAccount == true {
+			// Service account with fern-read scope - no filtering needed
+			h.logger.Debug("Service account request - returning all test runs for project")
+		} else {
+			// Regular user - filter by groups
+			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+		}
 	} else {
+		// Get all recent test runs
 		testRuns, err = h.testingService.GetRecentTestRuns(c.Request.Context(), limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Filter by user's groups unless it's a service account with fern-read scope
+		if isServiceAccount == true {
+			// Service account with fern-read scope - return all test runs
+			h.logger.Debug("Service account request - returning all test runs")
+		} else {
+			// Regular user - filter by groups
+			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+		}
 	}
 
 	total := int64(len(testRuns))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	// Convert to API response
 	response := make([]gin.H, len(testRuns))
 	for i, tr := range testRuns {
-		response[i] = h.convertTestRunToAPI(tr)
+		response[i] = h.convertDomainTestRunToAPI(tr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -466,6 +612,47 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// filterTestRunsByUserGroups filters test runs to only include those from projects
+// whose team matches any of the user's groups
+func (h *DomainHandler) filterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.TestRun, user *authDomain.User) []*testingDomain.TestRun {
+	// Extract user's group names
+	userGroups := make(map[string]bool)
+	for _, group := range user.Groups {
+		userGroups[group.GroupName] = true
+	}
+
+	// Get unique project IDs from test runs
+	projectIDs := make(map[string]bool)
+	for _, tr := range testRuns {
+		projectIDs[tr.ProjectID] = true
+	}
+
+	// Check which projects the user has access to
+	allowedProjects := make(map[string]bool)
+	for projectID := range projectIDs {
+		project, err := h.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
+		if err != nil {
+			h.logger.WithError(err).Warnf("Failed to get project %s", projectID)
+			continue
+		}
+
+		// Check if project's team matches any of user's groups
+		if userGroups[string(project.Team())] {
+			allowedProjects[projectID] = true
+		}
+	}
+
+	// Filter test runs to only include allowed projects
+	filtered := make([]*testingDomain.TestRun, 0)
+	for _, tr := range testRuns {
+		if allowedProjects[tr.ProjectID] {
+			filtered = append(filtered, tr)
+		}
+	}
+
+	return filtered
 }
 
 // getCurrentUser returns the current authenticated user information
@@ -544,7 +731,7 @@ func (h *DomainHandler) createProject(c *gin.Context) {
 	// Generate project ID if not provided
 	projectID := req.ProjectID
 	if projectID == "" {
-		projectID = strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
+		projectID = uuid.New().String()
 	}
 
 	// Get current user ID for creator
@@ -599,7 +786,7 @@ func (h *DomainHandler) getTestRun(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.convertTestRunToAPI(testRun))
+	c.JSON(http.StatusOK, h.convertDomainTestRunToAPI(testRun))
 }
 
 func (h *DomainHandler) getTestRunByRunId(c *gin.Context) {
@@ -667,44 +854,6 @@ func (h *DomainHandler) ignoreFlakyTest(c *gin.Context) {
 
 // Conversion helpers
 
-func (h *DomainHandler) convertTestRunToAPI(tr *testingDomain.TestRun) gin.H {
-	// Convert test run to API response
-	return gin.H{
-		"id":           tr.ID,
-		"runId":        tr.RunID,
-		"projectId":    tr.ProjectID,
-		"branch":       tr.Branch,
-		"commitSha":    tr.GitCommit,
-		"status":       tr.Status,
-		"startTime":    tr.StartTime,
-		"endTime":      tr.EndTime,
-		"duration":     tr.Duration.Seconds(),
-		"totalTests":   tr.TotalTests,
-		"passedTests":  tr.PassedTests,
-		"failedTests":  tr.FailedTests,
-		"skippedTests": tr.SkippedTests,
-		"environment":  tr.Environment,
-		"metadata":     tr.Metadata,
-	}
-}
-
-func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
-	snapshot := p.ToSnapshot()
-	return gin.H{
-		"id":            snapshot.ID,
-		"projectId":     string(snapshot.ProjectID),
-		"name":          snapshot.Name,
-		"description":   snapshot.Description,
-		"repository":    snapshot.Repository,
-		"defaultBranch": snapshot.DefaultBranch,
-		"team":          string(snapshot.Team),
-		"isActive":      snapshot.IsActive,
-		"settings":      snapshot.Settings,
-		"createdAt":     snapshot.CreatedAt,
-		"updatedAt":     snapshot.UpdatedAt,
-	}
-}
-
 // convertFlakyTestToAPI is deprecated - flaky test types have changed
 // func (h *DomainHandler) convertFlakyTestToAPI(ft *testingDomain.FlakyTest) gin.H {
 // 	return gin.H{}
@@ -714,7 +863,7 @@ func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 
 func (h *DomainHandler) getJiraConnections(c *gin.Context) {
 	projectID := c.Param("id")
-	
+
 	connections, err := h.jiraConnectionService.GetProjectConnections(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

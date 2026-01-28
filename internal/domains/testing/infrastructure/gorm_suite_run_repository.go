@@ -12,7 +12,8 @@ import (
 
 // GormSuiteRunRepository implements domain.SuiteRunRepository using GORM
 type GormSuiteRunRepository struct {
-	db *gorm.DB
+	db        *gorm.DB
+	converter *DatabaseConverter
 }
 
 // NewGormSuiteRunRepository creates a new GORM-based suite run repository
@@ -21,6 +22,8 @@ func NewGormSuiteRunRepository(db *gorm.DB) *GormSuiteRunRepository {
 }
 
 // Create creates a new suite run
+// This is used when adding suite runs to an existing test run.
+// For new test runs, the entire hierarchy is saved via GormTestRunRepository.Create()
 func (r *GormSuiteRunRepository) Create(ctx context.Context, suiteRun *domain.SuiteRun) error {
 	dbSuiteRun := &database.SuiteRun{
 		TestRunID:    suiteRun.TestRunID,
@@ -33,8 +36,10 @@ func (r *GormSuiteRunRepository) Create(ctx context.Context, suiteRun *domain.Su
 		FailedSpecs:  suiteRun.FailedTests,
 		SkippedSpecs: suiteRun.SkippedTests,
 		Duration:     int64(suiteRun.Duration / time.Millisecond),
+		Tags:         r.converter.ConvertDomainTagsToDatabase(suiteRun.Tags),
 	}
 
+	// GORM will handle the association with existing tags by ID
 	if err := r.db.WithContext(ctx).Create(dbSuiteRun).Error; err != nil {
 		return fmt.Errorf("failed to create suite run: %w", err)
 	}
@@ -62,6 +67,7 @@ func (r *GormSuiteRunRepository) CreateBatch(ctx context.Context, suiteRuns []*d
 			FailedSpecs:  suiteRun.FailedTests,
 			SkippedSpecs: suiteRun.SkippedTests,
 			Duration:     int64(suiteRun.Duration / time.Millisecond),
+			Tags:         r.converter.ConvertDomainTagsToDatabase(suiteRun.Tags),
 		}
 	}
 
