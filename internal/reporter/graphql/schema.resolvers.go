@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
@@ -828,6 +829,15 @@ func (r *subscriptionResolver) FlakyTestDetected(ctx context.Context, projectID 
 
 // SpecRuns is the resolver for the specRuns field.
 func (r *suiteRunResolver) SpecRuns(ctx context.Context, obj *model.SuiteRun) ([]*model.SpecRun, error) {
+	// PERFORMANCE FIX: Check if this is being called from recentTestRuns
+	// If so, return empty array to avoid loading thousands of spec runs
+	path := graphql.GetPath(ctx)
+	pathStr := path.String()
+	if len(pathStr) > 0 && (pathStr == "recentTestRuns" || pathStr[0:15] == "recentTestRuns.") {
+		r.logger.WithField("suite_run_id", obj.ID).Debug("Skipping spec runs for recentTestRuns query")
+		return []*model.SpecRun{}, nil
+	}
+
 	r.logger.WithField("suite_run_id", obj.ID).Debug("Loading spec runs for suite run")
 
 	// Get data loader from context
@@ -845,8 +855,10 @@ func (r *suiteRunResolver) SpecRuns(ctx context.Context, obj *model.SuiteRun) ([
 		return nil, fmt.Errorf("invalid suite run ID: %w", err)
 	}
 
+	// CRITICAL FIX: Add LIMIT to prevent slow queries
+	// The query is timing out because the table is huge
 	if err := r.db.Where("suite_run_id = ?", intID).
-		Preload("Tags").
+		Limit(100). // Max 100 spec runs per suite
 		Find(&specRuns).Error; err != nil {
 		r.logger.WithError(err).WithField("suite_run_id", obj.ID).Error("Failed to load spec runs directly")
 		return nil, fmt.Errorf("failed to load spec runs: %w", err)
@@ -926,8 +938,6 @@ func (r *testRunResolver) SuiteRuns(ctx context.Context, obj *model.TestRun) ([]
 
 	if err := r.db.Where("test_run_id = ?", intID).
 		Preload("Tags").
-		Preload("SpecRuns").
-		Preload("SpecRuns.Tags").
 		Find(&suiteRuns).Error; err != nil {
 		r.logger.WithError(err).WithField("test_run_id", obj.ID).Error("Failed to load suite runs directly")
 		return nil, fmt.Errorf("failed to load suite runs: %w", err)

@@ -101,50 +101,21 @@ const QUERIES = {
                 totalCount
             }
             
-            recentTestRuns(limit: 100) {
-                id
-                runId
-                projectId
-                branch
-                status
-                startTime
-                endTime
-                duration
-                totalTests
-                passedTests
-                failedTests
-                skippedTests
-                tags {
-                    id
-                    name
-                    category
-                    value
-                }
-                suiteRuns {
-                    id
-                    suiteName
-                    status
-                    totalSpecs
-                    passedSpecs
-                    failedSpecs
-                    skippedSpecs
-                    duration
-                    tags {
+            testRuns(first: 50) {
+                edges {
+                    node {
                         id
-                        name
-                        category
-                        value
-                    }
-                    specRuns {
-                        id
-                        specName
+                        runId
+                        projectId
+                        branch
                         status
-                        duration
                         startTime
                         endTime
-                        errorMessage
-                        stackTrace
-                        isFlaky
+                        duration
+                        totalTests
+                        passedTests
+                        failedTests
+                        skippedTests
                         tags {
                             id
                             name
@@ -152,7 +123,15 @@ const QUERIES = {
                             value
                         }
                     }
+                    cursor
                 }
+                pageInfo {
+                    hasNextPage
+                    hasPreviousPage
+                    startCursor
+                    endCursor
+                }
+                totalCount
             }
         }
     `,
@@ -184,6 +163,43 @@ const QUERIES = {
                 totalDuration
                 totalTests
                 overallPassRate
+            }
+        }
+    `,
+
+    GET_TEST_RUNS_PAGINATED: `
+        query GetTestRunsPaginated($first: Int, $after: String, $projectId: String) {
+            testRuns(first: $first, after: $after, filter: { projectId: $projectId }) {
+                edges {
+                    node {
+                        id
+                        runId
+                        projectId
+                        branch
+                        status
+                        startTime
+                        endTime
+                        duration
+                        totalTests
+                        passedTests
+                        failedTests
+                        skippedTests
+                        tags {
+                            id
+                            name
+                            category
+                            value
+                        }
+                    }
+                    cursor
+                }
+                pageInfo {
+                    hasNextPage
+                    hasPreviousPage
+                    startCursor
+                    endCursor
+                }
+                totalCount
             }
         }
     `,

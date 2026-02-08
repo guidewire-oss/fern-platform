@@ -44,6 +44,8 @@ func NewDatabase(cfg *config.DatabaseConfig) (*DB, error) {
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
+		PrepareStmt:            true,
+		SkipDefaultTransaction: true,
 	}
 
 	db, err := gorm.Open(postgres.Open(dbUrl), gormConfig)

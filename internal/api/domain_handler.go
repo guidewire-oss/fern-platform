@@ -71,24 +71,27 @@ func (h *DomainHandler) RegisterRoutes(router *gin.Engine) {
 	// API v1 routes
 	apiV1 := router.Group("/api/v1")
 	{
-		// Public routes for test result submission
-		// These are compatible with the legacy Fern Reporter API
-		apiV1.POST("/test-runs", h.recordTestRun)
-		apiV1.POST("/test-runs/start", h.startTestRun)
-		apiV1.POST("/test-runs/complete", h.completeTestRun)
-		apiV1.POST("/suite-runs", h.addSuiteRun)
-		apiV1.POST("/spec-runs", h.addSpecRun)
-		apiV1.PUT("/test-runs/:id", h.updateTestRun)
-
 		// Protected routes - require authentication
 		protected := apiV1.Group("/")
 		protected.Use(h.authMiddleware.RequireAuth())
 		{
-			// Test runs
+			// Test runs - read operations
 			protected.GET("/test-runs", h.getTestRuns)
 			protected.GET("/test-runs/:id", h.getTestRun)
 			protected.GET("/test-runs/by-run-id/:id", h.getTestRunByRunId)
 			protected.DELETE("/test-runs/:id", h.deleteTestRun)
+
+			// Test runs - write operations (result submission)
+			protected.POST("/test-runs", h.recordTestRun)
+			protected.POST("/test-runs/start", h.startTestRun)
+			protected.POST("/test-runs/complete", h.completeTestRun)
+			protected.PUT("/test-runs/:id", h.updateTestRun)
+
+			// Suite runs
+			protected.POST("/suite-runs", h.addSuiteRun)
+
+			// Spec runs
+			protected.POST("/spec-runs", h.addSpecRun)
 
 			// Suites
 			protected.GET("/test-runs/:id/suite-runs", h.getSuiteRuns)

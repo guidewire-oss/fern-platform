@@ -77,11 +77,6 @@ func (r *GormTestRunRepository) Update(ctx context.Context, testRun *domain.Test
 func (r *GormTestRunRepository) GetByID(ctx context.Context, id uint) (*domain.TestRun, error) {
 	var dbTestRun database.TestRun
 	if err := r.db.WithContext(ctx).
-		Preload("Tags").
-		Preload("SuiteRuns").
-		Preload("SuiteRuns.Tags").
-		Preload("SuiteRuns.SpecRuns").
-		Preload("SuiteRuns.SpecRuns.Tags").
 		First(&dbTestRun, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("test run not found")
@@ -96,11 +91,6 @@ func (r *GormTestRunRepository) GetByID(ctx context.Context, id uint) (*domain.T
 func (r *GormTestRunRepository) GetByRunID(ctx context.Context, runID string) (*domain.TestRun, error) {
 	var dbTestRun database.TestRun
 	if err := r.db.WithContext(ctx).
-		Preload("Tags").
-		Preload("SuiteRuns").
-		Preload("SuiteRuns.Tags").
-		Preload("SuiteRuns.SpecRuns").
-		Preload("SuiteRuns.SpecRuns.Tags").
 		Where("run_id = ?", runID).First(&dbTestRun).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("test run not found")
@@ -131,11 +121,6 @@ func (r *GormTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 	var dbTestRuns []database.TestRun
 	query := r.db.WithContext(ctx).
 		Where("project_id = ?", projectID).
-		Preload("Tags").
-		Preload("SuiteRuns").
-		Preload("SuiteRuns.Tags").
-		Preload("SuiteRuns.SpecRuns").
-		Preload("SuiteRuns.SpecRuns.Tags").
 		Order("created_at DESC")
 
 	if limit > 0 {
@@ -244,16 +229,18 @@ func (r *GormTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return count, err
 }
 
+// Count counts all test runs
+func (r *GormTestRunRepository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&database.TestRun{}).Count(&count).Error
+	return count, err
+}
+
 // GetRecent retrieves recent test runs across all projects
 func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	var dbTestRuns []database.TestRun
 	query := r.db.WithContext(ctx).
 		Model(&database.TestRun{}).
-		Preload("Tags").
-		Preload("SuiteRuns").
-		Preload("SuiteRuns.Tags").
-		Preload("SuiteRuns.SpecRuns").
-		Preload("SuiteRuns.SpecRuns.Tags").
 		Order("created_at DESC")
 
 	if limit > 0 {
@@ -270,6 +257,35 @@ func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*do
 	}
 
 	return testRuns, nil
+}
+
+// List retrieves test runs with pagination across all projects
+func (r *GormTestRunRepository) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	var dbTestRuns []database.TestRun
+	var total int64
+
+	// Get total count
+	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count test runs: %w", err)
+	}
+
+	// Get paginated results
+	query := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset)
+
+	if err := query.Find(&dbTestRuns).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list test runs: %w", err)
+	}
+
+	testRuns := make([]*domain.TestRun, len(dbTestRuns))
+	for i, dbTestRun := range dbTestRuns {
+		testRuns[i] = r.converter.ConvertTestRunToDomain(&dbTestRun)
+	}
+
+	return testRuns, total, nil
 }
 
 // GetDB returns the underlying GORM DB instance.

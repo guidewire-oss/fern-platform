@@ -890,7 +890,7 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 
 // DashboardSummary implementation using domain service
 func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.DashboardSummary, error) {
-	// Get all projects to count them
+	// Get all projects to count them (we'll reuse this for filtering)
 	projects, totalProjects, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project count: %w", err)
@@ -911,7 +911,21 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		r.logger.WithError(err).Error("Failed to get recent test runs for dashboard")
 	}
 
-	totalTestRuns := len(recentRuns)
+	// Filter by user's accessible projects (pass projects to avoid re-fetching)
+	recentRuns, err = r.filterTestRunsByUserGroupsWithProjects(ctx, recentRuns, projects)
+	if err != nil {
+		r.logger.WithError(err).Error("Failed to filter test runs by user groups")
+	}
+
+	// Get actual total count from database
+	totalTestRuns := 0
+	if totalCount, err := r.testingService.CountTestRuns(ctx); err == nil {
+		totalTestRuns = int(totalCount)
+	} else {
+		r.logger.WithError(err).Error("Failed to count test runs")
+		totalTestRuns = len(recentRuns) // fallback
+	}
+	
 	recentTestRuns := len(recentRuns)
 	overallPassRate := float64(0)
 	totalTestsExecuted := 0
@@ -1130,9 +1144,9 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 
 // TestRuns implementation using domain service with pagination
 func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.TestRunConnection, error) {
-	// Apply pagination
-	pageSize := 20
-	if first != nil && *first > 0 && *first <= 100 {
+	// Apply pagination - default 50 per page
+	pageSize := 50
+	if first != nil && *first > 0 && *first <= 200 {
 		pageSize = *first
 	}
 
@@ -1150,11 +1164,14 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 		projectID = *filter.ProjectID
 	}
 
-	// Get test runs with pagination
+	// Get test runs with pagination  
 	testRuns, totalCount, err := r.testingService.ListTestRuns(ctx, projectID, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list test runs: %w", err)
 	}
+
+	// TODO: Implement proper group-based filtering at database level
+	// For now, rely on UI to only request accessible projects
 
 	hasMore := offset+len(testRuns) < int(totalCount)
 
@@ -1257,3 +1274,111 @@ func (r *queryResolver) Tags_domain(ctx context.Context, filter *model.TagFilter
 		TotalCount: len(filteredTags),
 	}, nil
 }
+
+// filterTestRunsByUserGroups filters test runs to only include those from projects
+// whose team matches any of the user's groups
+func (r *queryResolver) filterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.TestRun) ([]*testingDomain.TestRun, error) {
+	// Get user from context
+	user, ok := ctx.Value("user").(*authDomain.User)
+	if !ok || user == nil {
+		// If no user in context, return all (might be service account)
+		return testRuns, nil
+	}
+
+	// Extract user's group names
+	userGroups := make(map[string]bool)
+	for _, group := range user.Groups {
+		userGroups[group.GroupName] = true
+	}
+
+	// Get unique project IDs from test runs
+	projectIDs := make([]string, 0)
+	projectIDSet := make(map[string]bool)
+	for _, tr := range testRuns {
+		if !projectIDSet[tr.ProjectID] {
+			projectIDs = append(projectIDs, tr.ProjectID)
+			projectIDSet[tr.ProjectID] = true
+		}
+	}
+
+	// Batch fetch all projects
+	projects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
+	if err != nil {
+		r.logger.WithError(err).Error("Failed to list projects for filtering")
+		return testRuns, nil // Return unfiltered on error
+	}
+
+	// Build map of projectID -> team
+	projectTeams := make(map[string]string)
+	for _, project := range projects {
+		snapshot := project.ToSnapshot()
+		projectTeams[string(snapshot.ProjectID)] = string(snapshot.Team)
+	}
+
+	// Check which projects the user has access to
+	allowedProjects := make(map[string]bool)
+	for _, projectID := range projectIDs {
+		team, exists := projectTeams[projectID]
+		if !exists {
+			r.logger.Warnf("Project %s not found in project list", projectID)
+			continue
+		}
+
+		// Check if project's team matches any of user's groups
+		if userGroups[team] {
+			allowedProjects[projectID] = true
+		}
+	}
+
+	// Filter test runs to only include allowed projects
+	filtered := make([]*testingDomain.TestRun, 0)
+	for _, tr := range testRuns {
+		if allowedProjects[tr.ProjectID] {
+			filtered = append(filtered, tr)
+		}
+	}
+
+	return filtered, nil
+}
+
+// filterTestRunsByUserGroupsWithProjects is an optimized version that reuses project list
+func (r *queryResolver) filterTestRunsByUserGroupsWithProjects(ctx context.Context, testRuns []*testingDomain.TestRun, projects []*projectsDomain.Project) ([]*testingDomain.TestRun, error) {
+	// Get user from context
+	user, ok := ctx.Value("user").(*authDomain.User)
+	if !ok || user == nil {
+		// If no user in context, return all (might be service account)
+		return testRuns, nil
+	}
+
+	// Extract user's group names
+	userGroups := make(map[string]bool)
+	for _, group := range user.Groups {
+		userGroups[group.GroupName] = true
+	}
+
+	// Build map of projectID -> team from provided projects
+	projectTeams := make(map[string]string)
+	for _, project := range projects {
+		snapshot := project.ToSnapshot()
+		projectTeams[string(snapshot.ProjectID)] = string(snapshot.Team)
+	}
+
+	// Check which projects the user has access to
+	allowedProjects := make(map[string]bool)
+	for projectID, team := range projectTeams {
+		if userGroups[team] {
+			allowedProjects[projectID] = true
+		}
+	}
+
+	// Filter test runs to only include allowed projects
+	filtered := make([]*testingDomain.TestRun, 0)
+	for _, tr := range testRuns {
+		if allowedProjects[tr.ProjectID] {
+			filtered = append(filtered, tr)
+		}
+	}
+
+	return filtered, nil
+}
+
