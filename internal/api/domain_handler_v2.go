@@ -40,10 +40,12 @@ func NewDomainHandlerV2(
 	logger *logging.Logger,
 ) *DomainHandlerV2 {
 	baseHandler := NewBaseHandler(logger)
+	testRunHandler := NewTestRunHandler(testingService, logger)
+	testRunHandler.SetTagService(tagService)
 	return &DomainHandlerV2{
 		authHandler:           NewAuthHandler(authMiddleware, logger),
 		healthHandler:         NewHealthHandler(logger),
-		testRunHandler:        NewTestRunHandler(testingService, logger),
+		testRunHandler:        testRunHandler,
 		projectHandler:        NewProjectHandler(projectService, logger),
 		tagHandler:            NewTagHandler(tagService, logger),
 		systemHandler:         NewSystemHandler(logger),
@@ -81,6 +83,7 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	// Public routes (no authentication required)
 	publicGroup := v1.Group("")
 	h.healthHandler.RegisterRoutes(publicGroup)
+	h.testRunHandler.RegisterPublicRoutes(publicGroup)
 
 	// User routes (require authentication)
 	userGroup := v1.Group("")

@@ -683,6 +683,348 @@ func (h *TestRunHandler) mergeUniqueTags(existingTags, newTags []domain.Tag) []d
 	return tags
 }
 
+// --- Public (unauthenticated) test submission endpoints ---
+// These are compatible with the legacy Fern Reporter API
+
+// recordTestRun handles POST /api/v1/test-runs (public)
+func (h *TestRunHandler) recordTestRun(c *gin.Context) {
+	var req TestRunRequest
+
+	if c.Request.Body == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body is empty"})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Process tags before converting to domain objects
+	if h.tagService != nil {
+		if err := ProcessTestRunTags(c.Request.Context(), h.tagService, &req); err != nil {
+			h.logger.WithError(err).Error("Failed to process tags")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error processing tags"})
+			return
+		}
+	}
+
+	// Convert request SuiteRuns to domain SuiteRuns
+	domainSuiteRuns := h.convertApiSuiteRunsToDomain(req.SuiteRuns)
+
+	runLevelTags := h.convertApiTagsToDomain(req.Tags)
+
+	// Calculate counts and status for this batch
+	status := h.calcOverallStatus(req.SuiteRuns)
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+	totalTests, passedTests, failedTests, skippedTests :=
+		h.calcOverallTestCounts(domainSuiteRuns)
+
+	// Determine runID
+	var runID string
+	if req.TestSeed != 0 {
+		runID = strconv.FormatUint(req.TestSeed, 10)
+	} else {
+		runID = uuid.New().String()
+	}
+
+	// Look up existing run if seed provided
+	var testRun *domain.TestRun
+	if req.TestSeed != 0 {
+		existing, err := h.testingService.GetTestRunByRunID(c.Request.Context(), runID)
+		if err == nil && existing != nil {
+			testRun = existing
+			fmt.Println("Test run exists, runID:", runID)
+		}
+	}
+
+	if testRun == nil {
+		// brand new run
+		newTestRun := &domain.TestRun{
+			RunID:        runID,
+			ProjectID:    req.TestProjectID,
+			Branch:       req.GitBranch,
+			GitCommit:    req.GitSha,
+			Environment:  environment,
+			Metadata:     map[string]interface{}{},
+			Status:       status,
+			StartTime:    time.Now(),
+			Tags:         runLevelTags,
+			SuiteRuns:    domainSuiteRuns,
+			TotalTests:   totalTests,
+			PassedTests:  passedTests,
+			FailedTests:  failedTests,
+			SkippedTests: skippedTests,
+		}
+
+		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
+		fmt.Println("alreadyExisted:", alreadyExisted)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		testRun = createdTestRun
+
+		// If it was newly created (not a duplicate), return immediately
+		if !alreadyExisted {
+			response := h.convertDomainTestRunToAPI(testRun)
+			c.JSON(http.StatusCreated, response)
+			return
+		}
+		// If it already existed (concurrent creation), continue to add suite runs below
+	}
+
+	// At this point, testRun exists (either was already there or was concurrently created)
+	// Add the new suite runs to the existing test run
+	if testRun != nil {
+		for _, suite := range domainSuiteRuns {
+			suite.TestRunID = testRun.ID
+			if err := h.testingService.CreateSuiteRun(c.Request.Context(), &suite); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			for _, spec := range suite.SpecRuns {
+				spec.SuiteRunID = suite.ID
+				if err := h.testingService.CreateSpecRun(c.Request.Context(), spec); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+		}
+		// Update existing run: accumulate suite runs + counts + tags
+		testRun.SuiteRuns = append(testRun.SuiteRuns, domainSuiteRuns...)
+		testRun.TotalTests += totalTests
+		testRun.PassedTests += passedTests
+		testRun.FailedTests += failedTests
+		testRun.SkippedTests += skippedTests
+
+		// Merge run-level tags
+		testRun.Tags = h.mergeUniqueTags(testRun.Tags, runLevelTags)
+
+		// mark overall status as failed if any failed
+		if status == "failed" || testRun.Status == "failed" {
+			testRun.Status = "failed"
+		} else if status == "partial" || testRun.Status == "partial" {
+			testRun.Status = "partial"
+		} else {
+			testRun.Status = "passed"
+		}
+
+		if err := h.testingService.UpdateTestRun(c.Request.Context(), testRun); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	response := h.convertDomainTestRunToAPI(testRun)
+	c.JSON(http.StatusCreated, response)
+}
+
+// startTestRun handles POST /api/v1/test-runs/start (public)
+func (h *TestRunHandler) startTestRun(c *gin.Context) {
+	var req struct {
+		ProjectID   string                 `json:"projectId" binding:"required"`
+		RunID       string                 `json:"runId"`
+		Branch      string                 `json:"branch"`
+		CommitSha   string                 `json:"commitSha"`
+		Environment string                 `json:"environment"`
+		Tags        []string               `json:"tags"`
+		Metadata    map[string]interface{} `json:"metadata"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.RunID == "" {
+		req.RunID = uuid.New().String()
+	}
+
+	environment := req.Environment
+	if environment == "" {
+		environment = "default"
+	}
+
+	testRun := &domain.TestRun{
+		ProjectID:   req.ProjectID,
+		RunID:       req.RunID,
+		Branch:      req.Branch,
+		GitCommit:   req.CommitSha,
+		Environment: environment,
+		Status:      "running",
+		StartTime:   time.Now(),
+		Metadata:    req.Metadata,
+	}
+
+	_, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":    testRun.ID,
+		"runId": testRun.RunID,
+	})
+}
+
+// completeTestRun handles POST /api/v1/test-runs/complete (public)
+func (h *TestRunHandler) completeTestRun(c *gin.Context) {
+	var req struct {
+		RunID        string     `json:"runId" binding:"required"`
+		Status       string     `json:"status"`
+		EndTime      *time.Time `json:"endTime"`
+		TotalTests   int        `json:"totalTests"`
+		PassedTests  int        `json:"passedTests"`
+		FailedTests  int        `json:"failedTests"`
+		SkippedTests int        `json:"skippedTests"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.EndTime == nil {
+		now := time.Now()
+		req.EndTime = &now
+	}
+
+	testRun, err := h.testingService.GetTestRunByRunID(c.Request.Context(), req.RunID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Test run not found"})
+		return
+	}
+
+	if err := h.testingService.CompleteTestRun(c.Request.Context(), testRun.ID, req.Status); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Test run completed successfully"})
+}
+
+// addSuiteRun handles POST /api/v1/suite-runs (public)
+func (h *TestRunHandler) addSuiteRun(c *gin.Context) {
+	var req struct {
+		TestRunID   string     `json:"testRunId" binding:"required"`
+		SuiteName   string     `json:"suiteName" binding:"required"`
+		Status      string     `json:"status"`
+		StartTime   *time.Time `json:"startTime"`
+		EndTime     *time.Time `json:"endTime"`
+		Duration    int64      `json:"duration"`
+		TotalSpecs  int        `json:"totalSpecs"`
+		PassedSpecs int        `json:"passedSpecs"`
+		FailedSpecs int        `json:"failedSpecs"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	testRun, err := h.testingService.GetTestRunByRunID(c.Request.Context(), req.TestRunID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Test run not found"})
+		return
+	}
+
+	suiteRun := &domain.SuiteRun{
+		TestRunID:    testRun.ID,
+		Name:         req.SuiteName,
+		Status:       req.Status,
+		StartTime:    time.Now(),
+		TotalTests:   req.TotalSpecs,
+		PassedTests:  req.PassedSpecs,
+		FailedTests:  req.FailedSpecs,
+		SkippedTests: req.TotalSpecs - req.PassedSpecs - req.FailedSpecs,
+	}
+
+	if req.StartTime != nil {
+		suiteRun.StartTime = *req.StartTime
+	}
+	if req.EndTime != nil {
+		suiteRun.EndTime = req.EndTime
+	}
+	if req.Duration > 0 {
+		suiteRun.Duration = time.Duration(req.Duration)
+	}
+
+	err = h.testingService.CreateSuiteRun(c.Request.Context(), suiteRun)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":        suiteRun.ID,
+		"suiteName": suiteRun.Name,
+	})
+}
+
+// addSpecRun handles POST /api/v1/spec-runs (public)
+func (h *TestRunHandler) addSpecRun(c *gin.Context) {
+	var req struct {
+		SuiteRunID   uint       `json:"suiteRunId" binding:"required"`
+		SpecName     string     `json:"specName" binding:"required"`
+		Status       string     `json:"status"`
+		StartTime    *time.Time `json:"startTime"`
+		EndTime      *time.Time `json:"endTime"`
+		Duration     int64      `json:"duration"`
+		ErrorMessage string     `json:"errorMessage"`
+		StackTrace   string     `json:"stackTrace"`
+		Stdout       string     `json:"stdout"`
+		Stderr       string     `json:"stderr"`
+		Retries      int        `json:"retries"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	specRun := &domain.SpecRun{
+		SuiteRunID:   req.SuiteRunID,
+		Name:         req.SpecName,
+		Status:       req.Status,
+		StartTime:    time.Now(),
+		ErrorMessage: req.ErrorMessage,
+		StackTrace:   req.StackTrace,
+		RetryCount:   req.Retries,
+	}
+
+	if req.StartTime != nil {
+		specRun.StartTime = *req.StartTime
+	}
+	if req.EndTime != nil {
+		specRun.EndTime = req.EndTime
+	}
+	if req.Duration > 0 {
+		specRun.Duration = time.Duration(req.Duration)
+	}
+
+	err := h.testingService.AddSpecRun(c.Request.Context(), req.SuiteRunID, specRun)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":       specRun.ID,
+		"specName": specRun.Name,
+	})
+}
+
+// updateTestRunPublic handles PUT /api/v1/test-runs/:id (public)
+func (h *TestRunHandler) updateTestRunPublic(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Update test run not yet implemented"})
+}
+
 // RegisterRoutes registers test run routes
 func (h *TestRunHandler) RegisterRoutes(userGroup, adminGroup *gin.RouterGroup) {
 	// User routes (read operations)
@@ -705,4 +1047,15 @@ func (h *TestRunHandler) RegisterRoutes(userGroup, adminGroup *gin.RouterGroup) 
 	adminGroup.PUT("/test-runs/:runId/status", h.updateTestRunStatus)
 	adminGroup.DELETE("/test-runs/:id", h.deleteTestRun)
 	adminGroup.POST("/test-runs/bulk-delete", h.bulkDeleteTestRuns)
+}
+
+// RegisterPublicRoutes registers public (unauthenticated) test submission routes
+// These are compatible with the legacy Fern Reporter API
+func (h *TestRunHandler) RegisterPublicRoutes(publicGroup *gin.RouterGroup) {
+	publicGroup.POST("/test-runs", h.recordTestRun)
+	publicGroup.POST("/test-runs/start", h.startTestRun)
+	publicGroup.POST("/test-runs/complete", h.completeTestRun)
+	publicGroup.POST("/suite-runs", h.addSuiteRun)
+	publicGroup.POST("/spec-runs", h.addSpecRun)
+	publicGroup.PUT("/test-runs/:id", h.updateTestRunPublic)
 }
