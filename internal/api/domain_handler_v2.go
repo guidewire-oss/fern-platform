@@ -7,6 +7,7 @@ import (
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
+	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
@@ -23,6 +24,7 @@ type DomainHandlerV2 struct {
 	systemHandler         *SystemHandler
 	jiraConnectionHandler *JiraConnectionHandler
 	flakyTestHandler      *FlakyTestHandler
+	summaryHandler        *summaryInterfaces.SummaryHandler
 
 	// Middleware
 	authMiddleware *interfaces.AuthMiddlewareAdapter
@@ -36,6 +38,7 @@ func NewDomainHandlerV2(
 	tagService *tagsApp.TagService,
 	flakyDetectionService *analyticsApp.FlakyDetectionService,
 	jiraConnectionService *integrations.JiraConnectionService,
+	summaryHandler *summaryInterfaces.SummaryHandler,
 	authMiddleware *interfaces.AuthMiddlewareAdapter,
 	logger *logging.Logger,
 ) *DomainHandlerV2 {
@@ -51,6 +54,7 @@ func NewDomainHandlerV2(
 		systemHandler:         NewSystemHandler(logger),
 		jiraConnectionHandler: NewJiraConnectionHandler(baseHandler, jiraConnectionService, projectService),
 		flakyTestHandler:      NewFlakyTestHandler(flakyDetectionService, logger),
+		summaryHandler:        summaryHandler,
 		authMiddleware:        authMiddleware,
 		logger:                logger,
 	}
@@ -104,6 +108,9 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	h.tagHandler.RegisterRoutes(userGroup, adminGroup)
 	h.systemHandler.RegisterRoutes(adminGroup)
 	h.flakyTestHandler.RegisterRoutes(userGroup)
+
+	// Summary
+	userGroup.GET("/summary/:projectId/:seed", h.summaryHandler.GetSummary)
 
 	// Register JIRA connection routes
 	h.registerJiraConnectionRoutes(managerGroup)

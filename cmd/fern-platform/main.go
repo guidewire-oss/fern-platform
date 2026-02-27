@@ -105,6 +105,7 @@ func main() {
 			tagService,
 			flakyDetectionService,
 			jiraConnectionService,
+			summaryHandler,
 			authMiddleware,
 			logger,
 		)
