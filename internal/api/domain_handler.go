@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -612,47 +611,6 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 	})
-}
-
-// filterTestRunsByUserGroups filters test runs to only include those from projects
-// whose team matches any of the user's groups
-func (h *DomainHandler) filterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.TestRun, user *authDomain.User) []*testingDomain.TestRun {
-	// Extract user's group names
-	userGroups := make(map[string]bool)
-	for _, group := range user.Groups {
-		userGroups[group.GroupName] = true
-	}
-
-	// Get unique project IDs from test runs
-	projectIDs := make(map[string]bool)
-	for _, tr := range testRuns {
-		projectIDs[tr.ProjectID] = true
-	}
-
-	// Check which projects the user has access to
-	allowedProjects := make(map[string]bool)
-	for projectID := range projectIDs {
-		project, err := h.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
-		if err != nil {
-			h.logger.WithError(err).Warnf("Failed to get project %s", projectID)
-			continue
-		}
-
-		// Check if project's team matches any of user's groups
-		if userGroups[string(project.Team())] {
-			allowedProjects[projectID] = true
-		}
-	}
-
-	// Filter test runs to only include allowed projects
-	filtered := make([]*testingDomain.TestRun, 0)
-	for _, tr := range testRuns {
-		if allowedProjects[tr.ProjectID] {
-			filtered = append(filtered, tr)
-		}
-	}
-
-	return filtered
 }
 
 // getCurrentUser returns the current authenticated user information
