@@ -415,12 +415,30 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("getTestRunByRunID", func() {
-		It("should return not implemented", func() {
+		It("should return test run when found", func() {
+			expectedRun := &domain.TestRun{
+				ID:        1,
+				RunID:     "run-123",
+				ProjectID: "project-123",
+				Status:    "passed",
+			}
+			testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(expectedRun, nil)
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/by-run-id/run-123", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should return not found when run ID does not exist", func() {
+			testRunRepo.On("GetByRunID", mock.Anything, "nonexistent").Return(nil, errors.New("not found"))
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/by-run-id/nonexistent", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 	})
 
@@ -560,7 +578,26 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("updateTestRunStatus", func() {
-		It("should return not implemented", func() {
+		It("should update status successfully", func() {
+			existingRun := &domain.TestRun{
+				ID:        1,
+				RunID:     "run-123",
+				ProjectID: "project-123",
+				Status:    "running",
+			}
+			updatedRun := &domain.TestRun{
+				ID:        1,
+				RunID:     "run-123",
+				ProjectID: "project-123",
+				Status:    "completed",
+			}
+
+			testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(existingRun, nil)
+			testRunRepo.On("GetByID", mock.Anything, uint(1)).Return(existingRun, nil).Once()
+			suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(1)).Return([]*domain.SuiteRun{}, nil)
+			testRunRepo.On("Update", mock.Anything, mock.Anything).Return(nil)
+			testRunRepo.On("GetByID", mock.Anything, uint(1)).Return(updatedRun, nil).Once()
+
 			requestBody := map[string]interface{}{
 				"status": "completed",
 			}
@@ -571,7 +608,23 @@ var _ = Describe("TestRunHandler", func() {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should return not found when run ID does not exist", func() {
+			testRunRepo.On("GetByRunID", mock.Anything, "nonexistent").Return(nil, errors.New("not found"))
+
+			requestBody := map[string]interface{}{
+				"status": "completed",
+			}
+			jsonBody, _ := json.Marshal(requestBody)
+
+			req := httptest.NewRequest("PUT", "/api/v1/admin/test-runs/nonexistent/status", bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 
 		It("should return bad request for missing status", func() {
@@ -588,12 +641,30 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("deleteTestRun", func() {
-		It("should return not implemented", func() {
+		It("should delete test run successfully", func() {
+			existingRun := &domain.TestRun{
+				ID:        1,
+				RunID:     "run-123",
+				ProjectID: "project-123",
+			}
+			testRunRepo.On("GetByID", mock.Anything, uint(1)).Return(existingRun, nil)
+			testRunRepo.On("Delete", mock.Anything, uint(1)).Return(nil)
+
 			req := httptest.NewRequest("DELETE", "/api/v1/admin/test-runs/1", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusNoContent))
+		})
+
+		It("should return not found when test run does not exist", func() {
+			testRunRepo.On("GetByID", mock.Anything, uint(999)).Return(nil, errors.New("not found"))
+
+			req := httptest.NewRequest("DELETE", "/api/v1/admin/test-runs/999", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 
 		It("should return bad request for invalid ID", func() {
@@ -779,12 +850,36 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("bulkDeleteTestRuns", func() {
-		It("should return not implemented", func() {
+		It("should bulk delete test runs successfully", func() {
+			for _, id := range []uint{1, 2} {
+				existingRun := &domain.TestRun{ID: id, ProjectID: "project-123"}
+				testRunRepo.On("GetByID", mock.Anything, id).Return(existingRun, nil)
+				testRunRepo.On("Delete", mock.Anything, id).Return(nil)
+			}
+
+			requestBody := map[string]interface{}{
+				"ids": []uint{1, 2},
+			}
+			jsonBody, _ := json.Marshal(requestBody)
+
+			req := httptest.NewRequest("POST", "/api/v1/admin/test-runs/bulk-delete", bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response["deleted"]).To(BeEquivalentTo(2))
+		})
+
+		It("should return bad request for missing body", func() {
 			req := httptest.NewRequest("POST", "/api/v1/admin/test-runs/bulk-delete", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
 		})
 	})
 
