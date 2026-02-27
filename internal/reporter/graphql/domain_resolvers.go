@@ -16,6 +16,21 @@ import (
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 )
 
+// buildTeamMap constructs a set of team names for O(1) membership checks.
+func buildTeamMap(teams []string) map[string]bool {
+	m := make(map[string]bool, len(teams))
+	for _, t := range teams {
+		m[t] = true
+	}
+	return m
+}
+
+// userCanAccessProject returns true when the snapshot belongs to a team the
+// caller is a member of.  An empty Team field is treated as inaccessible.
+func userCanAccessProject(snapshot projectsDomain.ProjectSnapshot, teamMap map[string]bool) bool {
+	return snapshot.Team != "" && teamMap[string(snapshot.Team)]
+}
+
 // convertTestRunToGraphQL converts a domain test run to GraphQL model
 func (r *Resolver) convertTestRunToGraphQL(testRun *testingDomain.TestRun) *model.TestRun {
 	return r.ConvertTestRunToGraphQL(testRun)
@@ -199,11 +214,26 @@ func (r *queryResolver) RecentTestRuns_domain(ctx context.Context, projectID *st
 	var testRuns []*testingDomain.TestRun
 	var err error
 
+	user, userErr := getCurrentUser(ctx)
 	if projectID != nil {
-		// Get test runs for specific project
+		// For non-admins, verify the user belongs to the project's team before returning runs.
+		if userErr == nil && user.Role != authDomain.RoleAdmin {
+			project, projErr := r.projectService.GetProject(ctx, projectsDomain.ProjectID(*projectID))
+			if projErr != nil || project == nil {
+				return nil, fmt.Errorf("project not found")
+			}
+			snapshot := project.ToSnapshot()
+			teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+			if !userCanAccessProject(snapshot, teamMap) {
+				return nil, fmt.Errorf("access denied")
+			}
+		}
 		testRuns, err = r.testingService.GetProjectTestRuns(ctx, *projectID, limitVal)
 	} else {
-		// Get recent test runs across all projects
+		// Cross-project query — admins see all runs; non-admins get an access error.
+		if userErr != nil || user.Role != authDomain.RoleAdmin {
+			return nil, fmt.Errorf("access denied: projectId is required for non-admin users")
+		}
 		testRuns, err = r.testingService.GetRecentTestRuns(ctx, limitVal)
 	}
 
@@ -286,17 +316,35 @@ func ConvertDurationPtr(d time.Duration) *int {
 
 // GetTestRun implementation using domain service
 func (r *queryResolver) GetTestRun_domain(ctx context.Context, id string) (*model.TestRun, error) {
-	// Try to parse as uint ID
-	if numID, err := strconv.ParseUint(id, 10, 32); err == nil {
-		testRun, err := r.testingService.GetTestRun(ctx, uint(numID))
-		if err != nil {
-			return nil, err
-		}
-		return r.convertTestRunToGraphQL(testRun), nil
+	user, err := getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("user not authenticated")
 	}
 
-	// Otherwise return error - GetTestRunByRunID not implemented
-	return nil, fmt.Errorf("test run not found")
+	// Try to parse as uint ID
+	numID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("test run not found")
+	}
+
+	testRun, err := r.testingService.GetTestRun(ctx, uint(numID))
+	if err != nil {
+		return nil, err
+	}
+
+	// Non-admins must belong to the run's project team.
+	if user.Role != authDomain.RoleAdmin {
+		project, projErr := r.projectService.GetProject(ctx, projectsDomain.ProjectID(testRun.ProjectID))
+		if projErr != nil || project == nil {
+			return nil, fmt.Errorf("access denied")
+		}
+		teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+		if !userCanAccessProject(project.ToSnapshot(), teamMap) {
+			return nil, fmt.Errorf("access denied")
+		}
+	}
+
+	return r.convertTestRunToGraphQL(testRun), nil
 }
 
 // GetProject implementation using domain service
@@ -310,6 +358,10 @@ func (r *queryResolver) GetProject_domain(ctx context.Context, projectID string)
 
 // ListProjects implementation using domain service
 func (r *queryResolver) ListProjects_domain(ctx context.Context, limit *int, offset *int, team *string) ([]*model.Project, error) {
+	if _, err := getCurrentUser(ctx); err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	// Default pagination
 	pageLimit := 50
 	pageOffset := 0
@@ -750,6 +802,10 @@ func (r *mutationResolver) DeleteProject_domain(ctx context.Context, id string) 
 
 // Project implementation using domain service
 func (r *queryResolver) Project_domain(ctx context.Context, id string) (*model.Project, error) {
+	if _, err := getCurrentUser(ctx); err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	// Parse ID and find project
 	projects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
@@ -815,16 +871,11 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 		filteredProjects = projects
 	} else {
 		// Get user's teams
-		userTeams := getUserTeamsFromContext(ctx)
-		teamMap := make(map[string]bool)
-		for _, team := range userTeams {
-			teamMap[team] = true
-		}
+		teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
 
 		// Filter projects by team
 		for _, project := range projects {
-			snapshot := project.ToSnapshot()
-			if snapshot.Team != "" && teamMap[string(snapshot.Team)] {
+			if userCanAccessProject(project.ToSnapshot(), teamMap) {
 				filteredProjects = append(filteredProjects, project)
 			}
 		}
@@ -890,6 +941,10 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 
 // DashboardSummary implementation using domain service
 func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.DashboardSummary, error) {
+	if _, err := getCurrentUser(ctx); err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	// Get all projects to count them
 	projects, totalProjects, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
@@ -904,37 +959,18 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		}
 	}
 
-	// Get test run statistics
-	recentRuns, err := r.testingService.GetRecentTestRuns(ctx, 100)
+	// Get test run statistics via a single SQL aggregate query.
+	dashStats, err := r.testingService.GetDashboardStats(ctx)
 	if err != nil {
 		// Log error but don't fail the whole query
-		r.logger.WithError(err).Error("Failed to get recent test runs for dashboard")
+		r.logger.WithError(err).Error("Failed to get dashboard stats")
+		dashStats = &testingDomain.DashboardStatsResult{}
 	}
 
-	totalTestRuns := len(recentRuns)
-	recentTestRuns := len(recentRuns)
+	// [0,1] fraction — all rate fields use this convention; multiply by 100 at the display layer.
 	overallPassRate := float64(0)
-	totalTestsExecuted := 0
-	avgDuration := 0
-
-	if len(recentRuns) > 0 {
-		var totalTests, passedTests int
-		var totalDuration int64
-
-		for _, tr := range recentRuns {
-			totalTests += tr.TotalTests
-			passedTests += tr.PassedTests
-			totalTestsExecuted += tr.TotalTests
-			totalDuration += tr.Duration.Milliseconds()
-		}
-
-		if totalTests > 0 {
-			overallPassRate = float64(passedTests) / float64(totalTests) * 100
-		}
-
-		if len(recentRuns) > 0 {
-			avgDuration = int(totalDuration / int64(len(recentRuns)))
-		}
+	if dashStats.TotalTestsExecuted > 0 {
+		overallPassRate = float64(dashStats.PassedTests) / float64(dashStats.TotalTestsExecuted)
 	}
 
 	version := "1.0.0"
@@ -947,11 +983,11 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		},
 		ProjectCount:        int(totalProjects),
 		ActiveProjectCount:  int(activeProjects),
-		TotalTestRuns:       totalTestRuns,
-		RecentTestRuns:      recentTestRuns,
+		TotalTestRuns:       int(dashStats.TotalTestRuns),
+		RecentTestRuns:      int(dashStats.RecentTestRuns),
 		OverallPassRate:     overallPassRate,
-		TotalTestsExecuted:  totalTestsExecuted,
-		AverageTestDuration: avgDuration,
+		TotalTestsExecuted:  int(dashStats.TotalTestsExecuted),
+		AverageTestDuration: int(dashStats.AvgDurationMs),
 	}, nil
 }
 
@@ -967,45 +1003,55 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 	endTime := time.Now()
 	startTime := endTime.AddDate(0, 0, -daysToQuery)
 
-	// Get all projects that the user has access to
-	projects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
+	user, err := getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
+	// Get all projects then filter to those the current user can access (same logic as Projects_domain)
+	allProjects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch projects: %w", err)
 	}
 
-	// For each project, get test runs
-	var allTestRuns []*testingDomain.TestRun
-	for _, project := range projects {
-		// Skip if specific project requested and doesn't match
-		if projectID != nil && *projectID != "" && string(project.ProjectID()) != *projectID {
-			continue
-		}
-
-		// Get test runs for this project
-		testRuns, _, err := r.testingService.ListTestRuns(ctx, string(project.ProjectID()), 1000, 0)
-		if err != nil {
-			r.logger.WithError(err).Errorf("Failed to get test runs for project %s", project.ProjectID())
-			continue
-		}
-
-		// Filter by date range
-		for _, run := range testRuns {
-			if run.StartTime.After(startTime) && run.StartTime.Before(endTime) {
-				allTestRuns = append(allTestRuns, run)
+	var accessibleProjects []*projectsDomain.Project
+	if user.Role == authDomain.RoleAdmin {
+		accessibleProjects = allProjects
+	} else {
+		teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+		for _, p := range allProjects {
+			if userCanAccessProject(p.ToSnapshot(), teamMap) {
+				accessibleProjects = append(accessibleProjects, p)
 			}
 		}
 	}
 
-	// Create a map for quick project lookup
-	projectMap := make(map[string]*projectsDomain.Project)
-	for _, p := range projects {
-		projectMap[string(p.ProjectID())] = p
+	// Build project lookup map and ID list for the batch query
+	projectMap := make(map[string]*projectsDomain.Project, len(accessibleProjects))
+	projectIDs := make([]string, 0, len(accessibleProjects))
+	for _, p := range accessibleProjects {
+		pid := string(p.ProjectID())
+		// Apply single-project filter if requested
+		if projectID != nil && *projectID != "" && pid != *projectID {
+			continue
+		}
+		projectMap[pid] = p
+		projectIDs = append(projectIDs, pid)
+	}
+
+	if len(projectIDs) == 0 {
+		return &model.TreemapData{Projects: []*model.ProjectTreemapNode{}}, nil
+	}
+
+	// Fetch all test runs for the accessible projects within the date range in one query
+	allTestRuns, err := r.testingService.GetTestRunsForProjectsInDateRange(ctx, projectIDs, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch test runs: %w", err)
 	}
 
 	// Group test runs by project
 	projectRuns := make(map[string][]*testingDomain.TestRun)
 	for _, run := range allTestRuns {
-		// Only include runs for projects user has access to
 		if _, ok := projectMap[run.ProjectID]; ok {
 			projectRuns[run.ProjectID] = append(projectRuns[run.ProjectID], run)
 		}
@@ -1033,14 +1079,7 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 		projectPassed := 0
 
 		for _, run := range runs {
-			// Get test run with details including suite runs
-			testRunWithDetails, err := r.testingService.GetTestRunWithDetails(ctx, run.ID)
-			if err != nil {
-				r.logger.WithError(err).Errorf("Failed to get test run details for run %d", run.ID)
-				continue
-			}
-
-			for _, suite := range testRunWithDetails.SuiteRuns {
+			for _, suite := range run.SuiteRuns {
 				key := suite.Name
 
 				if node, exists := suiteMap[key]; exists {
@@ -1130,6 +1169,11 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 
 // TestRuns implementation using domain service with pagination
 func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.TestRunConnection, error) {
+	user, err := getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	// Apply pagination
 	pageSize := 20
 	if first != nil && *first > 0 && *first <= 100 {
@@ -1148,6 +1192,23 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 	projectID := ""
 	if filter != nil && filter.ProjectID != nil {
 		projectID = *filter.ProjectID
+	}
+
+	// Enforce team-based authorization for non-admin users.
+	if user.Role != authDomain.RoleAdmin {
+		if projectID == "" {
+			// No projectId and non-admin: return error rather than silently hiding all runs.
+			return nil, fmt.Errorf("access denied: projectId is required for non-admin users")
+		}
+		project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
+		if err != nil || project == nil {
+			return nil, fmt.Errorf("project not found")
+		}
+		snapshot := project.ToSnapshot()
+		teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+		if !userCanAccessProject(snapshot, teamMap) {
+			return nil, fmt.Errorf("access denied")
+		}
 	}
 
 	// Get test runs with pagination

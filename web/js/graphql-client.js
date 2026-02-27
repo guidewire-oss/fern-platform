@@ -134,6 +134,36 @@ const QUERIES = {
             }
         }
     `,
+    
+    /**
+     * Lazy-loads test history for a single project's TestHistoryChart.
+     * Maps to the `recentTestRuns` GraphQL query with a required projectId.
+     * Fetches up to `limit` runs (default 10); chart displays the last 20.
+     */
+    GET_PROJECT_TEST_RUNS: `
+        query GetProjectTestRuns($projectId: String!, $limit: Int) {
+            recentTestRuns(projectId: $projectId, limit: $limit) {
+                id
+                runId
+                projectId
+                branch
+                status
+                startTime
+                endTime
+                duration
+                totalTests
+                passedTests
+                failedTests
+                skippedTests
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
+            }
+        }
+    `,
 
     GET_RECENT_TEST_RUNS_DETAILED: `
         query GetRecentTestRunsDetailed($limit: Int) {
@@ -314,7 +344,6 @@ const QUERIES = {
                 canManage
                 stats {
                     totalTestRuns
-                    recentTestRuns
                     uniqueBranches
                     successRate
                     averageDuration
@@ -490,5 +519,11 @@ const QUERIES = {
 const graphqlClient = new GraphQLClient();
 
 // Make it available globally for the existing code
-window.graphqlClient = graphqlClient;
-window.GRAPHQL_QUERIES = QUERIES;
+if (typeof window !== 'undefined') {
+    window.graphqlClient = graphqlClient;
+    window.GRAPHQL_QUERIES = QUERIES;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { QUERIES, GraphQLClient };
+}

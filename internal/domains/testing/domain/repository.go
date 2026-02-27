@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotFound is returned by repositories when a requested resource is not found
@@ -25,8 +26,17 @@ type TestRunRepository interface {
 	// GetWithDetails retrieves a test run with all related data
 	GetWithDetails(ctx context.Context, id uint) (*TestRun, error)
 
-	// GetLatestByProjectID retrieves the latest test runs for a project
+	// GetLatestByProjectID retrieves the latest test runs for a project with full association preloading.
+	// Use GetLatestByProjectIDTagsOnly for the chart/list path that only needs top-level fields.
 	GetLatestByProjectID(ctx context.Context, projectID string, limit int) ([]*TestRun, error)
+
+	// GetLatestByProjectIDTagsOnly retrieves the latest test runs for a project with Tags only (no SuiteRuns/SpecRuns).
+	// Use this for the lazy-load chart path where only top-level run fields are needed.
+	// SuiteRuns and SpecRuns will be empty slices — callers must not assume full hydration.
+	GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*TestRun, error)
+
+	// FindByDateRangeForProjects fetches test runs across multiple projects within a date range in one query.
+	FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*TestRun, error)
 
 	// GetTestRunSummary retrieves summary statistics for a project
 	GetTestRunSummary(ctx context.Context, projectID string) (*TestRunSummary, error)
@@ -37,8 +47,14 @@ type TestRunRepository interface {
 	// CountByProjectID counts test runs for a project
 	CountByProjectID(ctx context.Context, projectID string) (int64, error)
 
+	// GetProjectStats returns aggregated stats for a project in one query.
+	GetProjectStats(ctx context.Context, projectID string) (*ProjectStatsResult, error)
+
 	// GetRecent retrieves recent test runs across all projects
 	GetRecent(ctx context.Context, limit int) ([]*TestRun, error)
+
+	// GetDashboardStats returns platform-wide aggregate stats in a single query.
+	GetDashboardStats(ctx context.Context) (*DashboardStatsResult, error)
 }
 
 // SuiteRunRepository defines the interface for suite run persistence

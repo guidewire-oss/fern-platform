@@ -7,10 +7,10 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
-	"errors"
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
@@ -544,8 +544,53 @@ func (r *projectResolver) CanManage(ctx context.Context, obj *model.Project) (bo
 
 // Stats is the resolver for the stats field.
 func (r *projectResolver) Stats(ctx context.Context, obj *model.Project) (*model.ProjectStats, error) {
-	// TODO: Implement project stats in domain service
-	return nil, nil
+	projectID := obj.ProjectID
+
+	empty := &model.ProjectStats{
+		TotalTestRuns:   0,
+		UniqueBranches:  0,
+		SuccessRate:     0.0,
+		AverageDuration: 0,
+		LastRunTime:     nil,
+		RecentTestRuns:  0,
+	}
+
+	buildStats := func(totalRuns, passedRuns, uniqueBranches int64, avgDurationMs float64, lastRunTime *time.Time) *model.ProjectStats {
+		successRate := 0.0
+		if totalRuns > 0 {
+			successRate = float64(passedRuns) / float64(totalRuns)
+		}
+		return &model.ProjectStats{
+			TotalTestRuns:   int(totalRuns),
+			UniqueBranches:  int(uniqueBranches),
+			SuccessRate:     successRate,
+			AverageDuration: int(avgDurationMs),
+			LastRunTime:     lastRunTime,
+			RecentTestRuns:  0, // deprecated; use the top-level recentTestRuns query
+		}
+	}
+
+	// Use DataLoader when available (eliminates N+1 on project list queries).
+	// Falls back to direct service call in contexts without middleware (e.g. unit tests).
+	if loaders := getLoaders(ctx); loaders != nil {
+		thunk := loaders.ProjectStatsByProjectID.Load(ctx, projectID)
+		data, err := thunk()
+		if err != nil {
+			return empty, fmt.Errorf("failed to load stats for project %s: %w", projectID, err)
+		}
+		return buildStats(data.TotalRuns, data.PassedRuns, data.UniqueBranches, data.AvgDurationMs, data.LastRunTime), nil
+	}
+
+	if r.testingService == nil {
+		return empty, nil
+	}
+
+	stats, err := r.testingService.GetProjectStats(ctx, projectID)
+	if err != nil {
+		return empty, fmt.Errorf("failed to get stats for project %s: %w", projectID, err)
+	}
+
+	return buildStats(stats.TotalRuns, stats.PassedRuns, stats.UniqueBranches, stats.AvgDurationMs, stats.LastRunTime), nil
 }
 
 // CurrentUser is the resolver for the currentUser field.
@@ -846,14 +891,6 @@ func (r *subscriptionResolver) FlakyTestDetected(ctx context.Context, projectID 
 func (r *suiteRunResolver) SpecRuns(ctx context.Context, obj *model.SuiteRun) ([]*model.SpecRun, error) {
 	r.logger.WithField("suite_run_id", obj.ID).Debug("Loading spec runs for suite run")
 
-	// Get data loader from context
-	loaders := getLoaders(ctx)
-	if loaders == nil {
-		r.logger.Error("Data loaders not found in context")
-		return nil, fmt.Errorf("data loaders not found in context")
-	}
-
-	// Load spec runs for this suite run - bypass DataLoader for now
 	var specRuns []*database.SpecRun
 	intID, err := strconv.Atoi(obj.ID)
 	if err != nil {
@@ -922,42 +959,41 @@ func (r *suiteRunResolver) SpecRuns(ctx context.Context, obj *model.SuiteRun) ([
 func (r *testRunResolver) SuiteRuns(ctx context.Context, obj *model.TestRun) ([]*model.SuiteRun, error) {
 	r.logger.WithField("test_run_id", obj.ID).Debug("Loading suite runs for test run")
 
-	// Get data loader from context
-	loaders := getLoaders(ctx)
-	if loaders == nil {
-		r.logger.Error("Data loaders not found in context")
-		return nil, fmt.Errorf("data loaders not found in context")
-	}
+	var dbSuiteRuns []database.SuiteRun
 
-	// Load suite runs for this test run
-	r.logger.WithField("test_run_id", obj.ID).Debug("About to load suite runs")
-
-	// For now, bypass DataLoader to test if that's the issue
-	var suiteRuns []*database.SuiteRun
-	intID, err := strconv.Atoi(obj.ID)
-	if err != nil {
-		r.logger.WithError(err).WithField("test_run_id", obj.ID).Error("Failed to parse test run ID")
-		return nil, fmt.Errorf("invalid test run ID: %w", err)
-	}
-
-	if err := r.db.Where("test_run_id = ?", intID).
-		Preload("Tags").
-		Preload("SpecRuns").
-		Preload("SpecRuns.Tags").
-		Find(&suiteRuns).Error; err != nil {
-		r.logger.WithError(err).WithField("test_run_id", obj.ID).Error("Failed to load suite runs directly")
-		return nil, fmt.Errorf("failed to load suite runs: %w", err)
+	if loaders := getLoaders(ctx); loaders != nil {
+		// Use DataLoader to batch N+1 queries when multiple test runs are resolved together.
+		thunk := loaders.SuiteRunsByTestRunID.Load(ctx, obj.ID)
+		ptrs, err := thunk()
+		if err != nil {
+			r.logger.WithError(err).WithField("test_run_id", obj.ID).Error("Failed to load suite runs via DataLoader")
+			return nil, fmt.Errorf("failed to load suite runs: %w", err)
+		}
+		dbSuiteRuns = make([]database.SuiteRun, len(ptrs))
+		for i, p := range ptrs {
+			dbSuiteRuns[i] = *p
+		}
+	} else {
+		// Fallback for contexts without DataLoader middleware (e.g. unit tests).
+		intID, err := strconv.Atoi(obj.ID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid test run ID: %w", err)
+		}
+		if err := r.db.Where("test_run_id = ?", intID).
+			Preload("Tags").
+			Find(&dbSuiteRuns).Error; err != nil {
+			r.logger.WithError(err).WithField("test_run_id", obj.ID).Error("Failed to load suite runs")
+			return nil, fmt.Errorf("failed to load suite runs: %w", err)
+		}
 	}
 
 	r.logger.WithFields(map[string]interface{}{
 		"test_run_id": obj.ID,
-		"suite_count": len(suiteRuns),
-	}).Debug("Loaded suite runs directly without DataLoader")
+		"suite_count": len(dbSuiteRuns),
+	}).Debug("Loaded suite runs")
 
-	// Convert to GraphQL models
-	result := make([]*model.SuiteRun, len(suiteRuns))
-	for i, sr := range suiteRuns {
-		// Convert tags
+	result := make([]*model.SuiteRun, len(dbSuiteRuns))
+	for i, sr := range dbSuiteRuns {
 		tags := make([]*model.Tag, len(sr.Tags))
 		for j, tag := range sr.Tags {
 			tags[j] = &model.Tag{

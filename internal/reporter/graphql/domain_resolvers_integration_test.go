@@ -39,6 +39,7 @@ qr             *queryResolver
 mr             *mutationResolver
 logger         *logging.Logger
 ctx            context.Context
+adminCtx       context.Context
 db             *gorm.DB
 testingService *testingApp.TestRunService
 projectService *projectsApp.ProjectService
@@ -100,6 +101,11 @@ logger:         logger,
 qr = &queryResolver{resolver}
 mr = &mutationResolver{resolver}
 ctx = context.Background()
+adminCtx = context.WithValue(ctx, "user", &authDomain.User{
+UserID: "admin",
+Role:   authDomain.RoleAdmin,
+Groups: []authDomain.UserGroup{},
+})
 })
 
 AfterEach(func() {
@@ -132,13 +138,19 @@ Expect(result).To(Equal("test"))
 
 // Test Run tests
 Describe("GetTestRun_domain", func() {
-It("should return error for non-existent ID", func() {
-_, err := qr.GetTestRun_domain(ctx, "999999")
+It("should return error for non-existent ID as admin", func() {
+_, err := qr.GetTestRun_domain(adminCtx, "999999")
 Expect(err).NotTo(BeNil())
 })
 
+It("should return error for unauthenticated request", func() {
+_, err := qr.GetTestRun_domain(ctx, "123")
+Expect(err).NotTo(BeNil())
+Expect(err.Error()).To(ContainSubstring("not authenticated"))
+})
+
 It("should return error for invalid ID format", func() {
-_, err := qr.GetTestRun_domain(ctx, "invalid-id")
+_, err := qr.GetTestRun_domain(adminCtx, "invalid-id")
 Expect(err).NotTo(BeNil())
 Expect(err.Error()).To(ContainSubstring("test run not found"))
 })
@@ -159,7 +171,7 @@ PassedTests: 10,
 err := db.Create(dbTestRun).Error
 Expect(err).To(BeNil())
 
-result, err := qr.GetTestRun_domain(ctx, strconv.FormatUint(uint64(dbTestRun.ID), 10))
+result, err := qr.GetTestRun_domain(adminCtx, strconv.FormatUint(uint64(dbTestRun.ID), 10))
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result.RunID).To(Equal("test-run-123"))
@@ -169,7 +181,12 @@ Expect(result.ProjectID).To(Equal("test-project"))
 
 Describe("RecentTestRuns_domain", func() {
 It("should return empty list when no test runs", func() {
-result, err := qr.RecentTestRuns_domain(ctx, nil, nil)
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{
+UserID: "admin",
+Role:   authDomain.RoleAdmin,
+Groups: []authDomain.UserGroup{},
+})
+result, err := qr.RecentTestRuns_domain(adminCtx, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result).To(HaveLen(0))
@@ -192,7 +209,12 @@ err := db.Create(dbTestRun).Error
 Expect(err).To(BeNil())
 }
 
-result, err := qr.RecentTestRuns_domain(ctx, nil, nil)
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{
+UserID: "admin",
+Role:   authDomain.RoleAdmin,
+Groups: []authDomain.UserGroup{},
+})
+result, err := qr.RecentTestRuns_domain(adminCtx, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result)).To(BeNumerically(">=", 3))
@@ -246,7 +268,7 @@ Expect(result.Name).To(Equal("Test Project"))
 
 Describe("ListProjects_domain", func() {
 It("should return empty list when no projects", func() {
-result, err := qr.ListProjects_domain(ctx, nil, nil, nil)
+result, err := qr.ListProjects_domain(adminCtx, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result).To(HaveLen(0))
@@ -263,7 +285,7 @@ projectsDomain.ProjectID("proj-"+strconv.Itoa(i)),
 Expect(err).To(BeNil())
 }
 
-result, err := qr.ListProjects_domain(ctx, nil, nil, nil)
+result, err := qr.ListProjects_domain(adminCtx, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result)).To(Equal(3))
@@ -281,7 +303,7 @@ Expect(err).To(BeNil())
 }
 
 limit := 3
-result, err := qr.ListProjects_domain(ctx, &limit, nil, nil)
+result, err := qr.ListProjects_domain(adminCtx, &limit, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result)).To(Equal(3))
@@ -511,7 +533,7 @@ It("should retrieve project by numeric ID", func() {
 project, err := projectService.CreateProject(ctx, "id-proj", "ID Project", "team1", "user1")
 Expect(err).To(BeNil())
 
-result, err := qr.Project_domain(ctx, strconv.FormatUint(uint64(project.ID()), 10))
+result, err := qr.Project_domain(adminCtx, strconv.FormatUint(uint64(project.ID()), 10))
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result.ProjectID).To(Equal("id-proj"))
@@ -624,14 +646,15 @@ Expect(result.PageInfo).NotTo(BeNil())
 
 Describe("TestRuns_domain", func() {
 It("should return empty connection when no test runs", func() {
-result, err := qr.TestRuns_domain(ctx, nil, nil, nil, nil, nil)
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{}})
+result, err := qr.TestRuns_domain(adminCtx, nil, nil, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result.Edges).To(HaveLen(0))
 })
 
 It("should list test runs in connection format", func() {
-// Create test runs
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{}})
 now := time.Now()
 projectID := "test-project"
 for i := 0; i < 3; i++ {
@@ -650,7 +673,7 @@ Expect(err).To(BeNil())
 filter := &model.TestRunFilter{
 ProjectID: &projectID,
 }
-result, err := qr.TestRuns_domain(ctx, filter, nil, nil, nil, nil)
+result, err := qr.TestRuns_domain(adminCtx, filter, nil, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result.Edges)).To(BeNumerically(">=", 3))
@@ -658,8 +681,8 @@ Expect(result.PageInfo).NotTo(BeNil())
 })
 
 It("should filter by projectID", func() {
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{}})
 now := time.Now()
-// Create test runs for specific project
 for i := 0; i < 2; i++ {
 dbTestRun := &database.TestRun{
 RunID:     "filtered-run-" + strconv.Itoa(i),
@@ -676,7 +699,7 @@ projectID := "filter-project"
 filter := &model.TestRunFilter{
 ProjectID: &projectID,
 }
-result, err := qr.TestRuns_domain(ctx, filter, nil, nil, nil, nil)
+result, err := qr.TestRuns_domain(adminCtx, filter, nil, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result.Edges)).To(BeNumerically(">=", 2))
@@ -726,7 +749,7 @@ FailedTests: 2,
 err = db.Create(dbTestRun).Error
 Expect(err).To(BeNil())
 
-result, err := qr.DashboardSummary_domain(ctx)
+result, err := qr.DashboardSummary_domain(adminCtx)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(result.ProjectCount).To(BeNumerically(">=", 1))
@@ -735,6 +758,8 @@ Expect(result.ProjectCount).To(BeNumerically(">=", 1))
 
 Describe("TreemapData_domain", func() {
 It("should return treemap data", func() {
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{UserID: "admin-1", Role: authDomain.RoleAdmin})
+
 // Create project and test run
 _, err := projectService.CreateProject(ctx, "tree-proj", "Treemap Project", "team1", "user1")
 Expect(err).To(BeNil())
@@ -752,17 +777,19 @@ PassedTests: 10,
 err = db.Create(dbTestRun).Error
 Expect(err).To(BeNil())
 
-result, err := qr.TreemapData_domain(ctx, nil, nil)
+result, err := qr.TreemapData_domain(adminCtx, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 })
 
 It("should filter by projectID", func() {
+adminCtx := context.WithValue(ctx, "user", &authDomain.User{UserID: "admin-1", Role: authDomain.RoleAdmin})
+
 _, err := projectService.CreateProject(ctx, "tree-filtered-proj", "Filtered Project", "team1", "user1")
 Expect(err).To(BeNil())
 
 projectID := "tree-filtered-proj"
-result, err := qr.TreemapData_domain(ctx, &projectID, nil)
+result, err := qr.TreemapData_domain(adminCtx, &projectID, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 })

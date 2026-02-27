@@ -82,3 +82,22 @@ type TestRunSummary struct {
 	AverageRunTime time.Duration `json:"average_run_time"`
 	SuccessRate    float64       `json:"success_rate"`
 }
+
+// ProjectStatsResult holds all stats needed for the GraphQL ProjectStats type,
+// computed in a single SQL aggregation query.
+type ProjectStatsResult struct {
+	TotalRuns       int64
+	AvgDurationMs   float64
+	PassedRuns      int64
+	UniqueBranches  int64
+	LastRunTime     *time.Time
+}
+
+// DashboardStatsResult holds platform-wide aggregates for the DashboardSummary query.
+type DashboardStatsResult struct {
+	TotalTestRuns      int64
+	RecentTestRuns     int64 // runs in the last 24 hours
+	TotalTestsExecuted int64
+	PassedTests        int64
+	AvgDurationMs      float64
+}

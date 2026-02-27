@@ -166,11 +166,11 @@ type ProjectFilter struct {
 
 type ProjectStats struct {
 	TotalTestRuns   int        `json:"totalTestRuns"`
-	RecentTestRuns  int        `json:"recentTestRuns"`
 	UniqueBranches  int        `json:"uniqueBranches"`
 	SuccessRate     float64    `json:"successRate"`
 	AverageDuration int        `json:"averageDuration"`
 	LastRunTime     *time.Time `json:"lastRunTime,omitempty"`
+	RecentTestRuns  int        `json:"recentTestRuns"`
 }
 
 type ProjectTreemapNode struct {

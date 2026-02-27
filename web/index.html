@@ -46,11 +46,6 @@
             };
         }
         
-        // Verify function is working
-        console.log("formatDuration function test:", window.formatDuration(65432)); // Should show "1m 5s"
-        console.log("formatDate function test:", window.formatDate(new Date())); // Should show current date
-        console.log("getTestStatusColor function test:", window.getTestStatusColor(8, 2, 0, 10)); // Should show green
-        console.log("getStatusColor function test:", window.getStatusColor('passed')); // Should show green
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
@@ -1611,12 +1606,8 @@
         // Destructure React hooks at the top level
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
         
-        // Debug: Check if formatDuration is available
-        console.log('formatDuration availability check:', typeof window.formatDuration);
         if (typeof window.formatDuration === 'undefined') {
             console.error('formatDuration function is not available! This will cause rendering issues.');
-        } else {
-            console.log('formatDuration test:', window.formatDuration(125000));
         }
         
         // Make GraphQL queries available globally
@@ -1838,14 +1829,20 @@
                         );
                     
                     case 'recent':
-                        return [...projects].sort((a, b) => 
-                            new Date(b.last_run_time || 0) - new Date(a.last_run_time || 0)
-                        );
+                        return [...projects].sort((a, b) => {
+                            // Handle both snake_case and camelCase for compatibility
+                            const aTime = a.stats?.lastRunTime || a.last_run_time || 0;
+                            const bTime = b.stats?.lastRunTime || b.last_run_time || 0;
+                            return new Date(bTime) - new Date(aTime);
+                        });
                     
                     case 'success-rate':
                         return [...projects].sort((a, b) => {
-                            const aRate = a.total_tests > 0 ? (a.passed_tests || 0) / a.total_tests : 0;
-                            const bRate = b.total_tests > 0 ? (b.passed_tests || 0) / b.total_tests : 0;
+                            // Use stats.successRate from GraphQL or calculate from project fields
+                            const aRate = a.stats?.successRate ?? 
+                                          (a.total_tests > 0 ? (a.passed_tests || 0) / a.total_tests : 0);
+                            const bRate = b.stats?.successRate ?? 
+                                          (b.total_tests > 0 ? (b.passed_tests || 0) / b.total_tests : 0);
                             return bRate - aRate;
                         });
                     
@@ -2271,7 +2268,7 @@
                         setSystemConfig(data.systemConfig);
                     }
                 } catch (error) {
-                    console.log('Not authenticated:', error);
+                    // Not authenticated — expected before SSO redirect
                 } finally {
                     setLoading(false);
                 }
@@ -2733,21 +2730,62 @@
         }
 
         // Test History Stack Chart Component
-        function TestHistoryChart({ project, testRuns, onBack }) {
+        function TestHistoryChart({ project, onBack }) {
             const svgRef = useRef();
-            const [selectedSuite, setSelectedSuite] = useState('all');
+            const [projectRuns, setProjectRuns] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            
+            // Fetch test runs for this specific project when component mounts
+            useEffect(() => {
+                if (!project) return;
+                
+                // Create flag to prevent state updates after unmount
+                let isMounted = true;
+                
+                const fetchProjectTestRuns = async () => {
+                    try {
+                        setLoading(true);
+                        setError(null);
+                        
+                        // Fetch last 50 runs for this project (we'll show last 20 in chart)
+                        const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECT_TEST_RUNS, { 
+                            projectId: project.projectId, 
+                            limit: 50 
+                        });
+                        
+                        // Only update state if component is still mounted and project hasn't changed
+                        if (isMounted) {
+                            const runs = (data.recentTestRuns || [])
+                                .sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+                                .slice(-20); // Show last 20 runs
+                            
+                            setProjectRuns(runs);
+                        }
+                    } catch (err) {
+                        if (isMounted) {
+                            console.error('Failed to fetch project test runs:', err);
+                            setError(err.message);
+                        }
+                    } finally {
+                        if (isMounted) {
+                            setLoading(false);
+                        }
+                    }
+                };
+                
+                fetchProjectTestRuns();
+                
+                // Cleanup function to prevent state updates after unmount
+                return () => {
+                    isMounted = false;
+                };
+            }, [project?.projectId]); // Re-fetch if project changes
             
             useEffect(() => {
-                if (!project || !testRuns.length) return;
-                
-                // Filter and prepare data for this project
-                const projectRuns = testRuns
-                    .filter(run => run.projectId === project.projectId)
-                    .sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
-                    .slice(-20); // Show last 20 runs
-                
-                if (projectRuns.length === 0) return;
-                
+                if (!project || loading || projectRuns.length === 0) return;
+                if (!svgRef.current) return;
+
                 const svg = d3.select(svgRef.current);
                 svg.selectAll("*").remove();
                 
@@ -2759,87 +2797,32 @@
                 const g = svg.append("g")
                     .attr("transform", `translate(${margin.left},${margin.top})`);
                 
-                // Generate suite data for filtering
-                const availableSuites = ['API Tests', 'Integration Tests', 'UI Tests'];
-                
-                // Prepare stacked data with suite filtering
+                // Prepare stacked data from real backend values
                 const data = projectRuns.map((run, index) => {
-                    let suiteData = {};
-                    
-                    if (selectedSuite === 'all') {
-                        // Show total project data
-                        const totalTests = run.totalTests || 0;
-                        const passedTests = run.passedTests || 0;
-                        const failedTests = run.failedTests || 0;
-                        let skippedTests = run.skippedTests || 0;
-                        
-                        // Ensure the sum equals total tests
-                        const sum = passedTests + failedTests + skippedTests;
-                        if (sum !== totalTests && totalTests > 0) {
-                            console.warn(`Test count mismatch for run ${run.id}: passed=${passedTests}, failed=${failedTests}, skipped=${skippedTests}, total=${totalTests}, sum=${sum}`);
-                            // Recalculate skipped to ensure consistency
-                            skippedTests = Math.max(0, totalTests - passedTests - failedTests);
-                            console.log(`Adjusted skipped tests to ${skippedTests} to match total`);
-                        }
-                        
-                        suiteData = {
-                            passed: passedTests,
-                            failed: failedTests,
-                            skipped: skippedTests,
-                            total: totalTests
-                        };
-                    } else {
-                        // Generate realistic suite-specific data
-                        const totalTests = run.totalTests || 0;
-                        const suiteWeights = {
-                            'API Tests': 0.6,
-                            'Integration Tests': 0.3,
-                            'UI Tests': 0.1
-                        };
-                        const suiteFailureRates = {
-                            'API Tests': 0.3,
-                            'Integration Tests': 0.15,
-                            'UI Tests': 0.1
-                        };
-                        
-                        const suiteTotal = Math.max(1, Math.floor(totalTests * suiteWeights[selectedSuite]));
-                        const suiteFailed = Math.floor(suiteTotal * suiteFailureRates[selectedSuite]);
-                        const suitePassed = suiteTotal - suiteFailed;
-                        
-                        suiteData = {
-                            passed: suitePassed,
-                            failed: suiteFailed,
-                            skipped: 0,
-                            total: suiteTotal
-                        };
+                    const totalTests = run.totalTests || 0;
+                    const passedTests = run.passedTests || 0;
+                    const failedTests = run.failedTests || 0;
+                    let skippedTests = run.skippedTests || 0;
+
+                    const sum = passedTests + failedTests + skippedTests;
+                    if (sum !== totalTests && totalTests > 0) {
+                        console.debug(`Test count mismatch for run ${run.id}: passed=${passedTests}, failed=${failedTests}, skipped=${skippedTests}, total=${totalTests}, sum=${sum}`);
+                        skippedTests = Math.max(0, totalTests - passedTests - failedTests);
                     }
-                    
+
                     return {
                         index: index,
                         date: new Date(run.startTime),
-                        passed: suiteData.passed,
-                        failed: suiteData.failed,
-                        skipped: suiteData.skipped,
-                        total: suiteData.total,
+                        passed: passedTests,
+                        failed: failedTests,
+                        skipped: skippedTests,
+                        total: totalTests,
                         runId: run.id
                     };
                 });
-                
-                // Debug logging
-                console.log('Raw test runs for project:', projectRuns);
-                console.log('Test History Data:', data);
-                console.log('Data details:', data.map(d => ({
-                    index: d.index,
-                    passed: d.passed,
-                    failed: d.failed,
-                    skipped: d.skipped,
-                    total: d.total,
-                    sum: d.passed + d.failed + d.skipped
-                })));
-                
+
                 // Find the maximum total to ensure consistent scaling
                 const maxTotal = d3.max(data, d => d.total) || 0;
-                console.log('Max total tests across all runs:', maxTotal);
                 
                 // Normalize data to ensure consistent totals if needed
                 const normalizedData = data.map(d => {
@@ -2860,10 +2843,7 @@
                     .order(d3.stackOrderNone)
                     .offset(d3.stackOffsetNone);
                 const stackedData = stack(normalizedData); // Use normalized data
-                
-                console.log('Normalized Data:', normalizedData);
-                console.log('Stacked Data:', stackedData);
-                
+
                 // Scales
                 const xScale = d3.scaleTime()
                     .domain(d3.extent(normalizedData, d => d.date))
@@ -3033,9 +3013,77 @@
                     .style("fill", "var(--text-secondary)")
                     .text("Test Run Date & Time");
                 
-            }, [project, testRuns, selectedSuite]);
+            }, [project, projectRuns, loading]);
             
             if (!project) return null;
+            
+            if (loading) {
+                return (
+                    <div className="test-history-container fade-in">
+                        <div className="history-header">
+                            <button className="back-button" onClick={onBack}>
+                                <i className="fas fa-arrow-left"></i>
+                                Back to Overview
+                            </button>
+                            <div className="history-title">
+                                <h3>Test History: {project.name}</h3>
+                                <p>Loading test run history...</p>
+                            </div>
+                        </div>
+                        <div className="loading" style={{ padding: '4rem 2rem' }}>
+                            <i className="fas fa-spinner"></i>
+                            <div style={{fontSize: '1.125rem', fontWeight: '500', marginTop: '1rem'}}>Loading test history...</div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            if (error) {
+                return (
+                    <div className="test-history-container fade-in">
+                        <div className="history-header">
+                            <button className="back-button" onClick={onBack}>
+                                <i className="fas fa-arrow-left"></i>
+                                Back to Overview
+                            </button>
+                            <div className="history-title">
+                                <h3>Test History: {project.name}</h3>
+                                <p>Error loading test history</p>
+                            </div>
+                        </div>
+                        <div className="error-message" style={{ padding: '4rem 2rem' }}>
+                            <i className="fas fa-exclamation-triangle"></i>
+                            <div style={{fontSize: '1.125rem', fontWeight: '500', marginTop: '1rem'}}>Error: {error}</div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            if (projectRuns.length === 0) {
+                return (
+                    <div className="test-history-container fade-in">
+                        <div className="history-header">
+                            <button className="back-button" onClick={onBack}>
+                                <i className="fas fa-arrow-left"></i>
+                                Back to Overview
+                            </button>
+                            <div className="history-title">
+                                <h3>Test History: {project.name}</h3>
+                                <p>No test history available</p>
+                            </div>
+                        </div>
+                        <div className="empty-state" style={{ padding: '4rem 2rem' }}>
+                            <i className="fas fa-chart-line" style={{ fontSize: '4rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}></i>
+                            <h3 style={{ fontSize: '1.5rem', marginBottom: '0.75rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                                No Test History Available
+                            </h3>
+                            <p style={{ fontSize: '1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
+                                There are no test runs recorded for this project yet. Test runs will appear here once you start submitting test results to the platform.
+                            </p>
+                        </div>
+                    </div>
+                );
+            }
             
             return (
                 <div className="test-history-container fade-in">
@@ -3049,20 +3097,6 @@
                             <p>Stacked area chart showing pass/fail/skip trends over the last 20 test runs</p>
                         </div>
                         
-                        <div className="suite-filter">
-                            <label htmlFor="suite-select">Filter by Test Suite:</label>
-                            <select 
-                                id="suite-select"
-                                value={selectedSuite} 
-                                onChange={(e) => setSelectedSuite(e.target.value)}
-                                className="suite-select"
-                            >
-                                <option value="all">All Test Suites</option>
-                                <option value="API Tests">API Tests</option>
-                                <option value="Integration Tests">Integration Tests</option>
-                                <option value="UI Tests">UI Tests</option>
-                            </select>
-                        </div>
                     </div>
                     
                     <div className="info-note">
@@ -3102,9 +3136,7 @@
             const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, content: null });
 
             useEffect(() => {
-                console.log('UberTreemap received data:', treemapData);
                 if (!treemapData || !treemapData.projects || treemapData.projects.length === 0) {
-                    console.log('UberTreemap: No data to render');
                     return;
                 }
 
@@ -3444,10 +3476,6 @@
             useEffect(() => {
                 if (!projects.length) return;
                 
-                console.log('TreemapVisualization - projects:', projects);
-                console.log('TreemapVisualization - testRuns:', testRuns);
-                console.log('TreemapVisualization - currentView:', currentView);
-
                 const svg = d3.select(svgRef.current);
                 svg.selectAll("*").remove();
 
@@ -3467,7 +3495,6 @@
                     projects.forEach(project => {
                         const projectRuns = testRuns.filter(run => run.projectId === project.projectId);
                         const latestRun = projectRuns[0];
-                        console.log(`Project ${project.name} - Latest run:`, latestRun);
 
                         if (latestRun) {
                             // Use real test run data
@@ -3476,14 +3503,6 @@
                             const totalFailed = latestRun.failedTests || 0;
                             const totalSkipped = latestRun.skippedTests || 0;
                             const totalDuration = latestRun.duration || 1000;
-                            
-                            console.log(`Project ${project.name} stats:`, {
-                                totalTests,
-                                totalPassed,
-                                totalFailed,
-                                totalSkipped,
-                                suiteRuns: latestRun.suiteRuns
-                            });
                             
                             treemapData.push({
                                 name: project.name,
@@ -3504,12 +3523,9 @@
                     // Level 1: Show suites within a project
                     const project = currentView.data.project;
                     const testRun = currentView.data.testRun;
-                    console.log('Project view - testRun:', testRun);
-                    console.log('Project view - suiteRuns:', testRun?.suiteRuns);
 
                     // Fetch real suite data if available
                     if (testRun && testRun.suiteRuns && testRun.suiteRuns.length > 0) {
-                        console.log('Mapping suite runs to treemap data');
                         treemapData = testRun.suiteRuns.map(suite => ({
                             name: suite.suiteName,
                             value: suite.duration || 1000,
@@ -4476,7 +4492,6 @@
             if (showHistory && selectedProject) {
                 return <TestHistoryChart 
                     project={selectedProject} 
-                    testRuns={testRuns} 
                     onBack={hideProjectHistory} 
                 />;
             }
@@ -4563,20 +4578,19 @@
                     {(viewMode === 'grid' || viewMode === 'treemap') && getDisplayProjects().length > 0 && (
                         <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '2.5rem', rowGap: '3rem'}}>
                             {getDisplayProjects().map(project => {
-                                // Get stats from treemap data for consistency with Manager Dashboard
+                                // Get stats from treemap data first (filtered by time range)
+                                // Fall back to project.stats if treemap data is unavailable
                                 let totalTests = 0;
                                 let passedTests = 0;
                                 let failedTests = 0;
                                 let totalRuns = 0;
-                                
+
                                 if (treemapData && treemapData.projects) {
                                     const projectData = treemapData.projects.find(p => p.project.projectId === project.projectId);
                                     if (projectData) {
                                         totalTests = projectData.totalTests || 0;
-                                        // Calculate passed/failed from pass rate
                                         passedTests = Math.round(totalTests * (projectData.passRate || 0));
                                         failedTests = totalTests - passedTests;
-                                        // Use the totalRuns from treemap data which respects the time range filter
                                         totalRuns = projectData.totalRuns || 0;
                                     }
                                 }
@@ -4875,7 +4889,6 @@
                             });
                         } else if (detailedRun.metadata && detailedRun.metadata.suite_runs) {
                             // Fallback to metadata if no database relationships exist
-                            console.log('Falling back to metadata suiteRuns');
                             suites = extractSuitesFromMetadata(detailedRun.metadata.suite_runs, run);
                         }
                     }
@@ -4920,8 +4933,6 @@
             };
 
             const handleSuiteClick = (suite) => {
-                console.log('[SUITE CLICK] Clicked suite:', suite);
-                console.log('[SUITE CLICK] Suite tags:', suite.tags);
                 setSelectedSuite(suite);
 
                 let specs = [];
@@ -5391,11 +5402,8 @@
                         graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 })
                     ]);
                     
-                    console.log('Manager Dashboard - Projects Data:', projectsData);
-                    
                     // Convert projects from edges format
                     const projectList = projectsData.projects.edges.map(edge => edge.node);
-                    console.log('Projects:', projectList);
                     setProjects(projectList);
                     
                     // Set test runs with project names
@@ -5412,12 +5420,8 @@
                     // If treemap fails, projects and test runs can still render
                     try {
                         const treemapResponse = await graphqlClient.query(GRAPHQL_QUERIES.GET_TREEMAP_DATA, { days: timeRange });
-                        console.log('Manager Dashboard - Treemap Response:', treemapResponse);
                         if (treemapResponse && treemapResponse.treemapData) {
-                            console.log('Setting treemap data:', treemapResponse.treemapData);
                             setTreemapData(treemapResponse.treemapData);
-                        } else {
-                            console.log('No treemap data in response');
                         }
                     } catch (treemapErr) {
                         console.warn('Failed to load treemap data:', treemapErr);
@@ -5466,10 +5470,6 @@
             }
 
             const selectedProjects = getSelectedProjects();
-            console.log('Manager Dashboard - projects:', projects);
-            console.log('Manager Dashboard - preferences:', preferences.managerDashboard);
-            console.log('Manager Dashboard - selectedProjects:', selectedProjects);
-            console.log('Manager Dashboard - treemapData:', treemapData);
 
             if (selectedProjects.length === 0) {
                 return (
@@ -5701,7 +5701,6 @@
                                         <th style={{textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: '600'}}>Role</th>
                                         <th style={{textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: '600'}}>Status</th>
                                         <th style={{textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: '600'}}>Last Login</th>
-                                        <th style={{textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: '600'}}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -5743,18 +5742,6 @@
                                             </td>
                                             <td style={{padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem'}}>
                                                 {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
-                                            </td>
-                                            <td style={{padding: '1rem'}}>
-                                                <button 
-                                                    onClick={() => console.log('Edit user:', user.user_id)}
-                                                    style={{
-                                                        background: 'var(--primary)', color: 'white', border: 'none',
-                                                        borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer',
-                                                        fontSize: '0.875rem'
-                                                    }}
-                                                >
-                                                    Edit
-                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -5968,18 +5955,11 @@
             };
 
             const handleUpdateProject = async (projectId, projectData) => {
-                console.log('Update project called with ID:', projectId, 'Data:', projectData);
                 try {
-                    console.log('Calling UPDATE_PROJECT mutation');
-                    console.log('Full mutation variables:', {
-                        id: projectId,
-                        input: projectData
-                    });
                     const result = await graphqlClient.mutation(GRAPHQL_QUERIES.UPDATE_PROJECT, {
                         id: projectId,
                         input: projectData
                     });
-                    console.log('Update result:', result);
                     setEditingProject(null);
                     fetchProjects();
                 } catch (err) {
@@ -5990,7 +5970,6 @@
             };
 
             const handleDeleteProject = async (projectId, projectName) => {
-                console.log('Delete project called with ID:', projectId);
                 const project = projects.find(p => p.id === projectId);
                 if (project) {
                     setDeletingProject(project);
@@ -6007,12 +5986,9 @@
                 }
                 
                 try {
-                    console.log('Calling DELETE_PROJECT mutation with ID:', deletingProject.id);
-                    console.log('Full mutation variables:', { id: deletingProject.id });
                     const result = await graphqlClient.mutation(GRAPHQL_QUERIES.DELETE_PROJECT, {
                         id: deletingProject.id
                     });
-                    console.log('Delete result:', result);
                     setDeletingProject(null);
                     setDeleteConfirmInput('');
                     fetchProjects();
@@ -6267,7 +6243,7 @@
                                                         </div>
                                                         <div title="Success Rate">
                                                             <span style={{color: 'var(--success)'}}>✓</span>
-                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600', color: 'var(--success)'}}>{project.stats.successRate?.toFixed(1)}%</span>
+                                                            <span style={{marginLeft: '0.25rem', fontWeight: '600', color: 'var(--success)'}}>{(project.stats.successRate * 100)?.toFixed(1)}%</span>
                                                         </div>
                                                         <div title="Avg Duration">
                                                             <span style={{color: 'var(--text-tertiary)'}}>⏱️</span>
@@ -6285,7 +6261,6 @@
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('Settings button clicked for project:', project.projectId);
                                                                 window.location.hash = `/project/${project.projectId}/settings`;
                                                             }}
                                                             title="Project Settings"
@@ -6316,7 +6291,6 @@
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('Edit button clicked for project:', project.id, project.name);
                                                                 setEditingProject(project);
                                                             }}
                                                             title="Edit Project"
@@ -6347,7 +6321,6 @@
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('Delete button clicked for project:', project.id, project.name);
                                                                 handleDeleteProject(project.id);
                                                             }}
                                                             title="Delete Project"
@@ -6566,7 +6539,6 @@
 
         // Project Modal Component
         function ProjectModal({ project, teams, isAdmin, onSubmit, onClose }) {
-            console.log('ProjectModal rendered with project:', project);
             const [activeTab, setActiveTab] = useState('general');
             const [formData, setFormData] = useState({
                 name: project?.name || '',
@@ -6833,7 +6805,6 @@
             const handleTestConnection = async (connectionId) => {
                 try {
                     setTestingConnection(connectionId);
-                    console.log('Testing connection:', connectionId);
                     const result = await graphqlClient.mutation(GRAPHQL_QUERIES.TEST_JIRA_CONNECTION, { id: connectionId });
                     // Check if the test was successful (true), not just if it exists
                     if (result.testJiraConnection === true) {
@@ -7911,8 +7882,6 @@
 
                 try {
                     setSaving(true);
-                    // Save mappings to backend
-                    console.log('Saving mappings:', mappings);
                     // await graphqlClient.mutation(SAVE_FIELD_MAPPINGS, { connectionId: connection.id, mappings });
                     onSuccess();
                 } catch (err) {
@@ -8480,9 +8449,6 @@
             // Extract project ID from route (format: /project/:projectId/settings)
             const projectId = route.split('/')[2];
             
-            console.log('ProjectSettings component - Route:', route);
-            console.log('ProjectSettings component - Extracted projectId:', projectId);
-
             useEffect(() => {
                 if (projectId) {
                     fetchProject();
@@ -8491,12 +8457,7 @@
 
             const fetchProject = async () => {
                 try {
-                    console.log('Fetching project with ID:', projectId);
-                    console.log('Route:', route);
-                    console.log('GraphQL client:', window.graphqlClient);
-                    console.log('GraphQL queries:', GRAPHQL_QUERIES.GET_PROJECT_DETAILS);
                     const data = await window.graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECT_DETAILS, { projectId });
-                    console.log('Project data received:', data);
                     setProject(data.projectByProjectId);
                 } catch (err) {
                     console.error('Failed to fetch project:', err);

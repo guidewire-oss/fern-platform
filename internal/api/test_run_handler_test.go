@@ -82,6 +82,14 @@ func (m *MockTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 	return args.Get(0).([]*domain.TestRun), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	args := m.Called(ctx, limit)
 	if args.Get(0) == nil {
@@ -114,6 +122,30 @@ func (m *MockTestRunRepository) GetAll(ctx context.Context, limit, offset int) (
 func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
 	args := m.Called(ctx, projectID)
 	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	args := m.Called(ctx, projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ProjectStatsResult), args.Error(1)
+}
+
+func (m *MockTestRunRepository) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.DashboardStatsResult), args.Error(1)
 }
 
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
@@ -871,7 +903,7 @@ var _ = Describe("TestRunHandler", func() {
 				{ID: 2, ProjectID: "project-123", Status: "failed"},
 			}
 
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 10).Return(testRuns, nil).Once()
+			testRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "project-123", 10).Return(testRuns, nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/recent?project_id=project-123", nil)
 			w := httptest.NewRecorder()
@@ -892,7 +924,7 @@ var _ = Describe("TestRunHandler", func() {
 				{ID: 1, ProjectID: "project-123", Status: "passed"},
 			}
 
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 5).Return(testRuns, nil).Once()
+			testRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "project-123", 5).Return(testRuns, nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/recent?project_id=project-123&limit=5", nil)
 			w := httptest.NewRecorder()
@@ -911,7 +943,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should return internal server error when service fails", func() {
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 10).Return(nil, errors.New("database error")).Once()
+			testRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "project-123", 10).Return(nil, errors.New("database error")).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/recent?project_id=project-123", nil)
 			w := httptest.NewRecorder()

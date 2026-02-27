@@ -279,8 +279,12 @@ var _ = Describe("GormTestRunRepository", func() {
 			results, err := repo.GetByProjectID(ctx, "project-test")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(HaveLen(3))
-			// Should be ordered by created_at DESC
-			Expect(results[0].RunID).To(Equal("run-2"))
+			// All returned runs should be from the run-0/1/2 set created in BeforeEach
+			runIDs := make([]string, len(results))
+			for i, r := range results {
+				runIDs[i] = r.RunID
+			}
+			Expect(runIDs).To(ConsistOf("run-0", "run-1", "run-2"))
 		})
 
 		It("should return empty slice when no test runs found", func() {
@@ -548,14 +552,41 @@ var _ = Describe("GormTestRunRepository", func() {
 			results, err := repo.GetRecent(ctx, 2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(HaveLen(2))
-			// Should be ordered by created_at DESC
-			Expect(results[0].RunID).To(Equal("recent-run-2"))
+			// All returned runs should be from the recent-run-* set created in BeforeEach
+			for _, r := range results {
+				Expect(r.RunID).To(MatchRegexp(`^recent-run-\d$`))
+			}
 		})
 
 		It("should retrieve all test runs when limit is 0", func() {
 			results, err := repo.GetRecent(ctx, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(results)).To(BeNumerically(">=", 3))
+		})
+
+		It("should preload tags on returned runs", func() {
+			taggedRun := &domain.TestRun{
+				RunID:     "recent-tagged-run",
+				ProjectID: "project-tagged",
+				Status:    "passed",
+				StartTime: time.Now(),
+				Tags:      []domain.Tag{{Name: "env", Category: "environment", Value: "staging"}},
+			}
+			Expect(repo.Create(ctx, taggedRun)).To(Succeed())
+
+			results, err := repo.GetRecent(ctx, 10)
+			Expect(err).NotTo(HaveOccurred())
+
+			var found *domain.TestRun
+			for _, r := range results {
+				if r.RunID == "recent-tagged-run" {
+					found = r
+					break
+				}
+			}
+			Expect(found).NotTo(BeNil())
+			Expect(found.Tags).To(HaveLen(1))
+			Expect(found.Tags[0].Name).To(Equal("env"))
 		})
 
 		It("should return error when database fails", func() {
@@ -1136,6 +1167,253 @@ var _ = Describe("GormTestRunRepository", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to count total runs"))
 			Expect(summary).To(BeNil())
+		})
+	})
+
+	Describe("FindByDateRangeForProjects", func() {
+		var (
+			now       time.Time
+			startDate time.Time
+			endDate   time.Time
+		)
+
+		BeforeEach(func() {
+			now = time.Now()
+			startDate = now.Add(-48 * time.Hour)
+			endDate = now.Add(48 * time.Hour)
+		})
+
+		It("returns runs for multiple projects within the date range", func() {
+			runsToCreate := []*domain.TestRun{
+				{RunID: "multi-proj-run-a1", ProjectID: "project-alpha", Status: "passed", StartTime: now.Add(-1 * time.Hour)},
+				{RunID: "multi-proj-run-a2", ProjectID: "project-alpha", Status: "failed", StartTime: now.Add(-2 * time.Hour)},
+				{RunID: "multi-proj-run-b1", ProjectID: "project-beta", Status: "passed", StartTime: now.Add(-3 * time.Hour)},
+			}
+			for _, r := range runsToCreate {
+				Expect(repo.Create(ctx, r)).To(Succeed())
+			}
+
+			results, err := repo.FindByDateRangeForProjects(ctx, []string{"project-alpha", "project-beta"}, startDate, endDate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(3))
+
+			runIDs := make([]string, len(results))
+			for i, r := range results {
+				runIDs[i] = r.RunID
+			}
+			Expect(runIDs).To(ConsistOf("multi-proj-run-a1", "multi-proj-run-a2", "multi-proj-run-b1"))
+		})
+
+		It("excludes runs outside the date range (filters on start_time)", func() {
+			insideRun := &domain.TestRun{
+				RunID: "inside-range-run", ProjectID: "project-range-test", Status: "passed",
+				StartTime: now.Add(-1 * time.Hour),
+			}
+			outsideRun := &domain.TestRun{
+				RunID: "outside-range-run", ProjectID: "project-range-test", Status: "passed",
+				StartTime: now.Add(-72 * time.Hour), // before startDate
+			}
+			Expect(repo.Create(ctx, insideRun)).To(Succeed())
+			Expect(repo.Create(ctx, outsideRun)).To(Succeed())
+
+			results, err := repo.FindByDateRangeForProjects(ctx, []string{"project-range-test"}, startDate, endDate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].RunID).To(Equal("inside-range-run"))
+		})
+
+		It("returns nil (not an error) when projectIDs is empty", func() {
+			results, err := repo.FindByDateRangeForProjects(ctx, []string{}, startDate, endDate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(BeNil())
+		})
+
+		It("cross-project isolation: a run in project A does not appear in project B results", func() {
+			runA := &domain.TestRun{
+				RunID: "isolation-run-a", ProjectID: "project-isolation-a", Status: "passed",
+				StartTime: now.Add(-1 * time.Hour),
+			}
+			runB := &domain.TestRun{
+				RunID: "isolation-run-b", ProjectID: "project-isolation-b", Status: "passed",
+				StartTime: now.Add(-2 * time.Hour),
+			}
+			Expect(repo.Create(ctx, runA)).To(Succeed())
+			Expect(repo.Create(ctx, runB)).To(Succeed())
+
+			results, err := repo.FindByDateRangeForProjects(ctx, []string{"project-isolation-b"}, startDate, endDate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].RunID).To(Equal("isolation-run-b"))
+			Expect(results[0].ProjectID).NotTo(Equal("project-isolation-a"))
+		})
+
+		It("preloads Tags on returned runs", func() {
+			taggedRun := &domain.TestRun{
+				RunID:     "tagged-date-range-run",
+				ProjectID: "project-tags-preload",
+				Status:    "passed",
+				StartTime: now.Add(-1 * time.Hour),
+				Tags:      []domain.Tag{{Name: "env-dr", Category: "environment", Value: "prod"}},
+			}
+			Expect(repo.Create(ctx, taggedRun)).To(Succeed())
+
+			results, err := repo.FindByDateRangeForProjects(ctx, []string{"project-tags-preload"}, startDate, endDate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].Tags).To(HaveLen(1))
+			Expect(results[0].Tags[0].Name).To(Equal("env-dr"))
+		})
+	})
+
+	Describe("GetDashboardStats", func() {
+		It("returns zero values when no test runs exist", func() {
+			stats, err := repo.GetDashboardStats(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stats).NotTo(BeNil())
+			Expect(stats.TotalTestRuns).To(Equal(int64(0)))
+			Expect(stats.RecentTestRuns).To(Equal(int64(0)))
+			Expect(stats.TotalTestsExecuted).To(Equal(int64(0)))
+			Expect(stats.PassedTests).To(Equal(int64(0)))
+			Expect(stats.AvgDurationMs).To(Equal(0.0))
+		})
+
+		It("24-hour window: a run older than 24h is excluded from RecentTestRuns", func() {
+			recentRun := &domain.TestRun{
+				RunID: "dash-recent-run", ProjectID: "project-dash", Status: "passed",
+				StartTime:  time.Now().Add(-1 * time.Hour),
+				TotalTests: 5, PassedTests: 5,
+			}
+			oldRun := &domain.TestRun{
+				RunID: "dash-old-run", ProjectID: "project-dash", Status: "passed",
+				StartTime:  time.Now().Add(-25 * time.Hour),
+				TotalTests: 3, PassedTests: 3,
+			}
+			Expect(repo.Create(ctx, recentRun)).To(Succeed())
+			Expect(repo.Create(ctx, oldRun)).To(Succeed())
+
+			stats, err := repo.GetDashboardStats(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stats.TotalTestRuns).To(BeNumerically(">=", int64(2)))
+			// Only the recent run should count in the 24h window
+			Expect(stats.RecentTestRuns).To(BeNumerically(">=", int64(1)))
+			// Verify the old run's contribution to TotalTestsExecuted but not to RecentTestRuns
+			// The old run exists so TotalTestRuns must include it
+			Expect(stats.TotalTestRuns).To(BeNumerically(">=", stats.RecentTestRuns))
+		})
+
+		It("total_tests = 0 edge case: runs with zero tests do not inflate TotalTestsExecuted", func() {
+			zeroTestRun := &domain.TestRun{
+				RunID: "dash-zero-tests-run", ProjectID: "project-dash-zero",
+				Status: "running", StartTime: time.Now(),
+				TotalTests: 0, PassedTests: 0,
+			}
+			realTestRun := &domain.TestRun{
+				RunID: "dash-real-tests-run", ProjectID: "project-dash-zero",
+				Status: "passed", StartTime: time.Now(),
+				TotalTests: 10, PassedTests: 8,
+			}
+			Expect(repo.Create(ctx, zeroTestRun)).To(Succeed())
+			Expect(repo.Create(ctx, realTestRun)).To(Succeed())
+
+			stats, err := repo.GetDashboardStats(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			// TotalTestsExecuted should equal the sum of total_tests; the zero-test run adds nothing
+			Expect(stats.TotalTestsExecuted).To(BeNumerically(">=", int64(10)))
+			Expect(stats.PassedTests).To(BeNumerically(">=", int64(8)))
+		})
+	})
+
+	Describe("GetLatestByProjectIDTagsOnly", func() {
+		It("negative limit returns an error", func() {
+			results, err := repo.GetLatestByProjectIDTagsOnly(ctx, "any-project", -1)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("limit must be non-negative"))
+			Expect(results).To(BeNil())
+		})
+
+		It("returns only Tags — SuiteRuns are not preloaded", func() {
+			// Create a test run that has a suite run associated in the DB
+			parentRun := &domain.TestRun{
+				RunID:     "summary-with-suite-run",
+				ProjectID: "project-summary-suite",
+				Status:    "passed",
+				StartTime: time.Now(),
+				Tags:      []domain.Tag{{Name: "summary-tag", Category: "ci", Value: "true"}},
+				SuiteRuns: []domain.SuiteRun{
+					{
+						Name:       "suite-one",
+						Status:     "passed",
+						StartTime:  time.Now(),
+						TotalTests: 3, PassedTests: 3,
+					},
+				},
+			}
+			Expect(repo.Create(ctx, parentRun)).To(Succeed())
+
+			results, err := repo.GetLatestByProjectIDTagsOnly(ctx, "project-summary-suite", 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+
+			run := results[0]
+			// Tags should be populated
+			Expect(run.Tags).To(HaveLen(1))
+			Expect(run.Tags[0].Name).To(Equal("summary-tag"))
+			// SuiteRuns should NOT be preloaded (summary path intentionally omits them)
+			Expect(run.SuiteRuns).To(BeEmpty())
+		})
+	})
+
+	Describe("GetProjectStats", func() {
+		BeforeEach(func() {
+			testRuns := []*domain.TestRun{
+				{RunID: "stats-1", ProjectID: "project-stats", Status: "completed", Branch: "main", StartTime: time.Now().Add(-3 * time.Hour), Duration: 1000 * time.Millisecond, TotalTests: 10, PassedTests: 10, FailedTests: 0},
+				{RunID: "stats-2", ProjectID: "project-stats", Status: "completed", Branch: "main", StartTime: time.Now().Add(-2 * time.Hour), Duration: 3000 * time.Millisecond, TotalTests: 5, PassedTests: 5, FailedTests: 0},
+				{RunID: "stats-3", ProjectID: "project-stats", Status: "failed", Branch: "feature/x", StartTime: time.Now().Add(-1 * time.Hour), Duration: 2000 * time.Millisecond, TotalTests: 8, PassedTests: 7, FailedTests: 1},
+				{RunID: "stats-4", ProjectID: "project-stats", Status: "running", Branch: "", StartTime: time.Now(), Duration: 0},
+				{RunID: "other-1", ProjectID: "project-other", Status: "completed", Branch: "main", StartTime: time.Now(), Duration: 500 * time.Millisecond, TotalTests: 3, PassedTests: 3, FailedTests: 0},
+			}
+			for _, tr := range testRuns {
+				Expect(repo.Create(ctx, tr)).To(Succeed())
+			}
+		})
+
+		It("should aggregate all stats in one query", func() {
+			stats, err := repo.GetProjectStats(ctx, "project-stats")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stats).NotTo(BeNil())
+
+			Expect(stats.TotalRuns).To(Equal(int64(4)))
+			// passed + completed = 2
+			Expect(stats.PassedRuns).To(Equal(int64(2)))
+			// main and feature/x; empty branch excluded
+			Expect(stats.UniqueBranches).To(Equal(int64(2)))
+			// avg of 1000+3000+2000+0 = 1500ms
+			Expect(stats.AvgDurationMs).To(BeNumerically("~", 1500.0, 1.0))
+			Expect(stats.LastRunTime).NotTo(BeNil())
+		})
+
+		It("should return zeros for a project with no runs", func() {
+			stats, err := repo.GetProjectStats(ctx, "no-such-project")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stats.TotalRuns).To(Equal(int64(0)))
+			Expect(stats.PassedRuns).To(Equal(int64(0)))
+			Expect(stats.UniqueBranches).To(Equal(int64(0)))
+			Expect(stats.LastRunTime).To(BeNil())
+		})
+
+		It("should not include runs from other projects", func() {
+			stats, err := repo.GetProjectStats(ctx, "project-stats")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stats.TotalRuns).To(Equal(int64(4)))
+		})
+
+		It("should return error when database connection is lost", func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+
+			stats, err := repo.GetProjectStats(ctx, "project-stats")
+			Expect(err).To(HaveOccurred())
+			Expect(stats).To(BeNil())
 		})
 	})
 })

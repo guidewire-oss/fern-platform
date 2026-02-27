@@ -24,8 +24,14 @@ func (m *mockTestRunRepo) GetWithDetails(ctx context.Context, id uint) (*domain.
 func (m *mockTestRunRepo) GetLatestByProjectID(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
 	return nil, nil
 }
+func (m *mockTestRunRepo) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	return nil, nil
+}
 func (m *mockTestRunRepo) GetTestRunSummary(ctx context.Context, projectID string) (*domain.TestRunSummary, error) {
 	return nil, nil
+}
+func (m *mockTestRunRepo) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	return &domain.ProjectStatsResult{}, nil
 }
 func (m *mockTestRunRepo) Delete(ctx context.Context, id uint) error { return nil }
 func (m *mockTestRunRepo) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
@@ -34,9 +40,15 @@ func (m *mockTestRunRepo) CountByProjectID(ctx context.Context, projectID string
 func (m *mockTestRunRepo) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	return nil, nil
 }
+func (m *mockTestRunRepo) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	return &domain.DashboardStatsResult{}, nil
+}
 func (m *mockTestRunRepo) GetByRunID(ctx context.Context, runID string) (*domain.TestRun, error) {
 	args := m.Called(ctx, runID)
 	return args.Get(0).(*domain.TestRun), args.Error(1)
+}
+func (m *mockTestRunRepo) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	return nil, nil
 }
 func (m *mockTestRunRepo) Update(ctx context.Context, tr *domain.TestRun) error {
 	args := m.Called(ctx, tr)

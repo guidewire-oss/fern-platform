@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
+	testingSQL "github.com/guidewire-oss/fern-platform/internal/domains/testing/sql"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
 )
@@ -114,7 +115,7 @@ func (r *GormTestRunRepository) GetByRunID(ctx context.Context, runID string) (*
 // GetByProjectID retrieves all test runs for a project
 func (r *GormTestRunRepository) GetByProjectID(ctx context.Context, projectID string) ([]*domain.TestRun, error) {
 	var dbTestRuns []database.TestRun
-	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Order("created_at DESC").Find(&dbTestRuns).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("project_id = ?", projectID).Order("start_time DESC").Find(&dbTestRuns).Error; err != nil {
 		return nil, fmt.Errorf("failed to get test runs: %w", err)
 	}
 
@@ -126,8 +127,13 @@ func (r *GormTestRunRepository) GetByProjectID(ctx context.Context, projectID st
 	return testRuns, nil
 }
 
-// GetLatestByProjectID retrieves the latest test runs for a project
+// GetLatestByProjectID retrieves the latest test runs for a project.
+// Eagerly loads all associations for the project detail view.
 func (r *GormTestRunRepository) GetLatestByProjectID(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative")
+	}
+
 	var dbTestRuns []database.TestRun
 	query := r.db.WithContext(ctx).
 		Where("project_id = ?", projectID).
@@ -136,7 +142,8 @@ func (r *GormTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 		Preload("SuiteRuns.Tags").
 		Preload("SuiteRuns.SpecRuns").
 		Preload("SuiteRuns.SpecRuns.Tags").
-		Order("created_at DESC")
+		// Order by start_time (when tests actually ran), not created_at (insertion time).
+		Order("start_time DESC")
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -144,6 +151,35 @@ func (r *GormTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 
 	if err := query.Find(&dbTestRuns).Error; err != nil {
 		return nil, fmt.Errorf("failed to get latest test runs: %w", err)
+	}
+
+	testRuns := make([]*domain.TestRun, len(dbTestRuns))
+	for i, dbTestRun := range dbTestRuns {
+		testRuns[i] = r.converter.ConvertTestRunToDomain(&dbTestRun)
+	}
+
+	return testRuns, nil
+}
+
+// GetLatestByProjectIDTagsOnly retrieves the latest test runs for a project loading only Tags.
+// SuiteRuns and SpecRuns are intentionally omitted — use for the lazy-load chart path only.
+func (r *GormTestRunRepository) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative")
+	}
+
+	var dbTestRuns []database.TestRun
+	query := r.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Preload("Tags").
+		Order("start_time DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	if err := query.Find(&dbTestRuns).Error; err != nil {
+		return nil, fmt.Errorf("failed to get latest test runs summary: %w", err)
 	}
 
 	testRuns := make([]*domain.TestRun, len(dbTestRuns))
@@ -173,10 +209,11 @@ func (r *GormTestRunRepository) GetWithDetails(ctx context.Context, id uint) (*d
 	return r.converter.ConvertTestRunToDomain(&dbTestRun), nil
 }
 
-// FindByDateRange finds test runs within a date range
+// FindByDateRange finds test runs within a date range.
+// Filters on start_time (when the run actually occurred) to match FindByDateRangeForProjects.
 func (r *GormTestRunRepository) FindByDateRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
 	var dbTestRuns []database.TestRun
-	query := r.db.WithContext(ctx).Where("project_id = ? AND created_at >= ? AND created_at <= ?", projectID, startDate, endDate).Order("created_at DESC")
+	query := r.db.WithContext(ctx).Where("project_id = ? AND start_time >= ? AND start_time <= ?", projectID, startDate, endDate).Order("start_time DESC")
 
 	if err := query.Find(&dbTestRuns).Error; err != nil {
 		return nil, fmt.Errorf("failed to find test runs by date range: %w", err)
@@ -187,6 +224,30 @@ func (r *GormTestRunRepository) FindByDateRange(ctx context.Context, projectID s
 		testRuns[i] = r.converter.ConvertTestRunToDomain(&dbTestRun)
 	}
 
+	return testRuns, nil
+}
+
+// FindByDateRangeForProjects fetches test runs for multiple projects within a date range in one query.
+// Preloads SuiteRuns (names, counts, durations) but not SuiteRuns.Tags or SpecRuns — optimized for
+// aggregate treemap views. SpecRuns are not preloaded; callers requiring full hydration should use
+// a different method.
+func (r *GormTestRunRepository) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	if len(projectIDs) == 0 {
+		return nil, nil
+	}
+	var dbTestRuns []database.TestRun
+	if err := r.db.WithContext(ctx).
+		Where("project_id IN ? AND start_time >= ? AND start_time <= ?", projectIDs, startDate, endDate).
+		Preload("Tags").
+		Preload("SuiteRuns").
+		Order("start_time DESC").
+		Find(&dbTestRuns).Error; err != nil {
+		return nil, fmt.Errorf("failed to find test runs by date range: %w", err)
+	}
+	testRuns := make([]*domain.TestRun, len(dbTestRuns))
+	for i, dbTestRun := range dbTestRuns {
+		testRuns[i] = r.converter.ConvertTestRunToDomain(&dbTestRun)
+	}
 	return testRuns, nil
 }
 
@@ -244,17 +305,70 @@ func (r *GormTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return count, err
 }
 
-// GetRecent retrieves recent test runs across all projects
+// GetProjectStats returns aggregated stats for a project in a single query.
+func (r *GormTestRunRepository) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	type aggRow struct {
+		TotalRuns      int64
+		AvgDurationMs  float64
+		PassedRuns     int64
+		UniqueBranches int64
+	}
+	var agg aggRow
+	err := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Where("project_id = ?", projectID).
+		Select(`
+			COUNT(*) as total_runs,
+			COALESCE(AVG(duration_ms), 0) as avg_duration_ms,
+			`+testingSQL.PassedRunSumSQL+` as passed_runs,
+			COUNT(DISTINCT NULLIF(branch, '')) as unique_branches
+		`).
+		Scan(&agg).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project stats: %w", err)
+	}
+
+	// Fetch last run time in a separate query so the GORM model scanner handles
+	// time parsing correctly — MAX(start_time) in a raw SQL Scan returns a plain
+	// string in SQLite, which the driver cannot automatically coerce to time.Time.
+	// The resulting inconsistency window (a run inserted between the two queries)
+	// is intentionally accepted as an acceptable trade-off over a more complex
+	// single-query approach.
+	var lastRun database.TestRun
+	var lastRunTime *time.Time
+	err = r.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Order("start_time DESC").
+		Select("start_time").
+		First(&lastRun).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("failed to get project stats: %w", err)
+	}
+	if err == nil {
+		lastRunTime = &lastRun.StartTime
+	}
+
+	return &domain.ProjectStatsResult{
+		TotalRuns:      agg.TotalRuns,
+		AvgDurationMs:  agg.AvgDurationMs,
+		PassedRuns:     agg.PassedRuns,
+		UniqueBranches: agg.UniqueBranches,
+		LastRunTime:    lastRunTime,
+	}, nil
+}
+
+// GetRecent retrieves recent test runs across all projects.
+// Intentionally loads only Tags — SuiteRuns/SpecRuns are deferred to field resolvers.
 func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative")
+	}
+
 	var dbTestRuns []database.TestRun
 	query := r.db.WithContext(ctx).
 		Model(&database.TestRun{}).
 		Preload("Tags").
-		Preload("SuiteRuns").
-		Preload("SuiteRuns.Tags").
-		Preload("SuiteRuns.SpecRuns").
-		Preload("SuiteRuns.SpecRuns.Tags").
-		Order("created_at DESC")
+		Order("start_time DESC")
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -270,6 +384,42 @@ func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*do
 	}
 
 	return testRuns, nil
+}
+
+// GetDashboardStats returns platform-wide aggregate stats in a single query.
+func (r *GormTestRunRepository) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	type aggRow struct {
+		TotalTestRuns      int64
+		RecentTestRuns     int64
+		TotalTestsExecuted int64
+		PassedTests        int64
+		AvgDurationMs      float64
+	}
+	cutoff := time.Now().Add(-testingSQL.DefaultDashboardRecentWindowHours * time.Hour)
+	var agg aggRow
+	err := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Select(`
+			COUNT(*) as total_test_runs,
+			COALESCE(SUM(CASE WHEN start_time >= ? THEN 1 ELSE 0 END), 0) as recent_test_runs,
+			COALESCE(SUM(total_tests), 0) as total_tests_executed,
+			COALESCE(SUM(passed_tests), 0) as passed_tests,
+			COALESCE(AVG(duration_ms), 0) as avg_duration_ms
+		`, cutoff).
+		Scan(&agg).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dashboard stats: %w", err)
+	}
+	return &domain.DashboardStatsResult{
+		TotalTestRuns:      agg.TotalTestRuns,
+		RecentTestRuns:     agg.RecentTestRuns,
+		TotalTestsExecuted: agg.TotalTestsExecuted,
+		PassedTests:        agg.PassedTests,
+		AvgDurationMs:      agg.AvgDurationMs,
+	}, nil
 }
 
 // GetDB returns the underlying GORM DB instance.

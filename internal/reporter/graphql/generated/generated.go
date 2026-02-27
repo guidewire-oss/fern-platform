@@ -2698,11 +2698,12 @@ type Project {
 
 type ProjectStats {
   totalTestRuns: Int!
-  recentTestRuns: Int!
   uniqueBranches: Int!
+  # Range: 0.0–1.0 (fraction, not percentage). Multiply by 100 for display.
   successRate: Float!
   averageDuration: Int!
   lastRunTime: Time
+  recentTestRuns: Int! @deprecated(reason: "Use the top-level recentTestRuns query instead")
 }
 
 # Tag Types
@@ -2749,6 +2750,7 @@ type TestRunStats {
   totalRuns: Int!
   statusCounts: [StatusCount!]!
   averageDuration: Int!
+  # Range: 0.0–1.0 (fraction, not percentage). Multiply by 100 for display.
   successRate: Float!
 }
 
@@ -8205,8 +8207,6 @@ func (ec *executionContext) fieldContext_Project_stats(_ context.Context, field 
 			switch field.Name {
 			case "totalTestRuns":
 				return ec.fieldContext_ProjectStats_totalTestRuns(ctx, field)
-			case "recentTestRuns":
-				return ec.fieldContext_ProjectStats_recentTestRuns(ctx, field)
 			case "uniqueBranches":
 				return ec.fieldContext_ProjectStats_uniqueBranches(ctx, field)
 			case "successRate":
@@ -8215,6 +8215,8 @@ func (ec *executionContext) fieldContext_Project_stats(_ context.Context, field 
 				return ec.fieldContext_ProjectStats_averageDuration(ctx, field)
 			case "lastRunTime":
 				return ec.fieldContext_ProjectStats_lastRunTime(ctx, field)
+			case "recentTestRuns":
+				return ec.fieldContext_ProjectStats_recentTestRuns(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProjectStats", field.Name)
 		},
@@ -8618,50 +8620,6 @@ func (ec *executionContext) fieldContext_ProjectStats_totalTestRuns(_ context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _ProjectStats_recentTestRuns(ctx context.Context, field graphql.CollectedField, obj *model.ProjectStats) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_ProjectStats_recentTestRuns(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
-		ctx = rctx // use context from middleware stack in children
-		return obj.RecentTestRuns, nil
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(int)
-	fc.Result = res
-	return ec.marshalNInt2int(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_ProjectStats_recentTestRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ProjectStats",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _ProjectStats_uniqueBranches(ctx context.Context, field graphql.CollectedField, obj *model.ProjectStats) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_ProjectStats_uniqueBranches(ctx, field)
 	if err != nil {
@@ -8830,6 +8788,50 @@ func (ec *executionContext) fieldContext_ProjectStats_lastRunTime(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProjectStats_recentTestRuns(ctx context.Context, field graphql.CollectedField, obj *model.ProjectStats) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ProjectStats_recentTestRuns(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.RecentTestRuns, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ProjectStats_recentTestRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProjectStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -20621,11 +20623,6 @@ func (ec *executionContext) _ProjectStats(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "recentTestRuns":
-			out.Values[i] = ec._ProjectStats_recentTestRuns(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "uniqueBranches":
 			out.Values[i] = ec._ProjectStats_uniqueBranches(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -20643,6 +20640,11 @@ func (ec *executionContext) _ProjectStats(ctx context.Context, sel ast.Selection
 			}
 		case "lastRunTime":
 			out.Values[i] = ec._ProjectStats_lastRunTime(ctx, field, obj)
+		case "recentTestRuns":
+			out.Values[i] = ec._ProjectStats_recentTestRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

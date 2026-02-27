@@ -193,9 +193,25 @@ func (s *TestRunService) GetTestRunWithDetails(ctx context.Context, id uint) (*d
 	return s.testRunRepo.GetWithDetails(ctx, id)
 }
 
-// GetProjectTestRuns retrieves test runs for a project
+// GetProjectTestRuns retrieves test runs for a project (Tags only; no SuiteRuns/SpecRuns preloaded).
+// Used by the lazy-load chart path which only needs top-level run fields.
 func (s *TestRunService) GetProjectTestRuns(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
-	return s.testRunRepo.GetLatestByProjectID(ctx, projectID, limit)
+	return s.testRunRepo.GetLatestByProjectIDTagsOnly(ctx, projectID, limit)
+}
+
+// CountProjectTestRuns counts total test runs for a project
+func (s *TestRunService) CountProjectTestRuns(ctx context.Context, projectID string) (int64, error) {
+	return s.testRunRepo.CountByProjectID(ctx, projectID)
+}
+
+// GetProjectStats returns aggregated stats for a project in a single query.
+func (s *TestRunService) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	return s.testRunRepo.GetProjectStats(ctx, projectID)
+}
+
+// GetTestRunsForProjectsInDateRange fetches test runs for multiple projects in one query.
+func (s *TestRunService) GetTestRunsForProjectsInDateRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	return s.testRunRepo.FindByDateRangeForProjects(ctx, projectIDs, startDate, endDate)
 }
 
 // GetTestRunSummary retrieves test run summary for a project
@@ -314,6 +330,11 @@ func (s *TestRunService) GetTestRunByRunID(ctx context.Context, runID string) (*
 // GetRecentTestRuns retrieves recent test runs across all projects
 func (s *TestRunService) GetRecentTestRuns(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	return s.testRunRepo.GetRecent(ctx, limit)
+}
+
+// GetDashboardStats returns platform-wide aggregate stats.
+func (s *TestRunService) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	return s.testRunRepo.GetDashboardStats(ctx)
 }
 
 // CreateSuiteRun creates a new suite run

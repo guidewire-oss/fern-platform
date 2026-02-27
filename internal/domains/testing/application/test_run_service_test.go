@@ -90,6 +90,14 @@ func (m *MockTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 	return args.Get(0).([]*domain.TestRun), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) FindByProjectID(ctx context.Context, projectID string) ([]*domain.TestRun, error) {
 	args := m.Called(ctx, projectID)
 	if args.Get(0) == nil {
@@ -127,6 +135,14 @@ func (m *MockTestRunRepository) GetStatsByProjectID(ctx context.Context, project
 	return args.Get(0).(map[string]interface{}), args.Error(1)
 }
 
+func (m *MockTestRunRepository) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
 	args := m.Called(ctx, projectID)
 	return args.Get(0).(int64), args.Error(1)
@@ -146,6 +162,22 @@ func (m *MockTestRunRepository) GetTestRunSummary(ctx context.Context, projectID
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*domain.TestRunSummary), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	args := m.Called(ctx, projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ProjectStatsResult), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.DashboardStatsResult), args.Error(1)
 }
 
 // Mock suite run repository
@@ -463,7 +495,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				fixtures.TestRun("proj-123", testhelpers.WithTestRunID("test-2")),
 			}
 
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-123", 100).Return(runs, nil)
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "proj-123", 100).Return(runs, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-123", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -473,7 +505,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return empty slice when no runs found", func() {
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-999", 100).Return([]*domain.TestRun{}, nil)
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "proj-999", 100).Return([]*domain.TestRun{}, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-999", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -481,7 +513,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should validate ProjectID parameter", func() {
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "", 100).Return(nil, errors.New("ProjectID is required"))
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "", 100).Return(nil, errors.New("ProjectID is required"))
 
 			results, err := service.GetProjectTestRuns(ctx, "", 100)
 			Expect(err).To(HaveOccurred())
