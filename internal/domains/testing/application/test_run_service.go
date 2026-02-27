@@ -346,6 +346,21 @@ func (s *TestRunService) GetSuiteRunsByTestRunID(ctx context.Context, testRunID 
 	return s.suiteRunRepo.FindByTestRunID(ctx, testRunID)
 }
 
+// GetSuiteRun retrieves a single suite run by ID
+func (s *TestRunService) GetSuiteRun(ctx context.Context, id uint) (*domain.SuiteRun, error) {
+	return s.suiteRunRepo.GetByID(ctx, id)
+}
+
+// GetSpecRunsBySuiteRunID retrieves all spec runs for a suite run
+func (s *TestRunService) GetSpecRunsBySuiteRunID(ctx context.Context, suiteRunID uint) ([]*domain.SpecRun, error) {
+	return s.specRunRepo.FindBySuiteRunID(ctx, suiteRunID)
+}
+
+// GetSpecRun retrieves a single spec run by ID
+func (s *TestRunService) GetSpecRun(ctx context.Context, id uint) (*domain.SpecRun, error) {
+	return s.specRunRepo.GetByID(ctx, id)
+}
+
 // UpdateTestRun updates an existing test run
 func (s *TestRunService) UpdateTestRun(ctx context.Context, testRun *domain.TestRun) error {
 	if err := s.testRunRepo.Update(ctx, testRun); err != nil {
