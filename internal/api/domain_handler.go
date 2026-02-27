@@ -1,4 +1,8 @@
-// THIS FILE IS BECOMING DEPRECATED - Use the new split handler architecture in domain_handler_v2.go
+// DEPRECATED: This file contains the legacy monolithic DomainHandler (V1).
+// It is no longer used in production — the server now exclusively uses DomainHandlerV2
+// from domain_handler_v2.go. This file is retained only because existing tests in
+// domain_handler_test.go still reference DomainHandler directly.
+// TODO: Migrate tests to use V2 sub-handlers, then delete this file.
 package api
 
 import (
