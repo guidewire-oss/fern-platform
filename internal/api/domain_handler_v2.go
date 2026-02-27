@@ -22,6 +22,7 @@ type DomainHandlerV2 struct {
 	tagHandler            *TagHandler
 	systemHandler         *SystemHandler
 	jiraConnectionHandler *JiraConnectionHandler
+	flakyTestHandler      *FlakyTestHandler
 
 	// Middleware
 	authMiddleware *interfaces.AuthMiddlewareAdapter
@@ -47,6 +48,7 @@ func NewDomainHandlerV2(
 		tagHandler:            NewTagHandler(tagService, logger),
 		systemHandler:         NewSystemHandler(logger),
 		jiraConnectionHandler: NewJiraConnectionHandler(baseHandler, jiraConnectionService, projectService),
+		flakyTestHandler:      NewFlakyTestHandler(flakyDetectionService, logger),
 		authMiddleware:        authMiddleware,
 		logger:                logger,
 	}
@@ -98,6 +100,7 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	h.projectHandler.RegisterRoutes(userGroup, managerGroup, adminGroup)
 	h.tagHandler.RegisterRoutes(userGroup, adminGroup)
 	h.systemHandler.RegisterRoutes(adminGroup)
+	h.flakyTestHandler.RegisterRoutes(userGroup)
 
 	// Register JIRA connection routes
 	h.registerJiraConnectionRoutes(managerGroup)
