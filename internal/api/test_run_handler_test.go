@@ -112,6 +112,19 @@ func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockTestRunRepository) Count(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, 0, args.Error(2)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Get(1).(int64), args.Error(2)
+}
+
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
 type MockSuiteRunRepository struct {
 	mock.Mock
@@ -486,8 +499,9 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should handle list test runs without project ID", func() {
-			// When no project ID is provided, the service returns empty list
-			// This matches the current implementation in test_run_service.go
+			// When no project ID is provided, the service calls List with default pagination
+			testRunRepo.On("List", mock.Anything, 50, 0).Return([]*domain.TestRun{}, int64(0), nil).Once()
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -533,8 +547,9 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should count test runs without project ID", func() {
-			// When no project ID is provided, the service returns 0
-			// This matches the current implementation in test_run_service.go
+			// When no project ID is provided, the service calls List with limit=0
+			testRunRepo.On("List", mock.Anything, 0, 0).Return([]*domain.TestRun{}, int64(0), nil).Once()
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)

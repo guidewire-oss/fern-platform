@@ -321,14 +321,11 @@ func (s *TestRunService) DeleteTestRun(ctx context.Context, id uint) error {
 
 // ListTestRuns retrieves test runs with pagination and filtering
 func (s *TestRunService) ListTestRuns(ctx context.Context, projectID string, limit, offset int) ([]*domain.TestRun, int64, error) {
-	// For now, use GetLatestByProjectID with limit
-	// TODO: Add proper filtering support to repository
 	if projectID != "" {
 		runs, err := s.testRunRepo.GetLatestByProjectID(ctx, projectID, limit)
 		if err != nil {
 			return nil, 0, err
 		}
-		// Get total count
 		total, err := s.testRunRepo.CountByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, 0, err
@@ -336,9 +333,12 @@ func (s *TestRunService) ListTestRuns(ctx context.Context, projectID string, lim
 		return runs, total, nil
 	}
 
-	// If no project ID, return empty for now
-	// TODO: Add GetAll method to repository
-	return []*domain.TestRun{}, 0, nil
+	return s.testRunRepo.List(ctx, limit, offset)
+}
+
+// CountTestRuns counts all test runs
+func (s *TestRunService) CountTestRuns(ctx context.Context) (int64, error) {
+	return s.testRunRepo.Count(ctx)
 }
 
 // GetSuiteRunsByTestRunID retrieves all suite runs for a test run

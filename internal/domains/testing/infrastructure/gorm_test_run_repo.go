@@ -244,6 +244,13 @@ func (r *GormTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return count, err
 }
 
+// Count counts all test runs
+func (r *GormTestRunRepository) Count(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&database.TestRun{}).Count(&count).Error
+	return count, err
+}
+
 // GetRecent retrieves recent test runs across all projects
 func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	var dbTestRuns []database.TestRun
@@ -270,6 +277,33 @@ func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*do
 	}
 
 	return testRuns, nil
+}
+
+// List retrieves test runs with pagination across all projects
+func (r *GormTestRunRepository) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	var dbTestRuns []database.TestRun
+	var total int64
+
+	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count test runs: %w", err)
+	}
+
+	query := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset)
+
+	if err := query.Find(&dbTestRuns).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list test runs: %w", err)
+	}
+
+	testRuns := make([]*domain.TestRun, len(dbTestRuns))
+	for i, dbTestRun := range dbTestRuns {
+		testRuns[i] = r.converter.ConvertTestRunToDomain(&dbTestRun)
+	}
+
+	return testRuns, total, nil
 }
 
 // GetDB returns the underlying GORM DB instance.

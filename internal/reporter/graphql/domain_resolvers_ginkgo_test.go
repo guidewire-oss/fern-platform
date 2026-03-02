@@ -884,7 +884,7 @@ var _ = Describe("DomainResolvers", func() {
 
 		Context("without project filter", func() {
 			It("should return empty results when no test runs exist", func() {
-				mockRepo.On("FindAll", mock.Anything, 20, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
+				mockRepo.On("List", mock.Anything, 50, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
 
 				result, err := resolver.Query().(*queryResolver).TestRuns_domain(ctx, nil, nil, nil, nil, nil)
 

@@ -1130,9 +1130,9 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 
 // TestRuns implementation using domain service with pagination
 func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.TestRunConnection, error) {
-	// Apply pagination
-	pageSize := 20
-	if first != nil && *first > 0 && *first <= 100 {
+	// Apply pagination - default 50 per page
+	pageSize := 50
+	if first != nil && *first > 0 && *first <= 200 {
 		pageSize = *first
 	}
 
