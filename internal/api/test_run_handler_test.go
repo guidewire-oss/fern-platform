@@ -112,6 +112,19 @@ func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockTestRunRepository) Count(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, 0, args.Error(2)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Get(1).(int64), args.Error(2)
+}
+
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
 type MockSuiteRunRepository struct {
 	mock.Mock
@@ -234,15 +247,16 @@ var _ = Describe("TestRunHandler", func() {
 		testingService = application.NewTestRunService(testRunRepo, suiteRunRepo, specRunRepo)
 
 		// Create handler
-		handler = NewTestRunHandler(testingService, logger)
+		handler = NewTestRunHandler(testingService, nil, logger)
 
 		// Setup router with groups
 		router = gin.New()
+		publicGroup := router.Group("/api/v1")
 		userGroup = router.Group("/api/v1")
 		adminGroup = router.Group("/api/v1/admin")
 
 		// Register routes
-		handler.RegisterRoutes(userGroup, adminGroup)
+		handler.RegisterRoutes(publicGroup, userGroup, adminGroup)
 	})
 
 	Describe("createTestRun", func() {
@@ -415,12 +429,27 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("getTestRunByRunID", func() {
-		It("should return not implemented", func() {
+		It("should return not found when run does not exist", func() {
+			testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(nil, errors.New("not found")).Once()
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/by-run-id/run-123", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return test run when found", func() {
+			testRun := &domain.TestRun{ID: 1, RunID: "run-123", ProjectID: "project-123", Status: "passed"}
+			testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(testRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/by-run-id/run-123", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			testRunRepo.AssertExpectations(GinkgoT())
 		})
 	})
 
@@ -486,8 +515,9 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should handle list test runs without project ID", func() {
-			// When no project ID is provided, the service returns empty list
-			// This matches the current implementation in test_run_service.go
+			// When no project ID is provided, the service calls List with default pagination
+			testRunRepo.On("List", mock.Anything, 50, 0).Return([]*domain.TestRun{}, int64(0), nil).Once()
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -533,8 +563,9 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should count test runs without project ID", func() {
-			// When no project ID is provided, the service returns 0
-			// This matches the current implementation in test_run_service.go
+			// When no project ID is provided, the service calls List with limit=0
+			testRunRepo.On("List", mock.Anything, 0, 0).Return([]*domain.TestRun{}, int64(0), nil).Once()
+
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -560,7 +591,9 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("updateTestRunStatus", func() {
-		It("should return not implemented", func() {
+		It("should return not found when run does not exist", func() {
+			testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(nil, errors.New("not found")).Once()
+
 			requestBody := map[string]interface{}{
 				"status": "completed",
 			}
@@ -571,7 +604,8 @@ var _ = Describe("TestRunHandler", func() {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			testRunRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should return bad request for missing status", func() {
@@ -588,12 +622,17 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("deleteTestRun", func() {
-		It("should return not implemented", func() {
+		It("should delete test run successfully", func() {
+			testRun := &domain.TestRun{ID: 1, ProjectID: "project-123"}
+			testRunRepo.On("GetByID", mock.Anything, uint(1)).Return(testRun, nil).Once()
+			testRunRepo.On("Delete", mock.Anything, uint(1)).Return(nil).Once()
+
 			req := httptest.NewRequest("DELETE", "/api/v1/admin/test-runs/1", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusOK))
+			testRunRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should return bad request for invalid ID", func() {

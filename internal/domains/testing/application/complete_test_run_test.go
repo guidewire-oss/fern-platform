@@ -42,6 +42,10 @@ func (m *mockTestRunRepo) Update(ctx context.Context, tr *domain.TestRun) error 
 	args := m.Called(ctx, tr)
 	return args.Error(0)
 }
+func (m *mockTestRunRepo) Count(ctx context.Context) (int64, error) { return 0, nil }
+func (m *mockTestRunRepo) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	return nil, 0, nil
+}
 
 type mockFlakyRepo struct{ mock.Mock }
 

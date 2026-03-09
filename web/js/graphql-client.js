@@ -191,6 +191,43 @@ const QUERIES = {
         }
     `,
 
+    GET_TEST_RUNS_PAGINATED: `
+        query GetTestRunsPaginated($first: Int, $after: String, $projectId: String) {
+            testRuns(first: $first, after: $after, filter: { projectId: $projectId }) {
+                edges {
+                    node {
+                        id
+                        runId
+                        projectId
+                        branch
+                        status
+                        startTime
+                        endTime
+                        duration
+                        totalTests
+                        passedTests
+                        failedTests
+                        skippedTests
+                        tags {
+                            id
+                            name
+                            category
+                            value
+                        }
+                    }
+                    cursor
+                }
+                pageInfo {
+                    hasNextPage
+                    hasPreviousPage
+                    startCursor
+                    endCursor
+                }
+                totalCount
+            }
+        }
+    `,
+
     GET_TREEMAP_DATA: `
         query GetTreemapData($projectId: String, $days: Int) {
             treemapData(projectId: $projectId, days: $days) {

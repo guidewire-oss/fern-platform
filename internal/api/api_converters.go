@@ -64,10 +64,10 @@ type ProjectDetails struct {
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// Domain to API conversion methods
+// Domain to API conversion functions
 
 // convertDomainTestRunToAPI converts a domain TestRun to API response format
-func (h *DomainHandler) convertDomainTestRunToAPI(tr *testingDomain.TestRun) gin.H {
+func convertDomainTestRunToAPI(tr *testingDomain.TestRun) gin.H {
 	return gin.H{
 		"id":           tr.ID,
 		"runId":        tr.RunID,
@@ -89,7 +89,7 @@ func (h *DomainHandler) convertDomainTestRunToAPI(tr *testingDomain.TestRun) gin
 }
 
 // convertProjectToAPI converts a domain Project to API response format
-func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
+func convertProjectToAPI(p *projectsDomain.Project) gin.H {
 	snapshot := p.ToSnapshot()
 	return gin.H{
 		"id":            snapshot.ID,
@@ -106,20 +106,20 @@ func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 	}
 }
 
-// Request to Domain conversion methods
+// Request to Domain conversion functions
 
 // convertApiSuiteRunstoDomain converts request SuiteRuns to domain SuiteRuns
 // Returns []testingDomain.SuiteRun (slice of values, not pointers)
-func (h *DomainHandler) convertApiSuiteRunstoDomain(reqSuiteRuns []SuiteRun) []testingDomain.SuiteRun {
+func convertApiSuiteRunstoDomain(reqSuiteRuns []SuiteRun) []testingDomain.SuiteRun {
 	domainSuiteRuns := make([]testingDomain.SuiteRun, len(reqSuiteRuns))
 
 	for i, reqSuite := range reqSuiteRuns {
 		// Convert SpecRuns (returns []*testingDomain.SpecRun)
-		domainSpecRuns := h.convertSpecRuns(reqSuite.SpecRuns)
+		domainSpecRuns := convertSpecRuns(reqSuite.SpecRuns)
 
 		// Calculate test counts and status
-		totalTests, passedTests, failedTests, skippedTests := h.calculateTestCounts(domainSpecRuns)
-		status := h.calculateSuiteStatus(domainSpecRuns)
+		totalTests, passedTests, failedTests, skippedTests := calculateTestCounts(domainSpecRuns)
+		status := calculateSuiteStatus(domainSpecRuns)
 
 		// Calculate duration
 		var duration time.Duration
@@ -134,15 +134,15 @@ func (h *DomainHandler) convertApiSuiteRunstoDomain(reqSuiteRuns []SuiteRun) []t
 		}
 
 		// Convert tags
-		domainTags := h.convertApiTagsToDomain(reqSuite.Tags)
+		domainTags := convertApiTagsToDomain(reqSuite.Tags)
 
 		// Create value (not pointer) for slice of values
 		domainSuiteRuns[i] = testingDomain.SuiteRun{
 			ID:           reqSuite.ID,
 			TestRunID:    0, // will be set later in recordTestRun
 			Name:         reqSuite.SuiteName,
-			PackageName:  "", // Set based on your requirements
-			ClassName:    "", // Set based on your requirements
+			PackageName:  "",
+			ClassName:    "",
 			Status:       status,
 			StartTime:    reqSuite.StartTime,
 			EndTime:      endTime,
@@ -152,16 +152,16 @@ func (h *DomainHandler) convertApiSuiteRunstoDomain(reqSuiteRuns []SuiteRun) []t
 			SkippedTests: skippedTests,
 			Duration:     duration,
 			Tags:         domainTags,
-			SpecRuns:     domainSpecRuns, // []*testingDomain.SpecRun
+			SpecRuns:     domainSpecRuns,
 		}
 	}
 
-	return domainSuiteRuns // []testingDomain.SuiteRun
+	return domainSuiteRuns
 }
 
 // convertSpecRuns converts request SpecRuns to domain SpecRuns
 // Returns []*testingDomain.SpecRun (slice of pointers)
-func (h *DomainHandler) convertSpecRuns(reqSpecRuns []SpecRun) []*testingDomain.SpecRun {
+func convertSpecRuns(reqSpecRuns []SpecRun) []*testingDomain.SpecRun {
 	domainSpecRuns := make([]*testingDomain.SpecRun, len(reqSpecRuns))
 
 	for i, reqSpec := range reqSpecRuns {
@@ -188,34 +188,33 @@ func (h *DomainHandler) convertSpecRuns(reqSpecRuns []SpecRun) []*testingDomain.
 		}
 
 		// Convert tags
-		domainTags := h.convertApiTagsToDomain(reqSpec.Tags)
+		domainTags := convertApiTagsToDomain(reqSpec.Tags)
 
-		// Create pointer for slice of pointers
 		domainSpecRuns[i] = &testingDomain.SpecRun{
 			ID:             reqSpec.ID,
 			SuiteRunID:     uint(reqSpec.SuiteID),
 			Name:           reqSpec.SpecDescription,
-			ClassName:      "", // Set based on your requirements
+			ClassName:      "",
 			Status:         reqSpec.Status,
 			StartTime:      reqSpec.StartTime,
 			EndTime:        endTime,
 			Duration:       duration,
 			ErrorMessage:   errorMessage,
 			FailureMessage: failureMessage,
-			StackTrace:     "",    // Set if available in your data
-			RetryCount:     0,     // Set based on your requirements
-			IsFlaky:        false, // Set based on your requirements
+			StackTrace:     "",
+			RetryCount:     0,
+			IsFlaky:        false,
 			Tags:           domainTags,
 		}
 	}
 
-	return domainSpecRuns // []*testingDomain.SpecRun
+	return domainSpecRuns
 }
 
-// Calculation and status helper methods
+// Calculation and status helper functions
 
 // calculateOverallStatus calculates the overall test run status from suite runs
-func (h *DomainHandler) calculateOverallStatus(suiteRuns []SuiteRun) string {
+func calculateOverallStatus(suiteRuns []SuiteRun) string {
 	for _, suite := range suiteRuns {
 		for _, spec := range suite.SpecRuns {
 			if spec.Status == "failed" {
@@ -227,7 +226,7 @@ func (h *DomainHandler) calculateOverallStatus(suiteRuns []SuiteRun) string {
 }
 
 // calculateTestCounts calculates test statistics from SpecRuns
-func (h *DomainHandler) calculateTestCounts(specRuns []*testingDomain.SpecRun) (total, passed, failed, skipped int) {
+func calculateTestCounts(specRuns []*testingDomain.SpecRun) (total, passed, failed, skipped int) {
 	total = len(specRuns)
 
 	for _, spec := range specRuns {
@@ -245,7 +244,7 @@ func (h *DomainHandler) calculateTestCounts(specRuns []*testingDomain.SpecRun) (
 }
 
 // calculateOverallTestCounts calculates total test statistics from all suite runs
-func (h *DomainHandler) calculateOverallTestCounts(suiteRuns []testingDomain.SuiteRun) (total, passed, failed, skipped int) {
+func calculateOverallTestCounts(suiteRuns []testingDomain.SuiteRun) (total, passed, failed, skipped int) {
 	for _, suite := range suiteRuns {
 		total += suite.TotalTests
 		passed += suite.PassedTests
@@ -256,7 +255,7 @@ func (h *DomainHandler) calculateOverallTestCounts(suiteRuns []testingDomain.Sui
 }
 
 // calculateSuiteStatus determines suite status based on spec runs
-func (h *DomainHandler) calculateSuiteStatus(specRuns []*testingDomain.SpecRun) string {
+func calculateSuiteStatus(specRuns []*testingDomain.SpecRun) string {
 	if len(specRuns) == 0 {
 		return "unknown"
 	}
@@ -283,7 +282,7 @@ func (h *DomainHandler) calculateSuiteStatus(specRuns []*testingDomain.SpecRun) 
 }
 
 // convertApiTagsToDomain converts API tags to domain tags
-func (h *DomainHandler) convertApiTagsToDomain(apiTags []Tag) []testingDomain.Tag {
+func convertApiTagsToDomain(apiTags []Tag) []testingDomain.Tag {
 	if len(apiTags) == 0 {
 		return nil
 	}
@@ -301,7 +300,7 @@ func (h *DomainHandler) convertApiTagsToDomain(apiTags []Tag) []testingDomain.Ta
 }
 
 // mergeUniqueTags merges two tag slices, removing duplicates by ID
-func (h *DomainHandler) mergeUniqueTags(existingTags, newTags []testingDomain.Tag) []testingDomain.Tag {
+func mergeUniqueTags(existingTags, newTags []testingDomain.Tag) []testingDomain.Tag {
 	tagMap := make(map[uint]testingDomain.Tag)
 
 	// Add existing tags
@@ -326,3 +325,4 @@ func (h *DomainHandler) mergeUniqueTags(existingTags, newTags []testingDomain.Ta
 
 	return tags
 }
+

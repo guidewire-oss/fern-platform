@@ -46,11 +46,8 @@
             };
         }
         
-        // Verify function is working
+        // Verify formatDuration is working (defined above)
         console.log("formatDuration function test:", window.formatDuration(65432)); // Should show "1m 5s"
-        console.log("formatDate function test:", window.formatDate(new Date())); // Should show current date
-        console.log("getTestStatusColor function test:", window.getTestStatusColor(8, 2, 0, 10)); // Should show green
-        console.log("getStatusColor function test:", window.getStatusColor('passed')); // Should show green
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/web/css/font-awesome.min.css" rel="stylesheet">
@@ -2208,8 +2205,18 @@
 
         // Simple router for SPA navigation
         function useRouter() {
-            const [route, setRoute] = useState(window.location.hash.slice(1) || '/');
-            
+            const [route, setRoute] = useState(() => {
+                const hash = window.location.hash.slice(1);
+                if (!hash) {
+                    // Replace the current history entry with a hash-based URL so that
+                    // all navigation entries are consistent hash fragments. This ensures
+                    // the browser back button navigates between hash routes rather than
+                    // returning to a no-hash URL (which can reload the page in some browsers).
+                    history.replaceState(null, '', '#/');
+                }
+                return hash || '/';
+            });
+
             useEffect(() => {
                 const handleHashChange = () => {
                     setRoute(window.location.hash.slice(1) || '/');
@@ -2217,11 +2224,11 @@
                 window.addEventListener('hashchange', handleHashChange);
                 return () => window.removeEventListener('hashchange', handleHashChange);
             }, []);
-            
+
             const navigate = (path) => {
                 window.location.hash = path;
             };
-            
+
             return { route, navigate };
         }
 
@@ -2576,11 +2583,12 @@
         }
 
         // Modern Header component
-        function Header({ health, projects, testRuns, onOpenSettings }) {
+        function Header({ health, projects, testRuns, dashboardSummary, onOpenSettings }) {
             const { theme, toggleTheme } = useUserPreferences();
             const { user, loading, login, logout } = useAuth();
-            const activeProjects = projects.filter(p => p.isActive).length;
-            const recentRuns = testRuns.filter(tr => {
+            const activeProjects = dashboardSummary?.activeProjectCount ?? projects.filter(p => p.isActive).length;
+            const totalRuns = dashboardSummary?.totalTestRuns ?? testRuns.length;
+            const recentRuns = dashboardSummary?.recentTestRuns ?? testRuns.filter(tr => {
                 const runDate = new Date(tr.startTime);
                 const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
                 return runDate > dayAgo;
@@ -2635,7 +2643,7 @@
                                     <span className="stat-label">Active Projects</span>
                                 </div>
                                 <div className="stat-item">
-                                    <span className="stat-value">{testRuns.length}</span>
+                                    <span className="stat-value">{totalRuns}</span>
                                     <span className="stat-label">Total Runs</span>
                                 </div>
                                 <div className="stat-item">
@@ -4382,18 +4390,18 @@
             const fetchData = async () => {
                 try {
                     // Fetch critical data in parallel (projects and test runs)
-                    // TestHistoryChart needs test runs, but only summary data (not full nested details)
                     const [projectsData, testRunsData] = await Promise.all([
                         graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 }),
-                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 })
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_TEST_RUNS_PAGINATED, { first: 100 })
                     ]);
-                    
+
                     // Convert projects from edges format
                     const projectList = projectsData.projects.edges.map(edge => edge.node);
                     setProjects(projectList);
-                    
+
                     // Set test runs with project names - needed for TestHistoryChart
-                    const testRunsWithProjects = (testRunsData.recentTestRuns || []).map(run => {
+                    const testRunsWithProjects = (testRunsData.testRuns?.edges || []).map(edge => {
+                        const run = edge.node;
                         const project = projectList.find(p => p.projectId === run.projectId);
                         return {
                             ...run,
@@ -4715,30 +4723,33 @@
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
             const [view, setView] = useState('runs'); // 'runs', 'suites', 'specs'
+            const [pageInfo, setPageInfo] = useState(null);
+            const [totalCount, setTotalCount] = useState(0);
+            const [currentCursor, setCurrentCursor] = useState(null);
 
             useEffect(() => {
                 fetchData();
-            }, []);
+            }, [currentCursor]);
 
             const fetchData = async () => {
                 try {
                     setLoading(true);
-                    // Use lightweight summary query - drill-down will load details on demand
                     const [testRunsData, projectsData] = await Promise.all([
-                        graphqlClient.query(GRAPHQL_QUERIES.GET_RECENT_TEST_RUNS_SUMMARY, { limit: 100 }),
+                        graphqlClient.query(GRAPHQL_QUERIES.GET_TEST_RUNS_PAGINATED, { first: 50, after: currentCursor }),
                         graphqlClient.query(GRAPHQL_QUERIES.GET_PROJECTS_LIST, { first: 100 })
                     ]);
-                    
+
                     // Get projects to map project names
                     const projectList = projectsData.projects.edges.map(edge => edge.node);
-                    
+
                     // Enrich test runs with project names and use database duration
-                    const enrichedTestRuns = (testRunsData.recentTestRuns || []).map(run => {
+                    const enrichedTestRuns = (testRunsData.testRuns?.edges || []).map(edge => {
+                        const run = edge.node;
                         const project = projectList.find(p => p.projectId === run.projectId);
-                        
+
                         // Use database duration or calculate from timestamps
                         let finalDuration = run.duration;
-                        
+
                         // Fallback: Calculate from startTime and endTime if duration is missing
                         if ((!finalDuration || finalDuration <= 0) && run.startTime && run.endTime) {
                             try {
@@ -4752,25 +4763,39 @@
                                 // Failed to parse timestamps
                             }
                         }
-                        
+
                         // Last resort: Reasonable estimate based on test count
                         if (!finalDuration && run.totalTests && run.totalTests > 0) {
                             finalDuration = run.totalTests * 100; // 100ms per test average
                         }
-                        
+
                         return {
                             ...run,
                             projectName: project?.name || run.projectId,
                             duration: finalDuration
                         };
                     });
-                    
+
                     setTestRuns(enrichedTestRuns);
+                    setPageInfo(testRunsData.testRuns?.pageInfo);
+                    setTotalCount(testRunsData.testRuns?.totalCount || 0);
                     setLoading(false);
                 } catch (err) {
                     console.error('Error fetching test runs:', err);
                     setError(err.message);
                     setLoading(false);
+                }
+            };
+
+            const handleNextPage = () => {
+                if (pageInfo?.hasNextPage) {
+                    setCurrentCursor(pageInfo.endCursor);
+                }
+            };
+
+            const handlePreviousPage = () => {
+                if (currentCursor) {
+                    setCurrentCursor(null); // For now, go back to first page
                 }
             };
 
@@ -5133,6 +5158,51 @@
                                         ))}
                                     </tbody>
                                 </table>
+                                {/* Pagination Controls */}
+                                {pageInfo && (
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: '1rem',
+                                        borderTop: '1px solid var(--border-color)',
+                                        marginTop: '1rem'
+                                    }}>
+                                        <div style={{fontSize: '0.875rem', color: 'var(--text-secondary)'}}>
+                                            Showing {testRuns.length} of {totalCount} test runs
+                                        </div>
+                                        <div style={{display: 'flex', gap: '0.5rem'}}>
+                                            <button
+                                                onClick={handlePreviousPage}
+                                                disabled={!currentCursor}
+                                                style={{
+                                                    padding: '0.5rem 1rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-secondary)',
+                                                    cursor: !currentCursor ? 'not-allowed' : 'pointer',
+                                                    opacity: !currentCursor ? 0.5 : 1
+                                                }}
+                                            >
+                                                <i className="fas fa-chevron-left"></i> Previous
+                                            </button>
+                                            <button
+                                                onClick={handleNextPage}
+                                                disabled={!pageInfo.hasNextPage}
+                                                style={{
+                                                    padding: '0.5rem 1rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-secondary)',
+                                                    cursor: !pageInfo.hasNextPage ? 'not-allowed' : 'pointer',
+                                                    opacity: !pageInfo.hasNextPage ? 0.5 : 1
+                                                }}
+                                            >
+                                                Next <i className="fas fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="empty-state">
@@ -8737,7 +8807,7 @@
         // Main App component
         function FernPlatform() {
             const { route, navigate } = useRouter();
-            const [appData, setAppData] = useState({ health: null, projects: [], testRuns: [] });
+            const [appData, setAppData] = useState({ health: null, projects: [], testRuns: [], dashboardSummary: null });
             const [showSettings, setShowSettings] = useState(false);
 
             useEffect(() => {
@@ -8759,7 +8829,8 @@
                     setAppData({
                         health: summaryData.dashboardSummary.health,
                         projects: projectList,
-                        testRuns: [] // Pages will load their own test runs as needed
+                        testRuns: [],
+                        dashboardSummary: summaryData.dashboardSummary,
                     });
                 } catch (err) {
                     console.error('Failed to fetch app data:', err);

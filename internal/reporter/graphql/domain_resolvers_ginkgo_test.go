@@ -817,6 +817,7 @@ var _ = Describe("DomainResolvers", func() {
 				projects = append(projects, proj1)
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(1), nil)
+				mockTestRunRepo.On("Count", mock.Anything).Return(int64(0), nil)
 				mockTestRunRepo.On("GetRecent", mock.Anything, 100).Return([]*testingDomain.TestRun{}, nil)
 				mockTestRunRepo.On("GetLatestByProjectID", mock.Anything, "proj-1", 1).Return([]*testingDomain.TestRun{}, nil)
 
@@ -884,7 +885,7 @@ var _ = Describe("DomainResolvers", func() {
 
 		Context("without project filter", func() {
 			It("should return empty results when no test runs exist", func() {
-				mockRepo.On("FindAll", mock.Anything, 20, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
+				mockRepo.On("List", mock.Anything, 50, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
 
 				result, err := resolver.Query().(*queryResolver).TestRuns_domain(ctx, nil, nil, nil, nil, nil)
 

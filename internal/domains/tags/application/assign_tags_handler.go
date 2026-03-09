@@ -44,7 +44,13 @@ func (h *AssignTagsHandler) Handle(ctx context.Context, cmd AssignTagsCommand) e
 				return err
 			}
 
-			tagIDs = append(tagIDs, newTag.ID())
+			// Re-fetch the saved tag to get the database-assigned ID
+			savedTag, err := h.tagRepo.FindByName(ctx, tagName)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve saved tag %q: %w", tagName, err)
+			}
+
+			tagIDs = append(tagIDs, savedTag.ID())
 		} else {
 			tagIDs = append(tagIDs, tag.ID())
 		}
