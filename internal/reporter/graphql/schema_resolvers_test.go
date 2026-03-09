@@ -36,6 +36,9 @@ func setupTestProjectResolver(t *testing.T) *projectResolver {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
+	err = db.AutoMigrate(&database.ProjectPermission{})
+	require.NoError(t, err)
+
 	resolver := &Resolver{
 		logger: logger,
 		db:     db,
@@ -310,7 +313,7 @@ var _ = Describe("Schema Resolvers - Ginkgo Tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Migrate tables
-		err = db.AutoMigrate(&database.UserPreferences{}, &database.TestRun{}, &database.SuiteRun{}, &database.SpecRun{}, &database.Tag{})
+		err = db.AutoMigrate(&database.UserPreferences{}, &database.TestRun{}, &database.SuiteRun{}, &database.SpecRun{}, &database.Tag{}, &database.ProjectPermission{})
 		Expect(err).ToNot(HaveOccurred())
 
 		// Create a minimal resolver without services

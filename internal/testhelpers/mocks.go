@@ -284,6 +284,19 @@ func (m *MockTestRunRepository) Create(ctx context.Context, testRun *testingDoma
 	return args.Error(0)
 }
 
+func (m *MockTestRunRepository) Count(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) List(ctx context.Context, limit, offset int) ([]*testingDomain.TestRun, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*testingDomain.TestRun), args.Get(1).(int64), args.Error(2)
+}
+
 // MockTagRepository is a mock implementation of tagsDomain.TagRepository
 type MockTagRepository struct {
 	mock.Mock

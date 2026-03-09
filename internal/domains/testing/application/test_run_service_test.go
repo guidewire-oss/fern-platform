@@ -147,6 +147,19 @@ func (m *MockTestRunRepository) GetTestRunSummary(ctx context.Context, projectID
 	return args.Get(0).(*domain.TestRunSummary), args.Error(1)
 }
 
+func (m *MockTestRunRepository) Count(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) List(ctx context.Context, limit, offset int) ([]*domain.TestRun, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Get(1).(int64), args.Error(2)
+}
+
 // Mock suite run repository
 type MockSuiteRunRepository struct {
 	mock.Mock
@@ -779,6 +792,8 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return empty list when no project ID", func() {
+			mockTestRunRepo.On("List", mock.Anything, 10, 0).Return([]*domain.TestRun{}, int64(0), nil)
+
 			results, count, err := service.ListTestRuns(ctx, "", 10, 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(BeEmpty())

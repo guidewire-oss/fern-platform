@@ -904,15 +904,29 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		}
 	}
 
-	// Get test run statistics
+	// Get total test run count from DB
+	totalTestRunCount, err := r.testingService.CountTestRuns(ctx)
+	if err != nil {
+		r.logger.WithError(err).Error("Failed to count test runs for dashboard")
+		totalTestRunCount = 0
+	}
+
+	// Get recent runs for pass rate / duration stats and 24h count
 	recentRuns, err := r.testingService.GetRecentTestRuns(ctx, 100)
 	if err != nil {
 		// Log error but don't fail the whole query
 		r.logger.WithError(err).Error("Failed to get recent test runs for dashboard")
 	}
 
-	totalTestRuns := len(recentRuns)
-	recentTestRuns := len(recentRuns)
+	// Count runs submitted in the last 24 hours
+	recentTestRuns := 0
+	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+	for _, run := range recentRuns {
+		if run.StartTime.After(twentyFourHoursAgo) {
+			recentTestRuns++
+		}
+	}
+
 	overallPassRate := float64(0)
 	totalTestsExecuted := 0
 	avgDuration := 0
@@ -947,7 +961,7 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		},
 		ProjectCount:        int(totalProjects),
 		ActiveProjectCount:  int(activeProjects),
-		TotalTestRuns:       totalTestRuns,
+		TotalTestRuns:       int(totalTestRunCount),
 		RecentTestRuns:      recentTestRuns,
 		OverallPassRate:     overallPassRate,
 		TotalTestsExecuted:  totalTestsExecuted,
@@ -1130,9 +1144,9 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 
 // TestRuns implementation using domain service with pagination
 func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.TestRunConnection, error) {
-	// Apply pagination
-	pageSize := 20
-	if first != nil && *first > 0 && *first <= 100 {
+	// Apply pagination - default 50 per page
+	pageSize := 50
+	if first != nil && *first > 0 && *first <= 200 {
 		pageSize = *first
 	}
 

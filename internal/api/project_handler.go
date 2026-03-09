@@ -288,21 +288,7 @@ func (h *ProjectHandler) getProjectUsers(c *gin.Context) {
 
 // convertProjectToAPI converts a domain project to API response format
 func (h *ProjectHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
-	snapshot := p.ToSnapshot()
-	
-	return gin.H{
-		"id":            snapshot.ID,
-		"projectId":     string(snapshot.ProjectID),
-		"name":          snapshot.Name,
-		"description":   snapshot.Description,
-		"repository":    snapshot.Repository,
-		"defaultBranch": snapshot.DefaultBranch,
-		"team":          string(snapshot.Team),
-		"isActive":      snapshot.IsActive,
-		"settings":      snapshot.Settings, // Return settings as map, not string
-		"createdAt":     snapshot.CreatedAt,
-		"updatedAt":     snapshot.UpdatedAt,
-	}
+	return convertProjectToAPI(p)
 }
 
 // RegisterRoutes registers project routes

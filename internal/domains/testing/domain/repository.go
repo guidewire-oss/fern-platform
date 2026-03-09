@@ -33,8 +33,14 @@ type TestRunRepository interface {
 	// CountByProjectID counts test runs for a project
 	CountByProjectID(ctx context.Context, projectID string) (int64, error)
 
+	// Count counts all test runs
+	Count(ctx context.Context) (int64, error)
+
 	// GetRecent retrieves recent test runs across all projects
 	GetRecent(ctx context.Context, limit int) ([]*TestRun, error)
+
+	// List retrieves test runs with pagination
+	List(ctx context.Context, limit, offset int) ([]*TestRun, int64, error)
 }
 
 // SuiteRunRepository defines the interface for suite run persistence
