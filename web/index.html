@@ -6571,7 +6571,7 @@
             const [formData, setFormData] = useState({
                 name: project?.name || '',
                 description: project?.description || '',
-                team: project?.team || (teams.length > 0 ? teams[0] : ''),
+                team: project?.team || '',
                 repository: project?.repository || '',
                 defaultBranch: project?.defaultBranch || 'main'
             });
@@ -6695,9 +6695,12 @@
                                 <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: '500'}}>
                                     Team
                                 </label>
-                                <select
+                                <input
+                                    type="text"
+                                    list="teams-datalist"
                                     value={formData.team}
                                     onChange={(e) => setFormData({...formData, team: e.target.value})}
+                                    placeholder={isAdmin ? "Type or select a team (leave blank for no team)" : "Type or select a team"}
                                     style={{
                                         width: '100%',
                                         padding: '0.75rem',
@@ -6706,12 +6709,12 @@
                                         background: 'var(--bg-secondary)',
                                         color: 'var(--text-primary)'
                                     }}
-                                >
-                                    {isAdmin && <option value="">No team</option>}
+                                />
+                                <datalist id="teams-datalist">
                                     {teams.map(team => (
-                                        <option key={team} value={team}>{team}</option>
+                                        <option key={team} value={team} />
                                     ))}
-                                </select>
+                                </datalist>
                             </div>
                             
                             <div style={{marginBottom: '1rem'}}>
