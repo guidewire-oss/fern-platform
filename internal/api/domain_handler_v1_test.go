@@ -1447,707 +1447,152 @@ var _ = Describe("recordTestRun Integration Tests with Mocked Services", func() 
 		})
 	})
 
-	// TODO: getTestRuns auth-filtering behavior was removed with DomainHandler; update these tests to test the new architecture
-	XDescribe("getTestRuns with service account", func() {
-		It("should handle service account request without user", func() {
+	Describe("listTestRuns", func() {
+		var (
+			testRunRepo    *MockTestRunRepository
+			testingService *testingApp.TestRunService
+			handler        *TestRunHandler
+			listRouter     *gin.Engine
+		)
+
+		BeforeEach(func() {
 			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			testRunService := testingApp.NewTestRunService(nil, nil, nil)
-			handler := NewTestRunHandler(testRunService, nil, logger)
-
-			router.GET("/test-runs", handler.listTestRuns)
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusUnauthorized))
-			Expect(w.Body.String()).To(ContainSubstring("Authentication required"))
+			testRunRepo = new(MockTestRunRepository)
+			testingService = testingApp.NewTestRunService(testRunRepo, nil, nil)
+			handler = NewTestRunHandler(testingService, nil, logger)
+			listRouter = gin.New()
+			listRouter.GET("/test-runs", handler.listTestRuns)
 		})
 
-		It("should handle invalid user data", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			testRunService := testingApp.NewTestRunService(nil, nil, nil)
-			handler := NewTestRunHandler(testRunService, nil, logger)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", "not-a-user-object") // Invalid type
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			Expect(w.Body.String()).To(ContainSubstring("Invalid user data"))
-		})
-
-		It("should successfully retrieve test runs with projectId for regular user", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-			projectRepo := new(MockProjectRepository)
-			permissionRepo := new(MockProjectPermissionRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-			projectService := projectsApp.NewProjectService(projectRepo, permissionRepo)
-			_ = projectService
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha"},
-				},
-			}
-
-			// Create mock test runs
+		It("should list all test runs without project_id using default limit", func() {
 			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
+				{ID: 1, RunID: "run-123", ProjectID: "project-alpha", Status: "passed"},
+				{ID: 2, RunID: "run-456", ProjectID: "project-beta", Status: "failed"},
 			}
+			// No project_id → List(ctx, limit=50, offset=0)
+			testRunRepo.On("List", mock.Anything, 50, 0).Return(mockTestRuns, int64(2), nil)
 
-			// Create mock project
-			mockProject, _ := projectsDomain.NewProject(
-				projectsDomain.ProjectID("project-alpha"),
-				"Project Alpha",
-				projectsDomain.Team("team-alpha"),
-			)
-
-			// Setup expectations
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-alpha", 50).Return(mockTestRuns, nil)
-			projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-alpha")).Return(mockProject, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs?projectId=project-alpha", nil)
+			req := httptest.NewRequest("GET", "/test-runs", nil)
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
+			listRouter.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
 			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
+			Expect(response["total"]).To(Equal(float64(2)))
+			Expect(response["limit"]).To(Equal(float64(50)))
+			Expect(response["offset"]).To(Equal(float64(0)))
+			data := response["data"].([]interface{})
+			Expect(len(data)).To(Equal(2))
+			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should list test runs filtered by project_id", func() {
+			mockTestRuns := []*testingDomain.TestRun{
+				{ID: 1, RunID: "run-123", ProjectID: "project-alpha", Status: "passed", TotalTests: 10, PassedTests: 10},
+			}
+			// project_id provided → GetLatestByProjectID + CountByProjectID
+			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-alpha", 50).Return(mockTestRuns, nil)
+			testRunRepo.On("CountByProjectID", mock.Anything, "project-alpha").Return(int64(1), nil)
+
+			req := httptest.NewRequest("GET", "/test-runs?project_id=project-alpha", nil)
+			w := httptest.NewRecorder()
+			listRouter.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var response map[string]interface{}
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
 			Expect(response["total"]).To(Equal(float64(1)))
 			Expect(response["limit"]).To(Equal(float64(50)))
 			Expect(response["offset"]).To(Equal(float64(0)))
-
+			data := response["data"].([]interface{})
+			Expect(len(data)).To(Equal(1))
+			firstRun := data[0].(map[string]interface{})
+			Expect(firstRun["projectId"]).To(Equal("project-alpha"))
 			testRunRepo.AssertExpectations(GinkgoT())
-			projectRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should successfully retrieve test runs with projectId for service account", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user (service account)
-			testUser := &authDomain.User{
-				UserID: "service-account-123",
-				Email:  "service@example.com",
-				Name:   "Service Account",
-			}
-
-			// Create mock test runs
+		It("should respect custom limit and offset", func() {
 			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-				{
-					ID:           2,
-					RunID:        "run-456",
-					ProjectID:    "project-alpha",
-					Branch:       "develop",
-					Status:       "failed",
-					TotalTests:   20,
-					PassedTests:  18,
-					FailedTests:  2,
-					SkippedTests: 0,
-				},
+				{ID: 1, RunID: "run-123", ProjectID: "project-alpha", Status: "passed"},
 			}
-
-			// Setup expectations
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-alpha", 50).Return(mockTestRuns, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				c.Set("is_service_account", true) // Service account flag
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs?projectId=project-alpha", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(2))) // Service account sees all test runs
-			Expect(response["limit"]).To(Equal(float64(50)))
-			Expect(response["offset"]).To(Equal(float64(0)))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-		})
-
-		It("should return 500 when GetProjectTestRuns fails", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-			}
-
-			// Setup expectations - return error
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-alpha", 50).
-				Return([]*testingDomain.TestRun{}, fmt.Errorf("database error"))
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs?projectId=project-alpha", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			Expect(w.Body.String()).To(ContainSubstring("database error"))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-		})
-
-		It("should successfully retrieve recent test runs without projectId for regular user", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-			projectRepo := new(MockProjectRepository)
-			permissionRepo := new(MockProjectPermissionRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-			projectService := projectsApp.NewProjectService(projectRepo, permissionRepo)
-			_ = projectService
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha"},
-				},
-			}
-
-			// Create mock test runs
-			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-			}
-
-			// Create mock project
-			mockProject, _ := projectsDomain.NewProject(
-				projectsDomain.ProjectID("project-alpha"),
-				"Project Alpha",
-				projectsDomain.Team("team-alpha"),
-			)
-
-			// Setup expectations
-			testRunRepo.On("GetRecent", mock.Anything, 50).Return(mockTestRuns, nil)
-			projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-alpha")).Return(mockProject, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(1)))
-			Expect(response["limit"]).To(Equal(float64(50)))
-			Expect(response["offset"]).To(Equal(float64(0)))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-			projectRepo.AssertExpectations(GinkgoT())
-		})
-
-		It("should successfully retrieve recent test runs without projectId for service account", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user (service account)
-			testUser := &authDomain.User{
-				UserID: "service-account-123",
-				Email:  "service@example.com",
-				Name:   "Service Account",
-			}
-
-			// Create mock test runs
-			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-				{
-					ID:           2,
-					RunID:        "run-456",
-					ProjectID:    "project-beta",
-					Branch:       "develop",
-					Status:       "failed",
-					TotalTests:   20,
-					PassedTests:  18,
-					FailedTests:  2,
-					SkippedTests: 0,
-				},
-			}
-
-			// Setup expectations
-			testRunRepo.On("GetRecent", mock.Anything, 50).Return(mockTestRuns, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				c.Set("is_service_account", true) // Service account flag
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(2))) // Service account sees all test runs
-			Expect(response["limit"]).To(Equal(float64(50)))
-			Expect(response["offset"]).To(Equal(float64(0)))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-		})
-
-		It("should return 500 when GetRecentTestRuns fails", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-			}
-
-			// Setup expectations - return error
-			testRunRepo.On("GetRecent", mock.Anything, 50).
-				Return([]*testingDomain.TestRun{}, fmt.Errorf("database connection failed"))
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			Expect(w.Body.String()).To(ContainSubstring("database connection failed"))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-		})
-
-		It("should parse custom limit and offset query parameters", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user (service account for simplicity)
-			testUser := &authDomain.User{
-				UserID: "service-account-123",
-				Email:  "service@example.com",
-				Name:   "Service Account",
-			}
-
-			// Create mock test runs
-			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-			}
-
-			// Setup expectations with custom limit
-			testRunRepo.On("GetRecent", mock.Anything, 100).Return(mockTestRuns, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				c.Set("is_service_account", true)
-				handler.listTestRuns(c)
-			})
+			testRunRepo.On("List", mock.Anything, 100, 20).Return(mockTestRuns, int64(1), nil)
 
 			req := httptest.NewRequest("GET", "/test-runs?limit=100&offset=20", nil)
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
+			listRouter.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
 			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["limit"]).To(Equal(float64(100))) // Custom limit
-			Expect(response["offset"]).To(Equal(float64(20))) // Custom offset
-			Expect(response["total"]).To(Equal(float64(1)))
-
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
+			Expect(response["limit"]).To(Equal(float64(100)))
+			Expect(response["offset"]).To(Equal(float64(20)))
 			testRunRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should filter test runs by user groups for regular user", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-			projectRepo := new(MockProjectRepository)
-			permissionRepo := new(MockProjectPermissionRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-			projectService := projectsApp.NewProjectService(projectRepo, permissionRepo)
-			_ = projectService
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user with specific group
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha"}, // User only in team-alpha
-				},
-			}
-
-			// Create mock test runs from different projects
-			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-				{
-					ID:           2,
-					RunID:        "run-456",
-					ProjectID:    "project-beta",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   5,
-					PassedTests:  5,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-			}
-
-			// Create mock projects
-			mockProjectAlpha, _ := projectsDomain.NewProject(
-				projectsDomain.ProjectID("project-alpha"),
-				"Project Alpha",
-				projectsDomain.Team("team-alpha"), // User has access
-			)
-			mockProjectBeta, _ := projectsDomain.NewProject(
-				projectsDomain.ProjectID("project-beta"),
-				"Project Beta",
-				projectsDomain.Team("team-beta"), // User does NOT have access
-			)
-
-			// Setup expectations
-			testRunRepo.On("GetRecent", mock.Anything, 50).Return(mockTestRuns, nil)
-			projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-alpha")).Return(mockProjectAlpha, nil)
-			projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-beta")).Return(mockProjectBeta, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
+		It("should return 400 for limit <= 0", func() {
+			req := httptest.NewRequest("GET", "/test-runs?limit=0", nil)
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
+			listRouter.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusOK))
-
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
 			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-
-			// Should only see 1 test run (project-alpha), not project-beta
-			Expect(response["total"]).To(Equal(float64(1)))
-
-			// Verify the returned test run is from project-alpha
-			data := response["data"].([]interface{})
-			Expect(len(data)).To(Equal(1))
-			firstTestRun := data[0].(map[string]interface{})
-			Expect(firstTestRun["projectId"]).To(Equal("project-alpha"))
-
-			testRunRepo.AssertExpectations(GinkgoT())
-			projectRepo.AssertExpectations(GinkgoT())
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
+			Expect(response["error"]).To(ContainSubstring("limit must be greater than 0"))
 		})
 
-		It("should return empty data array when user has no access to any projects", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
+		It("should return 500 when listing by project_id fails", func() {
+			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-alpha", 50).
+				Return([]*testingDomain.TestRun{}, fmt.Errorf("database error"))
 
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-			projectRepo := new(MockProjectRepository)
-			permissionRepo := new(MockProjectPermissionRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-			projectService := projectsApp.NewProjectService(projectRepo, permissionRepo)
-			_ = projectService
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user with no matching groups
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-gamma"}, // User in team-gamma
-				},
-			}
-
-			// Create mock test runs
-			mockTestRuns := []*testingDomain.TestRun{
-				{
-					ID:           1,
-					RunID:        "run-123",
-					ProjectID:    "project-alpha",
-					Branch:       "main",
-					Status:       "passed",
-					TotalTests:   10,
-					PassedTests:  10,
-					FailedTests:  0,
-					SkippedTests: 0,
-				},
-			}
-
-			// Create mock project with different team
-			mockProject, _ := projectsDomain.NewProject(
-				projectsDomain.ProjectID("project-alpha"),
-				"Project Alpha",
-				projectsDomain.Team("team-alpha"), // User NOT in this team
-			)
-
-			// Setup expectations
-			testRunRepo.On("GetRecent", mock.Anything, 50).Return(mockTestRuns, nil)
-			projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-alpha")).Return(mockProject, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.listTestRuns(c)
-			})
-
-			req := httptest.NewRequest("GET", "/test-runs", nil)
+			req := httptest.NewRequest("GET", "/test-runs?project_id=project-alpha", nil)
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
+			listRouter.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(0))) // User sees no test runs
-
-			data := response["data"].([]interface{})
-			Expect(len(data)).To(Equal(0))
-
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			Expect(w.Body.String()).To(ContainSubstring("database error"))
 			testRunRepo.AssertExpectations(GinkgoT())
-			projectRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should handle empty test runs list", func() {
-			gin.SetMode(gin.TestMode)
-			router := gin.New()
-
-			// Create mocks
-			testRunRepo := new(MockTestRunRepository)
-
-			// Create services
-			testingService := testingApp.NewTestRunService(testRunRepo, nil, nil)
-
-			// Create handler
-			handler := NewTestRunHandler(testingService, nil, logger)
-
-			// Create test user (service account for simplicity)
-			testUser := &authDomain.User{
-				UserID: "service-account-123",
-				Email:  "service@example.com",
-				Name:   "Service Account",
-			}
-
-			// Setup expectations - return empty list
-			testRunRepo.On("GetRecent", mock.Anything, 50).Return([]*testingDomain.TestRun{}, nil)
-
-			router.GET("/test-runs", func(c *gin.Context) {
-				c.Set("user", testUser)
-				c.Set("is_service_account", true)
-				handler.listTestRuns(c)
-			})
+		It("should return 500 when listing all test runs fails", func() {
+			testRunRepo.On("List", mock.Anything, 50, 0).
+				Return([]*testingDomain.TestRun{}, int64(0), fmt.Errorf("database connection failed"))
 
 			req := httptest.NewRequest("GET", "/test-runs", nil)
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
+			listRouter.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			Expect(w.Body.String()).To(ContainSubstring("database connection failed"))
+			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return empty data array when no test runs exist", func() {
+			testRunRepo.On("List", mock.Anything, 50, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
+
+			req := httptest.NewRequest("GET", "/test-runs", nil)
+			w := httptest.NewRecorder()
+			listRouter.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
 			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
 			Expect(response["total"]).To(Equal(float64(0)))
-			Expect(response["limit"]).To(Equal(float64(50)))
-			Expect(response["offset"]).To(Equal(float64(0)))
-
 			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(0))
-
 			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return 400 for non-numeric limit", func() {
+			// strconv.Atoi("invalid") returns l=0, which hits the l<=0 branch → 400
+			req := httptest.NewRequest("GET", "/test-runs?limit=invalid", nil)
+			w := httptest.NewRecorder()
+			listRouter.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+			var response map[string]interface{}
+			Expect(json.Unmarshal(w.Body.Bytes(), &response)).To(Succeed())
+			Expect(response["error"]).To(ContainSubstring("limit must be greater than 0"))
 		})
 	})
 })
@@ -4907,8 +4352,7 @@ var _ = Describe("startTestRun Method Tests", func() {
 	})
 })
 
-// TODO: getProjects response format differs from ProjectHandler.listProjects; update these tests
-var _ = XDescribe("getProjects Method Tests", func() {
+var _ = Describe("getProjects Method Tests", func() {
 	var (
 		handler        *ProjectHandler
 		router         *gin.Engine
@@ -4921,7 +4365,6 @@ var _ = XDescribe("getProjects Method Tests", func() {
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
 
-		// Initialize logger
 		loggingConfig := &config.LoggingConfig{
 			Level:  "info",
 			Format: "json",
@@ -4930,24 +4373,18 @@ var _ = XDescribe("getProjects Method Tests", func() {
 		logger, err = logging.NewLogger(loggingConfig)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create mocks
 		projectRepo = new(MockProjectRepository)
 		permissionRepo = new(MockProjectPermissionRepository)
 
-		// Create services with mocks
 		projectService = projectsApp.NewProjectService(projectRepo, permissionRepo)
-
-		// Create handler
 		handler = NewProjectHandler(projectService, logger)
 
-		// Setup router
 		router = gin.New()
 		router.GET("/api/v1/projects", handler.listProjects)
 	})
 
 	Describe("Successful Project Retrieval", func() {
 		It("should retrieve projects with default limit and offset", func() {
-			// Create mock projects
 			mockProject1, _ := projectsDomain.NewProject(
 				projectsDomain.ProjectID("project-1"),
 				"Project One",
@@ -4960,28 +4397,22 @@ var _ = XDescribe("getProjects Method Tests", func() {
 			)
 			mockProjects := []*projectsDomain.Project{mockProject1, mockProject2}
 
-			// Setup expectations with default limit=100, offset=0
-			projectRepo.On("FindAll", mock.Anything, 100, 0).Return(mockProjects, int64(2), nil)
+			// Default limit=20, offset=0
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return(mockProjects, int64(2), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("X-Total-Count")).To(Equal("2"))
 
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			// Response is a flat JSON array
+			var data []interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &data)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(2)))
-			Expect(response["limit"]).To(Equal(float64(100))) // Default limit
-			Expect(response["offset"]).To(Equal(float64(0)))  // Default offset
-
-			// Verify data structure
-			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(2))
 
-			// Verify first project
 			firstProject := data[0].(map[string]interface{})
 			Expect(firstProject["projectId"]).To(Equal("project-1"))
 			Expect(firstProject["name"]).To(Equal("Project One"))
@@ -4991,7 +4422,6 @@ var _ = XDescribe("getProjects Method Tests", func() {
 		})
 
 		It("should retrieve projects with custom limit and offset", func() {
-			// Create mock project
 			mockProject, _ := projectsDomain.NewProject(
 				projectsDomain.ProjectID("project-3"),
 				"Project Three",
@@ -4999,7 +4429,6 @@ var _ = XDescribe("getProjects Method Tests", func() {
 			)
 			mockProjects := []*projectsDomain.Project{mockProject}
 
-			// Setup expectations with custom limit=50, offset=10
 			projectRepo.On("FindAll", mock.Anything, 50, 10).Return(mockProjects, int64(100), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects?limit=50&offset=10", nil)
@@ -5007,47 +4436,35 @@ var _ = XDescribe("getProjects Method Tests", func() {
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("X-Total-Count")).To(Equal("100"))
 
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			var data []interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &data)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(100)))
-			Expect(response["limit"]).To(Equal(float64(50)))  // Custom limit
-			Expect(response["offset"]).To(Equal(float64(10))) // Custom offset
-
-			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(1))
 
 			projectRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should handle empty projects list", func() {
-			// Setup expectations - return empty list
-			projectRepo.On("FindAll", mock.Anything, 100, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("X-Total-Count")).To(Equal("0"))
 
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			var data []interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &data)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["data"]).NotTo(BeNil())
-			Expect(response["total"]).To(Equal(float64(0)))
-			Expect(response["limit"]).To(Equal(float64(100)))
-			Expect(response["offset"]).To(Equal(float64(0)))
-
-			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(0))
 
 			projectRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should retrieve multiple projects and convert them to API format", func() {
-			// Create 3 mock projects
 			mockProject1, _ := projectsDomain.NewProject(
 				projectsDomain.ProjectID("proj-alpha"),
 				"Alpha Project",
@@ -5065,31 +4482,26 @@ var _ = XDescribe("getProjects Method Tests", func() {
 			)
 			mockProjects := []*projectsDomain.Project{mockProject1, mockProject2, mockProject3}
 
-			// Setup expectations
-			projectRepo.On("FindAll", mock.Anything, 100, 0).Return(mockProjects, int64(3), nil)
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return(mockProjects, int64(3), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("X-Total-Count")).To(Equal("3"))
 
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			var data []interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &data)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(response["total"]).To(Equal(float64(3)))
-
-			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(3))
 
-			// Verify each project has required fields
 			for i, projectData := range data {
 				project := projectData.(map[string]interface{})
 				Expect(project["projectId"]).NotTo(BeEmpty())
 				Expect(project["name"]).NotTo(BeEmpty())
 				Expect(project["team"]).NotTo(BeEmpty())
 
-				// Verify projects are in correct order
 				if i == 0 {
 					Expect(project["projectId"]).To(Equal("proj-alpha"))
 				} else if i == 1 {
@@ -5103,71 +4515,44 @@ var _ = XDescribe("getProjects Method Tests", func() {
 		})
 
 		It("should parse large limit values correctly", func() {
-			mockProjects := []*projectsDomain.Project{}
-
-			// Setup expectations with large limit
-			projectRepo.On("FindAll", mock.Anything, 1000, 50).Return(mockProjects, int64(0), nil)
+			projectRepo.On("FindAll", mock.Anything, 1000, 50).Return([]*projectsDomain.Project{}, int64(0), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects?limit=1000&offset=50", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["limit"]).To(Equal(float64(1000)))
-			Expect(response["offset"]).To(Equal(float64(50)))
-
 			projectRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should handle invalid limit parameter gracefully (defaults to 0)", func() {
-			mockProjects := []*projectsDomain.Project{}
-
-			// Setup expectations - invalid limit converts to 0 by strconv.Atoi
-			projectRepo.On("FindAll", mock.Anything, 0, 0).Return(mockProjects, int64(0), nil)
+		It("should handle invalid limit parameter gracefully (keeps default of 20)", func() {
+			// strconv.Atoi fails on "invalid", so limit stays at default 20
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects?limit=invalid", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["limit"]).To(Equal(float64(0))) // Invalid converts to 0
-
 			projectRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should handle invalid offset parameter gracefully (converts to 0)", func() {
-			mockProjects := []*projectsDomain.Project{}
-
-			// Setup expectations - invalid offset converts to 0 by strconv.Atoi
-			projectRepo.On("FindAll", mock.Anything, 100, 0).Return(mockProjects, int64(0), nil)
+		It("should handle invalid offset parameter gracefully (keeps default of 0)", func() {
+			// strconv.Atoi fails on "invalid", so offset stays at default 0
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects?offset=invalid", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["offset"]).To(Equal(float64(0))) // Invalid converts to 0
-
 			projectRepo.AssertExpectations(GinkgoT())
 		})
 	})
 
 	Describe("Error Handling", func() {
 		It("should return 500 when ListProjects fails", func() {
-			// Setup expectations - return error
-			projectRepo.On("FindAll", mock.Anything, 100, 0).
+			projectRepo.On("FindAll", mock.Anything, 20, 0).
 				Return([]*projectsDomain.Project{}, int64(0), fmt.Errorf("database connection failed"))
 
 			req := httptest.NewRequest("GET", "/api/v1/projects", nil)
@@ -5185,7 +4570,6 @@ var _ = XDescribe("getProjects Method Tests", func() {
 		})
 
 		It("should return 500 when ListProjects returns a service error", func() {
-			// Setup expectations - return service layer error
 			projectRepo.On("FindAll", mock.Anything, 50, 25).
 				Return([]*projectsDomain.Project{}, int64(0), fmt.Errorf("service unavailable"))
 
@@ -5205,7 +4589,7 @@ var _ = XDescribe("getProjects Method Tests", func() {
 	})
 
 	Describe("Response Format Validation", func() {
-		It("should return correct response structure with all required fields", func() {
+		It("should return correct project structure with all required fields", func() {
 			mockProject, _ := projectsDomain.NewProject(
 				projectsDomain.ProjectID("test-project"),
 				"Test Project",
@@ -5213,26 +4597,19 @@ var _ = XDescribe("getProjects Method Tests", func() {
 			)
 			mockProjects := []*projectsDomain.Project{mockProject}
 
-			projectRepo.On("FindAll", mock.Anything, 100, 0).Return(mockProjects, int64(1), nil)
+			projectRepo.On("FindAll", mock.Anything, 20, 0).Return(mockProjects, int64(1), nil)
 
 			req := httptest.NewRequest("GET", "/api/v1/projects", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("X-Total-Count")).To(Equal("1"))
 
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
+			// Response is a flat array; total is in the X-Total-Count header
+			var data []interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &data)
 			Expect(err).NotTo(HaveOccurred())
-
-			// Verify top-level response structure
-			Expect(response).To(HaveKey("data"))
-			Expect(response).To(HaveKey("total"))
-			Expect(response).To(HaveKey("limit"))
-			Expect(response).To(HaveKey("offset"))
-
-			// Verify project data structure
-			data := response["data"].([]interface{})
 			Expect(len(data)).To(Equal(1))
 
 			project := data[0].(map[string]interface{})
@@ -5253,8 +4630,7 @@ var _ = XDescribe("getProjects Method Tests", func() {
 	})
 })
 
-// TODO: getCurrentUser uses different context keys in AuthHandler; update these tests
-var _ = XDescribe("getCurrentUser Method Tests", func() {
+var _ = Describe("getCurrentUser Method Tests", func() {
 	var (
 		handler *AuthHandler
 		router  *gin.Engine
@@ -5264,7 +4640,6 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
 
-		// Initialize logger
 		loggingConfig := &config.LoggingConfig{
 			Level:  "info",
 			Format: "json",
@@ -5273,34 +4648,24 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 		logger, err = logging.NewLogger(loggingConfig)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create handler (no services needed for this endpoint)
 		handler = NewAuthHandler(nil, logger)
 
-		// Setup router
 		router = gin.New()
 		router.GET("/auth/user", func(c *gin.Context) {
-			// getCurrentUser expects user to be set in context by middleware
-			// Tests will set the user individually
 			handler.getCurrentUser(c)
 		})
 	})
 
 	Describe("Successful User Retrieval", func() {
 		It("should return current user data with all fields", func() {
-			testUser := &authDomain.User{
-				UserID: "user-123",
-				Email:  "test@example.com",
-				Name:   "Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha"},
-					{GroupName: "team-beta"},
-				},
-			}
-
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "user-123")
+				c.Set("user_name", "Test User")
+				c.Set("user_email", "test@example.com")
+				c.Set("role", "user")
+				c.Set("team_id", "team-alpha")
+				c.Set("team_name", "Alpha Team")
 				handler.getCurrentUser(c)
 			})
 
@@ -5319,27 +4684,21 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 			Expect(response["name"]).To(Equal("Test User"))
 			Expect(response["role"]).To(Equal("user"))
 
-			// Verify teams array
-			teams := response["teams"].([]interface{})
-			Expect(len(teams)).To(Equal(2))
-			Expect(teams[0]).To(Equal("team-alpha"))
-			Expect(teams[1]).To(Equal("team-beta"))
+			team, ok := response["team"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(team["id"]).To(Equal("team-alpha"))
+			Expect(team["name"]).To(Equal("Alpha Team"))
 		})
 
 		It("should return user with admin role", func() {
-			testUser := &authDomain.User{
-				UserID: "admin-123",
-				Email:  "admin@example.com",
-				Name:   "Admin User",
-				Role:   authDomain.RoleAdmin,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "admins"},
-				},
-			}
-
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "admin-123")
+				c.Set("user_name", "Admin User")
+				c.Set("user_email", "admin@example.com")
+				c.Set("role", "admin")
+				c.Set("team_id", "admins")
+				c.Set("team_name", "Admins")
 				handler.getCurrentUser(c)
 			})
 
@@ -5355,26 +4714,17 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 
 			Expect(response["id"]).To(Equal("admin-123"))
 			Expect(response["role"]).To(Equal("admin"))
-
-			teams := response["teams"].([]interface{})
-			Expect(len(teams)).To(Equal(1))
-			Expect(teams[0]).To(Equal("admins"))
 		})
 
 		It("should return user with manager role", func() {
-			testUser := &authDomain.User{
-				UserID: "manager-123",
-				Email:  "manager@example.com",
-				Name:   "Manager User",
-				Role:   authDomain.RoleManager,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha-managers"},
-				},
-			}
-
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "manager-123")
+				c.Set("user_name", "Manager User")
+				c.Set("user_email", "manager@example.com")
+				c.Set("role", "manager")
+				c.Set("team_id", "team-alpha-managers")
+				c.Set("team_name", "Alpha Managers")
 				handler.getCurrentUser(c)
 			})
 
@@ -5390,24 +4740,16 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 
 			Expect(response["id"]).To(Equal("manager-123"))
 			Expect(response["role"]).To(Equal("manager"))
-
-			teams := response["teams"].([]interface{})
-			Expect(len(teams)).To(Equal(1))
-			Expect(teams[0]).To(Equal("team-alpha-managers"))
 		})
 
-		It("should return user with no groups", func() {
-			testUser := &authDomain.User{
-				UserID: "user-456",
-				Email:  "newuser@example.com",
-				Name:   "New User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{}, // Empty groups
-			}
-
+		It("should return 200 with empty team fields when team context keys are absent", func() {
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "user-456")
+				c.Set("user_email", "newuser@example.com")
+				c.Set("user_name", "New User")
+				c.Set("role", "user")
+				// team_id and team_name not set
 				handler.getCurrentUser(c)
 			})
 
@@ -5426,28 +4768,18 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 			Expect(response["name"]).To(Equal("New User"))
 			Expect(response["role"]).To(Equal("user"))
 
-			// Verify teams is nil (no groups)
-			Expect(response["teams"]).To(BeNil())
+			team, ok := response["team"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(team["id"]).To(BeNil())
+			Expect(team["name"]).To(BeNil())
 		})
 
-		It("should return user with many groups", func() {
-			testUser := &authDomain.User{
-				UserID: "user-789",
-				Email:  "multigroup@example.com",
-				Name:   "Multi Group User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "team-alpha"},
-					{GroupName: "team-beta"},
-					{GroupName: "team-gamma"},
-					{GroupName: "team-delta"},
-					{GroupName: "team-epsilon"},
-				},
-			}
-
+		It("should return 200 with nil optional fields when only user_id is set", func() {
+			// auth middleware always sets user_id; other keys are optional
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "user-minimal")
+				// user_name, user_email, role, team_id, team_name not set
 				handler.getCurrentUser(c)
 			})
 
@@ -5461,162 +4793,23 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 			err := json.Unmarshal(w.Body.Bytes(), &response)
 			Expect(err).NotTo(HaveOccurred())
 
-			teams := response["teams"].([]interface{})
-			Expect(len(teams)).To(Equal(5))
-			Expect(teams[0]).To(Equal("team-alpha"))
-			Expect(teams[1]).To(Equal("team-beta"))
-			Expect(teams[2]).To(Equal("team-gamma"))
-			Expect(teams[3]).To(Equal("team-delta"))
-			Expect(teams[4]).To(Equal("team-epsilon"))
-		})
-
-		It("should handle user with nil Groups slice", func() {
-			testUser := &authDomain.User{
-				UserID: "user-999",
-				Email:  "nilgroups@example.com",
-				Name:   "Nil Groups User",
-				Role:   authDomain.RoleUser,
-				Groups: nil, // nil groups
-			}
-
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(response["id"]).To(Equal("user-999"))
-			Expect(response["teams"]).To(BeNil())
-		})
-	})
-
-	Describe("Error Cases", func() {
-		It("should return 401 when user does not exist in context", func() {
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				// Don't set user in context
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusUnauthorized))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["error"]).To(Equal("User not found"))
-		})
-
-		It("should return 401 when user is nil", func() {
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", nil) // Set user as nil
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusUnauthorized))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["error"]).To(Equal("User not found"))
-		})
-
-		It("should return 500 when user data is invalid type", func() {
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", "invalid-string") // Wrong type
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["error"]).To(Equal("Invalid user data"))
-		})
-
-		It("should return 500 when user data is wrong struct type", func() {
-			type WrongUser struct {
-				ID   string
-				Name string
-			}
-
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", &WrongUser{ID: "123", Name: "Test"}) // Wrong struct
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["error"]).To(Equal("Invalid user data"))
-		})
-
-		It("should return 500 when user data is a number", func() {
-			router = gin.New()
-			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", 12345) // Wrong type - number
-				handler.getCurrentUser(c)
-			})
-
-			req := httptest.NewRequest("GET", "/auth/user", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
-
-			var response map[string]interface{}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(response["error"]).To(Equal("Invalid user data"))
+			Expect(response["id"]).To(Equal("user-minimal"))
+			Expect(response["name"]).To(BeNil())
+			Expect(response["email"]).To(BeNil())
+			Expect(response["role"]).To(BeNil())
 		})
 	})
 
 	Describe("Response Format Validation", func() {
 		It("should return response with exactly the expected fields", func() {
-			testUser := &authDomain.User{
-				UserID: "user-format-test",
-				Email:  "format@example.com",
-				Name:   "Format Test User",
-				Role:   authDomain.RoleUser,
-				Groups: []authDomain.UserGroup{
-					{GroupName: "test-team"},
-				},
-			}
-
 			router = gin.New()
 			router.GET("/auth/user", func(c *gin.Context) {
-				c.Set("user", testUser)
+				c.Set("user_id", "user-format-test")
+				c.Set("user_email", "format@example.com")
+				c.Set("user_name", "Format Test User")
+				c.Set("role", "user")
+				c.Set("team_id", "test-team")
+				c.Set("team_name", "Test Team")
 				handler.getCurrentUser(c)
 			})
 
@@ -5635,12 +4828,11 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 			Expect(response).To(HaveKey("email"))
 			Expect(response).To(HaveKey("name"))
 			Expect(response).To(HaveKey("role"))
-			Expect(response).To(HaveKey("teams"))
+			Expect(response).To(HaveKey("team"))
 
 			// Verify exactly 5 keys (no extra fields)
 			Expect(len(response)).To(Equal(5))
 
-			// Verify types
 			_, ok := response["id"].(string)
 			Expect(ok).To(BeTrue(), "id should be a string")
 
@@ -5653,8 +4845,8 @@ var _ = XDescribe("getCurrentUser Method Tests", func() {
 			_, ok = response["role"].(string)
 			Expect(ok).To(BeTrue(), "role should be a string")
 
-			_, ok = response["teams"].([]interface{})
-			Expect(ok).To(BeTrue(), "teams should be an array")
+			_, ok = response["team"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "team should be an object")
 		})
 	})
 })

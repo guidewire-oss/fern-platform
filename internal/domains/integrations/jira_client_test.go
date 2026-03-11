@@ -213,5 +213,6 @@ func TestDefaultJiraClient_CommonHeaders(t *testing.T) {
 	defer server.Close()
 
 	client := integrations.NewDefaultJiraClient()
-	_ = client.TestConnection(context.Background(), server.URL, "user", "token", integrations.AuthTypeAPIToken)
+	err := client.TestConnection(context.Background(), server.URL, "user", "token", integrations.AuthTypeAPIToken)
+	assert.NoError(t, err)
 }

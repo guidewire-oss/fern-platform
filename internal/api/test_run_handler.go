@@ -79,7 +79,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		existing, err := h.testingService.GetTestRunByRunID(c.Request.Context(), runID)
 		if err == nil && existing != nil {
 			testRun = existing
-			fmt.Println("Test run exists, runID:", runID)
+			h.logger.WithTestRun(runID, "").Debug("Test run exists, reusing existing run")
 		}
 	}
 
@@ -102,7 +102,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		}
 
 		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
-		fmt.Println("alreadyExisted:", alreadyExisted)
+		h.logger.WithTestRun(newTestRun.RunID, newTestRun.ProjectID).WithField("alreadyExisted", alreadyExisted).Debug("CreateTestRun result")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -182,6 +182,11 @@ func (h *TestRunHandler) startTestRun(c *gin.Context) {
 		environment = "default"
 	}
 
+	tags := make([]domain.Tag, len(req.Tags))
+	for i, t := range req.Tags {
+		tags[i] = domain.Tag{Name: t}
+	}
+
 	testRun := &domain.TestRun{
 		ProjectID:   req.ProjectID,
 		RunID:       req.RunID,
@@ -190,6 +195,7 @@ func (h *TestRunHandler) startTestRun(c *gin.Context) {
 		Environment: environment,
 		Status:      "running",
 		StartTime:   time.Now(),
+		Tags:        tags,
 		Metadata:    req.Metadata,
 	}
 

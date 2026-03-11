@@ -244,6 +244,7 @@ var _ = Describe("AuthenticateWithOAuth - additional tests", func() {
 	Describe("generateSessionID", func() {
 		It("should produce unique session IDs across multiple authentications", func() {
 			// Create two users with sessions and verify they get different session IDs
+			var sessionIDs []string
 			for _, sub := range []string{"user-a", "user-b"} {
 				userInfo := application.UserInfo{
 					Sub:   sub,
@@ -268,7 +269,9 @@ var _ = Describe("AuthenticateWithOAuth - additional tests", func() {
 				result, err := authService.AuthenticateWithOAuth(ctx, userInfo, tokenInfo, "", "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Session.SessionID).NotTo(BeEmpty())
+				sessionIDs = append(sessionIDs, result.Session.SessionID)
 			}
+			Expect(sessionIDs[0]).NotTo(Equal(sessionIDs[1]))
 		})
 	})
 })

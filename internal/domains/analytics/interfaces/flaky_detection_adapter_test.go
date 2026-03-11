@@ -132,8 +132,12 @@ var _ = Describe("FlakyDetectionAdapter", func() {
 
 		It("should return 400 when project ID is empty", func() {
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("GET", "/api/v1/projects//flaky-tests", nil)
-			router.ServeHTTP(w, req)
+			c, _ := gin.CreateTestContext(w)
+			c.Request, _ = http.NewRequest("GET", "/api/v1/projects//flaky-tests", nil)
+			// Set an empty projectId param directly; the router would return 404
+			// for a double-slash URL because named params cannot be empty.
+			c.Params = gin.Params{{Key: "projectId", Value: ""}}
+			adapter.GetFlakyTests()(c)
 
 			Expect(w.Code).To(Equal(400))
 			Expect(w.Body.String()).To(ContainSubstring("project ID is required"))

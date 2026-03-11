@@ -4726,6 +4726,7 @@
             const [pageInfo, setPageInfo] = useState(null);
             const [totalCount, setTotalCount] = useState(0);
             const [currentCursor, setCurrentCursor] = useState(null);
+            const [cursorHistory, setCursorHistory] = useState([]);
 
             useEffect(() => {
                 fetchData();
@@ -4789,13 +4790,17 @@
 
             const handleNextPage = () => {
                 if (pageInfo?.hasNextPage) {
+                    setCursorHistory(prev => [...prev, currentCursor]);
                     setCurrentCursor(pageInfo.endCursor);
                 }
             };
 
             const handlePreviousPage = () => {
-                if (currentCursor) {
-                    setCurrentCursor(null); // For now, go back to first page
+                if (cursorHistory.length > 0) {
+                    const prev = [...cursorHistory];
+                    const previousCursor = prev.pop();
+                    setCursorHistory(prev);
+                    setCurrentCursor(previousCursor);
                 }
             };
 
@@ -5174,14 +5179,14 @@
                                         <div style={{display: 'flex', gap: '0.5rem'}}>
                                             <button
                                                 onClick={handlePreviousPage}
-                                                disabled={!currentCursor}
+                                                disabled={cursorHistory.length === 0}
                                                 style={{
                                                     padding: '0.5rem 1rem',
                                                     borderRadius: 'var(--radius-md)',
                                                     border: '1px solid var(--border-color)',
                                                     background: 'var(--bg-secondary)',
-                                                    cursor: !currentCursor ? 'not-allowed' : 'pointer',
-                                                    opacity: !currentCursor ? 0.5 : 1
+                                                    cursor: cursorHistory.length === 0 ? 'not-allowed' : 'pointer',
+                                                    opacity: cursorHistory.length === 0 ? 0.5 : 1
                                                 }}
                                             >
                                                 <i className="fas fa-chevron-left"></i> Previous

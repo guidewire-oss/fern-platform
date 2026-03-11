@@ -153,13 +153,13 @@ func TestRequireAuth_WrongSigningMethod(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	m := newTestAuthMiddleware(t, true)
 
-	// Create token with RSA signing method but sign with HMAC (will fail validation)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS384, jwt.MapClaims{
+	// Create token with "none" algorithm — not HMAC, so the middleware must reject it
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{
 		"sub": "user-123",
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
-	// This will fail because the middleware expects HS256
-	tokenStr, _ := token.SignedString([]byte(testJWTSecret))
+	tokenStr, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	require.NoError(t, err)
 
 	router := gin.New()
 	router.Use(m.RequireAuth())
@@ -172,8 +172,7 @@ func TestRequireAuth_WrongSigningMethod(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	router.ServeHTTP(w, req)
 
-	// HS384 is still HMAC, so it should be accepted by the signing method check
-	// but let's test with a malformed auth header instead
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestRequireAuth_MalformedAuthHeader(t *testing.T) {

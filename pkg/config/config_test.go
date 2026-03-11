@@ -507,7 +507,7 @@ auth:
 		It("should return auth config through GetAuthConfig", func() {
 			authCfg := config.GetAuthConfig()
 			Expect(authCfg).NotTo(BeNil())
-			Expect(authCfg.Enabled).To(BeAssignableToTypeOf(false)) // may be overridden by real config file
+			Expect(authCfg.Enabled).To(BeFalse())
 		})
 
 		It("should return services config through GetServicesConfig", func() {
