@@ -96,10 +96,6 @@ func TestPaginateSlice(t *testing.T) {
 }
 
 func TestGetLoaders(t *testing.T) {
-	t.Run("nil context", func(t *testing.T) {
-		assert.Nil(t, getLoaders(nil))
-	})
-
 	t.Run("no loaders in context", func(t *testing.T) {
 		ctx := context.Background()
 		assert.Nil(t, getLoaders(ctx))

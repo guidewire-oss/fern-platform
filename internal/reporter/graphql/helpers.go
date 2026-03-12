@@ -14,10 +14,6 @@ import (
 
 // getLoaders gets the dataloader from context
 func getLoaders(ctx context.Context) *dataloader.Loaders {
-	if ctx == nil {
-		return nil
-	}
-
 	loadersVal := ctx.Value("loaders")
 	if loadersVal == nil {
 		return nil
