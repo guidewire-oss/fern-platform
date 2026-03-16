@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -402,7 +403,11 @@ func (h *TestRunHandler) getSuiteRun(c *gin.Context) {
 
 	suiteRun, err := h.testingService.GetSuiteRunWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Suite run not found"})
+		if errors.Is(err, application.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Suite run not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
@@ -425,7 +430,11 @@ func (h *TestRunHandler) getSpecRuns(c *gin.Context) {
 
 	specRuns, err := h.testingService.GetSpecRunsWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, application.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Suite run not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
@@ -454,7 +463,11 @@ func (h *TestRunHandler) getSpecRun(c *gin.Context) {
 
 	specRun, err := h.testingService.GetSpecRunWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID), uint(specID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Spec run not found"})
+		if errors.Is(err, application.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Spec run not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 

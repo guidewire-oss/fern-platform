@@ -1162,7 +1162,7 @@ var _ = Describe("TestRunHandler", func() {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotFound))
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
 		})
 	})
 
@@ -1207,7 +1207,7 @@ var _ = Describe("TestRunHandler", func() {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 
 		It("should return empty list when suite is valid but has no spec runs", func() {
@@ -1321,7 +1321,7 @@ var _ = Describe("TestRunHandler", func() {
 			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 
-		It("should return not found when validation chain fails unexpectedly", func() {
+		It("should return internal server error when validation chain fails unexpectedly", func() {
 			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
 			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
 			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("db error")).Once()
@@ -1330,7 +1330,7 @@ var _ = Describe("TestRunHandler", func() {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotFound))
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
 		})
 	})
 

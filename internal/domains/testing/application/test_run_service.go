@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,9 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
 )
+
+// ErrNotFound is returned when a resource is not found or parent-child validation fails
+var ErrNotFound = errors.New("resource not found")
 
 // TestRunService handles test run business logic
 type TestRunService struct {
@@ -355,13 +359,18 @@ func (s *TestRunService) GetSuiteRun(ctx context.Context, id uint) (*domain.Suit
 func (s *TestRunService) GetSuiteRunWithParentValidation(ctx context.Context, testRunID, suiteID uint) (*domain.SuiteRun, error) {
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
+		// Check if it's a not-found error from the repository
+		if strings.Contains(err.Error(), "not found") {
+			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		// Otherwise it's an internal/database error - return as-is
 		return nil, err
 	}
 
 	// Validate parent-child relationship
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("suite run not found")
+		return nil, fmt.Errorf("%w: suite run not found", ErrNotFound)
 	}
 
 	return suiteRun, nil
@@ -377,16 +386,22 @@ func (s *TestRunService) GetSpecRunsWithParentValidation(ctx context.Context, te
 	// First validate the suite belongs to the test run
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
+		// Check if it's a not-found error from the repository
+		if strings.Contains(err.Error(), "not found") {
+			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		// Otherwise it's an internal/database error - return as-is
 		return nil, err
 	}
 
 	// Validate parent-child relationship
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("suite run not found")
+		return nil, fmt.Errorf("%w: suite run not found", ErrNotFound)
 	}
 
 	// Now fetch spec runs for this validated suite
+	// Note: FindBySuiteRunID errors are NOT wrapped as ErrNotFound - they're internal failures
 	return s.specRunRepo.FindBySuiteRunID(ctx, suiteID)
 }
 
@@ -400,24 +415,34 @@ func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, tes
 	// Fetch the spec run
 	specRun, err := s.specRunRepo.GetByID(ctx, specID)
 	if err != nil {
+		// Check if it's a not-found error from the repository
+		if strings.Contains(err.Error(), "not found") {
+			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		// Otherwise it's an internal/database error - return as-is
 		return nil, err
 	}
 
 	// Validate spec belongs to the specified suite
 	if specRun.SuiteRunID != suiteID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("spec run not found")
+		return nil, fmt.Errorf("%w: spec run not found", ErrNotFound)
 	}
 
 	// Fetch and validate the parent suite belongs to the specified test run
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
+		// Check if it's a not-found error from the repository
+		if strings.Contains(err.Error(), "not found") {
+			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		// Otherwise it's an internal/database error - return as-is
 		return nil, err
 	}
 
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("spec run not found")
+		return nil, fmt.Errorf("%w: spec run not found", ErrNotFound)
 	}
 
 	return specRun, nil
