@@ -1107,7 +1107,7 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("getSuiteRun", func() {
-		It("should get suite run successfully", func() {
+		It("should get suite run successfully when parent matches", func() {
 			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
 			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
 
@@ -1116,6 +1116,14 @@ var _ = Describe("TestRunHandler", func() {
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should return bad request for invalid test run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/invalid/suite-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
 		})
 
 		It("should return bad request for invalid suite run ID", func() {
@@ -1135,10 +1143,33 @@ var _ = Describe("TestRunHandler", func() {
 
 			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
+
+		It("should return not found when suite belongs to different test run", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return internal server error when repository fails unexpectedly", func() {
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("database connection failed")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
 	})
 
 	Describe("getSpecRuns", func() {
-		It("should get spec runs successfully", func() {
+		It("should get spec runs successfully when parent matches", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
 			specRuns := []*domain.SpecRun{
 				{ID: 1, SuiteRunID: 1, Name: "Spec 1"},
 				{ID: 2, SuiteRunID: 1, Name: "Spec 2"},
@@ -1152,6 +1183,14 @@ var _ = Describe("TestRunHandler", func() {
 			Expect(w.Code).To(Equal(http.StatusOK))
 		})
 
+		It("should return bad request for invalid test run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/invalid/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
 		It("should return bad request for invalid suite run ID", func() {
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/invalid/spec-runs", nil)
 			w := httptest.NewRecorder()
@@ -1160,7 +1199,46 @@ var _ = Describe("TestRunHandler", func() {
 			Expect(w.Code).To(Equal(http.StatusBadRequest))
 		})
 
-		It("should return internal server error when service fails", func() {
+		It("should return not found when suite belongs to different test run", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+		})
+
+		It("should return empty list when suite is valid but has no spec runs", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(1)).Return([]*domain.SpecRun{}, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			var response []*domain.SpecRun
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(HaveLen(0))
+		})
+
+		It("should return internal server error when suite validation fails", func() {
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("db error")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+		})
+
+		It("should return internal server error when spec list lookup fails", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
 			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(1)).Return(nil, errors.New("db error")).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
@@ -1172,15 +1250,33 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("getSpecRun", func() {
-		It("should get spec run successfully", func() {
+		It("should get spec run successfully when full parent chain matches", func() {
 			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
 			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
 			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should return bad request for invalid test run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/invalid/suite-runs/1/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return bad request for invalid suite run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/invalid/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
 		})
 
 		It("should return bad request for invalid spec run ID", func() {
@@ -1193,6 +1289,42 @@ var _ = Describe("TestRunHandler", func() {
 
 		It("should return not found when spec run doesn't exist", func() {
 			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("not found")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return not found when spec belongs to different suite", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 2, Name: "Spec 1"}
+			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return not found when parent suite belongs to different test run", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
+			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("should return not found when validation chain fails unexpectedly", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
+			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("db error")).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
 			w := httptest.NewRecorder()

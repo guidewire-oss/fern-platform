@@ -388,13 +388,19 @@ func (h *TestRunHandler) getSuiteRuns(c *gin.Context) {
 
 // getSuiteRun handles GET /api/v1/test-runs/:id/suite-runs/:suiteId
 func (h *TestRunHandler) getSuiteRun(c *gin.Context) {
+	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid test run ID"})
+		return
+	}
+
 	suiteID, err := strconv.ParseUint(c.Param("suiteId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid suite run ID"})
 		return
 	}
 
-	suiteRun, err := h.testingService.GetSuiteRun(c.Request.Context(), uint(suiteID))
+	suiteRun, err := h.testingService.GetSuiteRunWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Suite run not found"})
 		return
@@ -405,13 +411,19 @@ func (h *TestRunHandler) getSuiteRun(c *gin.Context) {
 
 // getSpecRuns handles GET /api/v1/test-runs/:id/suite-runs/:suiteId/spec-runs
 func (h *TestRunHandler) getSpecRuns(c *gin.Context) {
+	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid test run ID"})
+		return
+	}
+
 	suiteID, err := strconv.ParseUint(c.Param("suiteId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid suite run ID"})
 		return
 	}
 
-	specRuns, err := h.testingService.GetSpecRunsBySuiteRunID(c.Request.Context(), uint(suiteID))
+	specRuns, err := h.testingService.GetSpecRunsWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -422,13 +434,25 @@ func (h *TestRunHandler) getSpecRuns(c *gin.Context) {
 
 // getSpecRun handles GET /api/v1/test-runs/:id/suite-runs/:suiteId/spec-runs/:specId
 func (h *TestRunHandler) getSpecRun(c *gin.Context) {
+	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid test run ID"})
+		return
+	}
+
+	suiteID, err := strconv.ParseUint(c.Param("suiteId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid suite run ID"})
+		return
+	}
+
 	specID, err := strconv.ParseUint(c.Param("specId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid spec run ID"})
 		return
 	}
 
-	specRun, err := h.testingService.GetSpecRun(c.Request.Context(), uint(specID))
+	specRun, err := h.testingService.GetSpecRunWithParentValidation(c.Request.Context(), uint(testRunID), uint(suiteID), uint(specID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Spec run not found"})
 		return

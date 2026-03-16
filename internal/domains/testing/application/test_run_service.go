@@ -351,14 +351,76 @@ func (s *TestRunService) GetSuiteRun(ctx context.Context, id uint) (*domain.Suit
 	return s.suiteRunRepo.GetByID(ctx, id)
 }
 
+// GetSuiteRunWithParentValidation retrieves a suite run and validates it belongs to the specified test run
+func (s *TestRunService) GetSuiteRunWithParentValidation(ctx context.Context, testRunID, suiteID uint) (*domain.SuiteRun, error) {
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate parent-child relationship
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, fmt.Errorf("suite run not found")
+	}
+
+	return suiteRun, nil
+}
+
 // GetSpecRunsBySuiteRunID retrieves all spec runs for a suite run
 func (s *TestRunService) GetSpecRunsBySuiteRunID(ctx context.Context, suiteRunID uint) ([]*domain.SpecRun, error) {
 	return s.specRunRepo.FindBySuiteRunID(ctx, suiteRunID)
 }
 
+// GetSpecRunsWithParentValidation retrieves spec runs for a suite and validates the suite belongs to the specified test run
+func (s *TestRunService) GetSpecRunsWithParentValidation(ctx context.Context, testRunID, suiteID uint) ([]*domain.SpecRun, error) {
+	// First validate the suite belongs to the test run
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate parent-child relationship
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, fmt.Errorf("suite run not found")
+	}
+
+	// Now fetch spec runs for this validated suite
+	return s.specRunRepo.FindBySuiteRunID(ctx, suiteID)
+}
+
 // GetSpecRun retrieves a single spec run by ID
 func (s *TestRunService) GetSpecRun(ctx context.Context, id uint) (*domain.SpecRun, error) {
 	return s.specRunRepo.GetByID(ctx, id)
+}
+
+// GetSpecRunWithParentValidation retrieves a spec run and validates the full parent chain
+func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, testRunID, suiteID, specID uint) (*domain.SpecRun, error) {
+	// Fetch the spec run
+	specRun, err := s.specRunRepo.GetByID(ctx, specID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate spec belongs to the specified suite
+	if specRun.SuiteRunID != suiteID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, fmt.Errorf("spec run not found")
+	}
+
+	// Fetch and validate the parent suite belongs to the specified test run
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		return nil, err
+	}
+
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, fmt.Errorf("spec run not found")
+	}
+
+	return specRun, nil
 }
 
 // UpdateTestRun updates an existing test run
