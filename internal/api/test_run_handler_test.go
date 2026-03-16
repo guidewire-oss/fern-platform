@@ -911,7 +911,7 @@ var _ = Describe("TestRunHandler", func() {
 				Metadata: map[string]interface{}{"key": "value"},
 			}
 
-			result := handler.convertTestRunToAPI(testRun)
+			result := convertTestRunToAPI(testRun)
 
 			Expect(result["id"]).To(Equal(uint(1)))
 			Expect(result["projectId"]).To(Equal("project-123"))
@@ -938,7 +938,7 @@ var _ = Describe("TestRunHandler", func() {
 				// StartTime will be zero value since it's not a pointer
 			}
 
-			result := handler.convertTestRunToAPI(testRun)
+			result := convertTestRunToAPI(testRun)
 
 			Expect(result["id"]).To(Equal(uint(1)))
 			Expect(result["projectId"]).To(Equal("project-123"))
@@ -958,7 +958,7 @@ var _ = Describe("TestRunHandler", func() {
 				Tags:      nil,
 			}
 
-			result := handler.convertTestRunToAPI(testRun)
+			result := convertTestRunToAPI(testRun)
 
 			Expect(result["id"]).To(Equal(uint(1)))
 			Expect(result["tags"]).To(BeNil())
@@ -972,7 +972,7 @@ var _ = Describe("TestRunHandler", func() {
 				Tags:      []domain.Tag{},
 			}
 
-			result := handler.convertTestRunToAPI(testRun)
+			result := convertTestRunToAPI(testRun)
 
 			Expect(result["id"]).To(Equal(uint(1)))
 			Expect(result["tags"]).To(HaveLen(0))

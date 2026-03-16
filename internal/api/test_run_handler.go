@@ -106,7 +106,7 @@ func (h *TestRunHandler) getTestRun(c *gin.Context) {
 	}
 
 	// Convert to API response format
-	c.JSON(http.StatusOK, h.convertTestRunToAPI(testRun))
+	c.JSON(http.StatusOK, convertTestRunToAPI(testRun))
 }
 
 // getTestRunByRunID handles GET /api/v1/test-runs/by-run-id/:runId
@@ -123,7 +123,7 @@ func (h *TestRunHandler) getTestRunByRunID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.convertTestRunToAPI(testRun))
+	c.JSON(http.StatusOK, convertTestRunToAPI(testRun))
 }
 
 // listTestRuns handles GET /api/v1/test-runs
@@ -159,7 +159,7 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 	// Convert to API response format
 	apiTestRuns := make([]interface{}, len(testRuns))
 	for i, tr := range testRuns {
-		apiTestRuns[i] = h.convertTestRunToAPI(tr)
+		apiTestRuns[i] = convertTestRunToAPI(tr)
 	}
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
@@ -227,7 +227,7 @@ func (h *TestRunHandler) updateTestRunStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.convertTestRunToAPI(updatedRun))
+	c.JSON(http.StatusOK, convertTestRunToAPI(updatedRun))
 }
 
 // deleteTestRun handles DELETE /api/v1/admin/test-runs/:id
@@ -299,7 +299,7 @@ func (h *TestRunHandler) getRecentTestRuns(c *gin.Context) {
 	// Convert to API response format
 	apiTestRuns := make([]interface{}, len(testRuns))
 	for i, tr := range testRuns {
-		apiTestRuns[i] = h.convertTestRunToAPI(tr)
+		apiTestRuns[i] = convertTestRunToAPI(tr)
 	}
 
 	c.JSON(http.StatusOK, apiTestRuns)
@@ -437,8 +437,9 @@ func (h *TestRunHandler) getSpecRun(c *gin.Context) {
 	c.JSON(http.StatusOK, specRun)
 }
 
-// convertTestRunToAPI converts a domain test run to API response format
-func (h *TestRunHandler) convertTestRunToAPI(tr *domain.TestRun) gin.H {
+// convertTestRunToAPI converts a domain test run to API response format for admin endpoints
+// This format includes additional fields like name, gitBranch, and uses milliseconds for duration
+func convertTestRunToAPI(tr *domain.TestRun) gin.H {
 	return gin.H{
 		"id":           tr.ID,
 		"projectId":    tr.ProjectID,
@@ -463,225 +464,7 @@ func (h *TestRunHandler) convertTestRunToAPI(tr *domain.TestRun) gin.H {
 	}
 }
 
-// --- Converter helper methods for public endpoints ---
 
-// convertDomainTestRunToAPI converts a domain TestRun to the legacy API response format
-// This matches the exact format used by the V1 DomainHandler for backward compatibility
-func (h *TestRunHandler) convertDomainTestRunToAPI(tr *domain.TestRun) gin.H {
-	return gin.H{
-		"id":           tr.ID,
-		"runId":        tr.RunID,
-		"projectId":    tr.ProjectID,
-		"branch":       tr.Branch,
-		"commitSha":    tr.GitCommit,
-		"status":       tr.Status,
-		"startTime":    tr.StartTime,
-		"endTime":      tr.EndTime,
-		"duration":     tr.Duration.Seconds(),
-		"totalTests":   tr.TotalTests,
-		"passedTests":  tr.PassedTests,
-		"failedTests":  tr.FailedTests,
-		"skippedTests": tr.SkippedTests,
-		"environment":  tr.Environment,
-		"tags":         tr.Tags,
-		"metadata":     tr.Metadata,
-	}
-}
-
-// convertApiSuiteRunsToDomain converts request SuiteRuns to domain SuiteRuns
-func (h *TestRunHandler) convertApiSuiteRunsToDomain(reqSuiteRuns []SuiteRun) []domain.SuiteRun {
-	domainSuiteRuns := make([]domain.SuiteRun, len(reqSuiteRuns))
-
-	for i, reqSuite := range reqSuiteRuns {
-		domainSpecRuns := h.convertSpecRunsToDomain(reqSuite.SpecRuns)
-
-		totalTests, passedTests, failedTests, skippedTests := h.calcTestCounts(domainSpecRuns)
-		status := h.calcSuiteStatus(domainSpecRuns)
-
-		var duration time.Duration
-		if !reqSuite.EndTime.IsZero() && !reqSuite.StartTime.IsZero() {
-			duration = reqSuite.EndTime.Sub(reqSuite.StartTime)
-		}
-
-		var endTime *time.Time
-		if !reqSuite.EndTime.IsZero() {
-			endTime = &reqSuite.EndTime
-		}
-
-		domainTags := h.convertApiTagsToDomain(reqSuite.Tags)
-
-		domainSuiteRuns[i] = domain.SuiteRun{
-			ID:           reqSuite.ID,
-			TestRunID:    0, // will be set later
-			Name:         reqSuite.SuiteName,
-			Status:       status,
-			StartTime:    reqSuite.StartTime,
-			EndTime:      endTime,
-			TotalTests:   totalTests,
-			PassedTests:  passedTests,
-			FailedTests:  failedTests,
-			SkippedTests: skippedTests,
-			Duration:     duration,
-			Tags:         domainTags,
-			SpecRuns:     domainSpecRuns,
-		}
-	}
-
-	return domainSuiteRuns
-}
-
-// convertSpecRunsToDomain converts request SpecRuns to domain SpecRuns
-func (h *TestRunHandler) convertSpecRunsToDomain(reqSpecRuns []SpecRun) []*domain.SpecRun {
-	domainSpecRuns := make([]*domain.SpecRun, len(reqSpecRuns))
-
-	for i, reqSpec := range reqSpecRuns {
-		var duration time.Duration
-		if !reqSpec.EndTime.IsZero() && !reqSpec.StartTime.IsZero() {
-			duration = reqSpec.EndTime.Sub(reqSpec.StartTime)
-		}
-
-		var endTime *time.Time
-		if !reqSpec.EndTime.IsZero() {
-			endTime = &reqSpec.EndTime
-		}
-
-		var errorMessage, failureMessage string
-		if reqSpec.Status == "failed" || reqSpec.Status == "error" {
-			if reqSpec.Status == "error" {
-				errorMessage = reqSpec.Message
-			} else {
-				failureMessage = reqSpec.Message
-			}
-		}
-
-		domainTags := h.convertApiTagsToDomain(reqSpec.Tags)
-
-		domainSpecRuns[i] = &domain.SpecRun{
-			ID:             reqSpec.ID,
-			SuiteRunID:     uint(reqSpec.SuiteID),
-			Name:           reqSpec.SpecDescription,
-			Status:         reqSpec.Status,
-			StartTime:      reqSpec.StartTime,
-			EndTime:        endTime,
-			Duration:       duration,
-			ErrorMessage:   errorMessage,
-			FailureMessage: failureMessage,
-			Tags:           domainTags,
-		}
-	}
-
-	return domainSpecRuns
-}
-
-// convertApiTagsToDomain converts API tags to domain tags
-func (h *TestRunHandler) convertApiTagsToDomain(apiTags []Tag) []domain.Tag {
-	if len(apiTags) == 0 {
-		return nil
-	}
-
-	domainTags := make([]domain.Tag, len(apiTags))
-	for i, tag := range apiTags {
-		domainTags[i] = domain.Tag{
-			ID:       uint(tag.ID),
-			Name:     tag.Name,
-			Category: tag.Category,
-			Value:    tag.Value,
-		}
-	}
-	return domainTags
-}
-
-// calcOverallStatus calculates the overall test run status from suite runs
-func (h *TestRunHandler) calcOverallStatus(suiteRuns []SuiteRun) string {
-	for _, suite := range suiteRuns {
-		for _, spec := range suite.SpecRuns {
-			if spec.Status == "failed" {
-				return "failed"
-			}
-		}
-	}
-	return "passed"
-}
-
-// calcTestCounts calculates test statistics from SpecRuns
-func (h *TestRunHandler) calcTestCounts(specRuns []*domain.SpecRun) (total, passed, failed, skipped int) {
-	total = len(specRuns)
-
-	for _, spec := range specRuns {
-		switch spec.Status {
-		case "passed", "pass":
-			passed++
-		case "failed", "fail", "error":
-			failed++
-		case "skipped", "skip", "pending":
-			skipped++
-		}
-	}
-
-	return total, passed, failed, skipped
-}
-
-// calcOverallTestCounts calculates total test statistics from all suite runs
-func (h *TestRunHandler) calcOverallTestCounts(suiteRuns []domain.SuiteRun) (total, passed, failed, skipped int) {
-	for _, suite := range suiteRuns {
-		total += suite.TotalTests
-		passed += suite.PassedTests
-		failed += suite.FailedTests
-		skipped += suite.SkippedTests
-	}
-	return total, passed, failed, skipped
-}
-
-// calcSuiteStatus determines suite status based on spec runs
-func (h *TestRunHandler) calcSuiteStatus(specRuns []*domain.SpecRun) string {
-	if len(specRuns) == 0 {
-		return "unknown"
-	}
-
-	hasFailures := false
-	hasSkipped := false
-
-	for _, spec := range specRuns {
-		switch spec.Status {
-		case "failed", "fail", "error":
-			hasFailures = true
-		case "skipped", "skip", "pending":
-			hasSkipped = true
-		}
-	}
-
-	if hasFailures {
-		return "failed"
-	}
-	if hasSkipped {
-		return "skipped"
-	}
-	return "passed"
-}
-
-// mergeUniqueTags merges two tag slices, removing duplicates by ID
-func (h *TestRunHandler) mergeUniqueTags(existingTags, newTags []domain.Tag) []domain.Tag {
-	tagMap := make(map[uint]domain.Tag)
-
-	for _, tag := range existingTags {
-		if tag.ID != 0 {
-			tagMap[tag.ID] = tag
-		}
-	}
-
-	for _, tag := range newTags {
-		if tag.ID != 0 {
-			tagMap[tag.ID] = tag
-		}
-	}
-
-	tags := make([]domain.Tag, 0, len(tagMap))
-	for _, tag := range tagMap {
-		tags = append(tags, tag)
-	}
-
-	return tags
-}
 
 // --- Public (unauthenticated) test submission endpoints ---
 // These are compatible with the legacy Fern Reporter API
@@ -710,18 +493,18 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	}
 
 	// Convert request SuiteRuns to domain SuiteRuns
-	domainSuiteRuns := h.convertApiSuiteRunsToDomain(req.SuiteRuns)
+	domainSuiteRuns := ConvertApiSuiteRunsToDomain(req.SuiteRuns)
 
-	runLevelTags := h.convertApiTagsToDomain(req.Tags)
+	runLevelTags := ConvertApiTagsToDomain(req.Tags)
 
 	// Calculate counts and status for this batch
-	status := h.calcOverallStatus(req.SuiteRuns)
+	status := CalculateOverallStatus(req.SuiteRuns)
 	environment := req.Environment
 	if environment == "" {
 		environment = "default"
 	}
 	totalTests, passedTests, failedTests, skippedTests :=
-		h.calcOverallTestCounts(domainSuiteRuns)
+		CalculateOverallTestCounts(domainSuiteRuns)
 
 	// Determine runID
 	var runID string
@@ -737,7 +520,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		existing, err := h.testingService.GetTestRunByRunID(c.Request.Context(), runID)
 		if err == nil && existing != nil {
 			testRun = existing
-			fmt.Println("Test run exists, runID:", runID)
+			h.logger.Debug("Test run exists", "runID", runID)
 		}
 	}
 
@@ -761,7 +544,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		}
 
 		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
-		fmt.Println("alreadyExisted:", alreadyExisted)
+		h.logger.Debug("Test run creation result", "alreadyExisted", alreadyExisted, "runID", runID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -771,7 +554,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 
 		// If it was newly created (not a duplicate), return immediately
 		if !alreadyExisted {
-			response := h.convertDomainTestRunToAPI(testRun)
+			response := ConvertDomainTestRunToAPI(testRun)
 			c.JSON(http.StatusCreated, response)
 			return
 		}
@@ -803,7 +586,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		testRun.SkippedTests += skippedTests
 
 		// Merge run-level tags
-		testRun.Tags = h.mergeUniqueTags(testRun.Tags, runLevelTags)
+		testRun.Tags = MergeUniqueTags(testRun.Tags, runLevelTags)
 
 		// mark overall status as failed if any failed
 		if status == "failed" || testRun.Status == "failed" {
@@ -820,7 +603,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		}
 	}
 
-	response := h.convertDomainTestRunToAPI(testRun)
+	response := ConvertDomainTestRunToAPI(testRun)
 	c.JSON(http.StatusCreated, response)
 }
 
