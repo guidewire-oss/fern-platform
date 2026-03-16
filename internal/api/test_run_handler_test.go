@@ -1108,10 +1108,10 @@ var _ = Describe("TestRunHandler", func() {
 
 	Describe("getSuiteRun", func() {
 		It("should get suite run successfully when parent matches", func() {
-			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
-			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 2, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(2)).Return(suiteRun, nil).Once()
 
-			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1", nil)
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/2", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -1135,7 +1135,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should return not found when suite run doesn't exist", func() {
-			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("not found")).Once()
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, domain.ErrNotFound).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1", nil)
 			w := httptest.NewRecorder()
@@ -1168,15 +1168,15 @@ var _ = Describe("TestRunHandler", func() {
 
 	Describe("getSpecRuns", func() {
 		It("should get spec runs successfully when parent matches", func() {
-			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
-			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 2, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(2)).Return(suiteRun, nil).Once()
 			specRuns := []*domain.SpecRun{
-				{ID: 1, SuiteRunID: 1, Name: "Spec 1"},
-				{ID: 2, SuiteRunID: 1, Name: "Spec 2"},
+				{ID: 3, SuiteRunID: 2, Name: "Spec 1"},
+				{ID: 4, SuiteRunID: 2, Name: "Spec 2"},
 			}
-			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(1)).Return(specRuns, nil).Once()
+			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(2)).Return(specRuns, nil).Once()
 
-			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/2/spec-runs", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -1251,12 +1251,12 @@ var _ = Describe("TestRunHandler", func() {
 
 	Describe("getSpecRun", func() {
 		It("should get spec run successfully when full parent chain matches", func() {
-			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
-			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
-			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
-			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+			specRun := &domain.SpecRun{ID: 3, SuiteRunID: 2, Name: "Spec 1"}
+			specRunRepo.On("GetByID", mock.Anything, uint(3)).Return(specRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 2, TestRunID: 1, Name: "Suite 1"}
+			suiteRunRepo.On("GetByID", mock.Anything, uint(2)).Return(suiteRun, nil).Once()
 
-			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/2/spec-runs/3", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
@@ -1288,7 +1288,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should return not found when spec run doesn't exist", func() {
-			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, errors.New("not found")).Once()
+			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(nil, domain.ErrNotFound).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
 			w := httptest.NewRecorder()

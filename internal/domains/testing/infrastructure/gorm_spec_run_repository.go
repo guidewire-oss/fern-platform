@@ -108,7 +108,7 @@ func (r *GormSpecRunRepository) GetByID(ctx context.Context, id uint) (*domain.S
 	var dbSpecRun database.SpecRun
 	if err := r.db.WithContext(ctx).First(&dbSpecRun, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("spec run not found")
+			return nil, domain.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get spec run: %w", err)
 	}

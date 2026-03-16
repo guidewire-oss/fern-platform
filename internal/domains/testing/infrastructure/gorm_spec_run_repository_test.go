@@ -335,7 +335,7 @@ var _ = Describe("GormSpecRunRepository", func() {
 				specRun, err := repository.GetByID(ctx, id)
 
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("spec run not found"))
+				Expect(err).To(Equal(domain.ErrNotFound))
 				Expect(specRun).To(BeNil())
 			})
 		})

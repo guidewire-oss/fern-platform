@@ -103,7 +103,7 @@ func (r *GormSuiteRunRepository) GetByID(ctx context.Context, id uint) (*domain.
 	var dbSuiteRun database.SuiteRun
 	if err := r.db.WithContext(ctx).First(&dbSuiteRun, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("suite run not found")
+			return nil, domain.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get suite run: %w", err)
 	}
@@ -141,7 +141,7 @@ func (r *GormSuiteRunRepository) GetWithSpecRuns(ctx context.Context, id uint) (
 	var dbSuiteRun database.SuiteRun
 	if err := r.db.WithContext(ctx).Preload("SpecRuns").First(&dbSuiteRun, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("suite run not found")
+			return nil, domain.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get suite run with spec runs: %w", err)
 	}

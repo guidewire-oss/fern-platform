@@ -1823,10 +1823,11 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return error when suite run not found", func() {
-			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
 
 			result, err := service.GetSuiteRunWithParentValidation(ctx, 1, 999)
 			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSuiteRepo.AssertExpectations(GinkgoT())
@@ -1838,7 +1839,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			result, err := service.GetSuiteRunWithParentValidation(ctx, 1, 1)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("suite run not found"))
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSuiteRepo.AssertExpectations(GinkgoT())
@@ -1877,10 +1878,11 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return error when suite run not found", func() {
-			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
 
 			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 999)
 			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSuiteRepo.AssertExpectations(GinkgoT())
@@ -1892,7 +1894,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 1)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("suite run not found"))
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSuiteRepo.AssertExpectations(GinkgoT())
@@ -1928,10 +1930,11 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return error when spec run not found", func() {
-			mockSpecRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+			mockSpecRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
 
 			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 999)
 			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSpecRepo.AssertExpectations(GinkgoT())
@@ -1943,7 +1946,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec run not found"))
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSpecRepo.AssertExpectations(GinkgoT())
@@ -1957,7 +1960,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec run not found"))
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
 			Expect(result).To(BeNil())
 
 			mockSpecRepo.AssertExpectations(GinkgoT())

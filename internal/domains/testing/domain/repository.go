@@ -2,7 +2,11 @@ package domain
 
 import (
 	"context"
+	"errors"
 )
+
+// ErrNotFound is returned by repositories when a requested resource is not found
+var ErrNotFound = errors.New("resource not found")
 
 // TestRunRepository defines the interface for test run persistence
 type TestRunRepository interface {

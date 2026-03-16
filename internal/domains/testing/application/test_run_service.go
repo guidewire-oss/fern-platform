@@ -13,7 +13,8 @@ import (
 )
 
 // ErrNotFound is returned when a resource is not found or parent-child validation fails
-var ErrNotFound = errors.New("resource not found")
+// It wraps domain.ErrNotFound for application-level error handling
+var ErrNotFound = fmt.Errorf("resource not found: %w", domain.ErrNotFound)
 
 // TestRunService handles test run business logic
 type TestRunService struct {
@@ -360,8 +361,8 @@ func (s *TestRunService) GetSuiteRunWithParentValidation(ctx context.Context, te
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
 		// Check if it's a not-found error from the repository
-		if strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
 		}
 		// Otherwise it's an internal/database error - return as-is
 		return nil, err
@@ -370,7 +371,7 @@ func (s *TestRunService) GetSuiteRunWithParentValidation(ctx context.Context, te
 	// Validate parent-child relationship
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("%w: suite run not found", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	return suiteRun, nil
@@ -387,8 +388,8 @@ func (s *TestRunService) GetSpecRunsWithParentValidation(ctx context.Context, te
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
 		// Check if it's a not-found error from the repository
-		if strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
 		}
 		// Otherwise it's an internal/database error - return as-is
 		return nil, err
@@ -397,7 +398,7 @@ func (s *TestRunService) GetSpecRunsWithParentValidation(ctx context.Context, te
 	// Validate parent-child relationship
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("%w: suite run not found", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	// Now fetch spec runs for this validated suite
@@ -416,8 +417,8 @@ func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, tes
 	specRun, err := s.specRunRepo.GetByID(ctx, specID)
 	if err != nil {
 		// Check if it's a not-found error from the repository
-		if strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
 		}
 		// Otherwise it's an internal/database error - return as-is
 		return nil, err
@@ -426,15 +427,15 @@ func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, tes
 	// Validate spec belongs to the specified suite
 	if specRun.SuiteRunID != suiteID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("%w: spec run not found", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	// Fetch and validate the parent suite belongs to the specified test run
 	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
 	if err != nil {
 		// Check if it's a not-found error from the repository
-		if strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("%w: %v", ErrNotFound, err)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
 		}
 		// Otherwise it's an internal/database error - return as-is
 		return nil, err
@@ -442,7 +443,7 @@ func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, tes
 
 	if suiteRun.TestRunID != testRunID {
 		// Return not found to avoid revealing existence under different parent
-		return nil, fmt.Errorf("%w: spec run not found", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	return specRun, nil
