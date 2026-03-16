@@ -6695,26 +6695,48 @@
                                 <label style={{display: 'block', marginBottom: '0.5rem', fontWeight: '500'}}>
                                     Team
                                 </label>
-                                <input
-                                    type="text"
-                                    list="teams-datalist"
-                                    value={formData.team}
-                                    onChange={(e) => setFormData({...formData, team: e.target.value})}
-                                    placeholder={isAdmin ? "Type or select a team (leave blank for no team)" : "Type or select a team"}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem',
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: 'var(--radius-md)',
-                                        background: 'var(--bg-secondary)',
-                                        color: 'var(--text-primary)'
-                                    }}
-                                />
-                                <datalist id="teams-datalist">
-                                    {teams.map(team => (
-                                        <option key={team} value={team} />
-                                    ))}
-                                </datalist>
+                                {isAdmin ? (
+                                    <>
+                                        <input
+                                            type="text"
+                                            list="teams-datalist"
+                                            value={formData.team}
+                                            onChange={(e) => setFormData({...formData, team: e.target.value})}
+                                            placeholder="Type or select a team (leave blank for no team)"
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.75rem',
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: 'var(--radius-md)',
+                                                background: 'var(--bg-secondary)',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        />
+                                        <datalist id="teams-datalist">
+                                            {teams.map(team => (
+                                                <option key={team} value={team} />
+                                            ))}
+                                        </datalist>
+                                    </>
+                                ) : (
+                                    <select
+                                        value={formData.team}
+                                        onChange={(e) => setFormData({...formData, team: e.target.value})}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-secondary)',
+                                            color: 'var(--text-primary)'
+                                        }}
+                                    >
+                                        <option value="">Select a team</option>
+                                        {teams.map(team => (
+                                            <option key={team} value={team}>{team}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
                             
                             <div style={{marginBottom: '1rem'}}>

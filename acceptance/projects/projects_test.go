@@ -75,7 +75,9 @@ var _ = Describe("UC-04-05: Team Assignment for Projects", Label("e2e"), func() 
 		Expect(teamInput).To(BeVisible())
 
 		datalist := page.Locator("datalist#teams-datalist")
-		Expect(datalist).To(BeVisible())
+		count, err := datalist.Count()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(count).To(Equal(1))
 	})
 
 	It("should allow typing a free-form team name not in the suggestion list", func() {
