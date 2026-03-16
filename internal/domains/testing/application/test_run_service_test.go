@@ -1723,4 +1723,90 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			mockTestRunRepo.AssertExpectations(GinkgoT())
 		})
 	})
+
+	Describe("GetSuiteRun", func() {
+		It("should get suite run successfully", func() {
+			suiteRun := &domain.SuiteRun{
+				ID:         1,
+				TestRunID:  1,
+				Name:       "Suite 1",
+				Status:     "passed",
+				TotalTests: 10,
+			}
+
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSuiteRun(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(suiteRun))
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite run not found", func() {
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			result, err := service.GetSuiteRun(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRunsBySuiteRunID", func() {
+		It("should get spec runs successfully", func() {
+			specRuns := []*domain.SpecRun{
+				{ID: 1, SuiteRunID: 1, Name: "Spec 1", Status: "passed"},
+				{ID: 2, SuiteRunID: 1, Name: "Spec 2", Status: "failed"},
+			}
+
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return(specRuns, nil).Once()
+
+			result, err := service.GetSpecRunsBySuiteRunID(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRuns))
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when query fails", func() {
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(999)).Return(nil, errors.New("db error")).Once()
+
+			result, err := service.GetSpecRunsBySuiteRunID(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRun", func() {
+		It("should get spec run successfully", func() {
+			specRun := &domain.SpecRun{
+				ID:         1,
+				SuiteRunID: 1,
+				Name:       "Spec 1",
+				Status:     "passed",
+			}
+
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+
+			result, err := service.GetSpecRun(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRun))
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when spec run not found", func() {
+			mockSpecRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			result, err := service.GetSpecRun(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+	})
 })
