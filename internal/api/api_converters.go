@@ -54,16 +54,6 @@ type Tag struct {
 	Value    string `json:"value,omitempty"`
 }
 
-type ProjectDetails struct {
-	ID        uint64    `json:"-" gorm:"primaryKey"`
-	UUID      string    `json:"uuid" gorm:"column:uuid;uniqueIndex"`
-	Name      string    `json:"name"`
-	TeamName  string    `json:"team_name"`
-	Comment   string    `json:"comment"`
-	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
-}
-
 // Domain to API conversion functions
 
 // convertDomainTestRunToAPI converts a domain TestRun to API response format

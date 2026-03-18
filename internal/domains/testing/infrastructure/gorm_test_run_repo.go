@@ -192,53 +192,44 @@ func (r *GormTestRunRepository) FindByDateRange(ctx context.Context, projectID s
 
 // GetTestRunSummary retrieves summary statistics for a project
 func (r *GormTestRunRepository) GetTestRunSummary(ctx context.Context, projectID string) (*domain.TestRunSummary, error) {
-	var summary domain.TestRunSummary
-
-	// Get total runs
-	var totalCount int64
-	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Where("project_id = ?", projectID).Count(&totalCount).Error; err != nil {
-		return nil, fmt.Errorf("failed to count total runs: %w", err)
+	var row struct {
+		Total       int64
+		Passed      int64
+		Failed      int64
+		AvgDuration float64
 	}
-	summary.TotalRuns = int(totalCount)
-
-	// Get passed runs
-	var passedCount int64
-	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Where("project_id = ? AND status = ?", projectID, "passed").Count(&passedCount).Error; err != nil {
-		return nil, fmt.Errorf("failed to count passed runs: %w", err)
+	if err := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Where("project_id = ?", projectID).
+		Select("COUNT(*) as total, " +
+			"COALESCE(SUM(CASE WHEN status='passed' THEN 1 ELSE 0 END), 0) as passed, " +
+			"COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END), 0) as failed, " +
+			"COALESCE(AVG(duration_ms), 0) as avg_duration").
+		Scan(&row).Error; err != nil {
+		return nil, fmt.Errorf("failed to get test run summary: %w", err)
 	}
-	summary.PassedRuns = int(passedCount)
 
-	// Get failed runs
-	var failedCount int64
-	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Where("project_id = ? AND status = ?", projectID, "failed").Count(&failedCount).Error; err != nil {
-		return nil, fmt.Errorf("failed to count failed runs: %w", err)
+	summary := &domain.TestRunSummary{
+		TotalRuns:      int(row.Total),
+		PassedRuns:     int(row.Passed),
+		FailedRuns:     int(row.Failed),
+		AverageRunTime: time.Duration(row.AvgDuration) * time.Millisecond,
 	}
-	summary.FailedRuns = int(failedCount)
-
-	// Get average duration
-	var avgDuration float64
-	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).Where("project_id = ?", projectID).Select("COALESCE(AVG(duration_ms), 0)").Scan(&avgDuration).Error; err != nil {
-		return nil, fmt.Errorf("failed to get average duration: %w", err)
-	}
-	summary.AverageRunTime = time.Duration(avgDuration) * time.Millisecond
-
-	// Calculate success rate
 	if summary.TotalRuns > 0 {
 		summary.SuccessRate = float64(summary.PassedRuns) / float64(summary.TotalRuns)
 	}
-
-	return &summary, nil
+	return summary, nil
 }
 
 // Delete removes a test run
 func (r *GormTestRunRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.Delete(&database.TestRun{}, id).Error
+	return r.db.WithContext(ctx).Delete(&database.TestRun{}, id).Error
 }
 
 // CountByProjectID counts test runs for a project
 func (r *GormTestRunRepository) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
 	var count int64
-	err := r.db.Model(&database.TestRun{}).
+	err := r.db.WithContext(ctx).Model(&database.TestRun{}).
 		Where("project_id = ?", projectID).
 		Count(&count).Error
 	return count, err

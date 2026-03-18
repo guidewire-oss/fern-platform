@@ -51,7 +51,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
 			// Another thread already created this test run
 			// Try to fetch the existing one
-			fmt.Println("Duplicate found: fetching existing test run")
 			if testRun.RunID != "" {
 				existing, fetchErr := s.testRunRepo.GetByRunID(ctx, testRun.RunID)
 				if fetchErr == nil && existing != nil {
@@ -63,7 +62,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		return nil, false, fmt.Errorf("failed to create test run: %w", err)
 	}
 
-	fmt.Println("New test run created with ID:", testRun.ID)
 	return testRun, false, nil // false = newly created
 }
 
@@ -339,6 +337,14 @@ func (s *TestRunService) ListTestRuns(ctx context.Context, projectID string, lim
 // CountTestRuns counts all test runs
 func (s *TestRunService) CountTestRuns(ctx context.Context) (int64, error) {
 	return s.testRunRepo.Count(ctx)
+}
+
+// CountTestRunsByProject counts test runs for a project, or all runs if projectID is empty
+func (s *TestRunService) CountTestRunsByProject(ctx context.Context, projectID string) (int64, error) {
+	if projectID == "" {
+		return s.testRunRepo.Count(ctx)
+	}
+	return s.testRunRepo.CountByProjectID(ctx, projectID)
 }
 
 // GetSuiteRunsByTestRunID retrieves all suite runs for a test run

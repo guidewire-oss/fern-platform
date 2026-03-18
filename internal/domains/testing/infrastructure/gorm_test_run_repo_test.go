@@ -823,7 +823,7 @@ var _ = Describe("GormTestRunRepository", func() {
 
 				summary, err := repo.GetTestRunSummary(ctx, "project-summary")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to count"))
+				Expect(err.Error()).To(ContainSubstring("failed to get test run summary"))
 				Expect(summary).To(BeNil())
 			})
 
@@ -875,7 +875,7 @@ var _ = Describe("GormTestRunRepository", func() {
 				// Note: This might not always fail depending on SQLite behavior,
 				// but it tests the error path when it does occur
 				if err != nil {
-					Expect(err.Error()).To(ContainSubstring("failed to count"))
+					Expect(err.Error()).To(ContainSubstring("failed to get test run summary"))
 					Expect(summary).To(BeNil())
 				}
 			})
@@ -1134,7 +1134,7 @@ var _ = Describe("GormTestRunRepository", func() {
 
 			summary, err := repo.GetTestRunSummary(ctx, "any-project")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to count total runs"))
+			Expect(err.Error()).To(ContainSubstring("failed to get test run summary"))
 			Expect(summary).To(BeNil())
 		})
 	})

@@ -545,7 +545,6 @@ var _ = Describe("TestRunHandler", func() {
 
 	Describe("countTestRuns", func() {
 		It("should count test runs successfully", func() {
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 0).Return([]*domain.TestRun{}, nil).Once()
 			testRunRepo.On("CountByProjectID", mock.Anything, "project-123").Return(int64(42), nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count?project_id=project-123", nil)
@@ -563,8 +562,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should count test runs without project ID", func() {
-			// When no project ID is provided, the service calls List with limit=0
-			testRunRepo.On("List", mock.Anything, 0, 0).Return([]*domain.TestRun{}, int64(0), nil).Once()
+			testRunRepo.On("Count", mock.Anything).Return(int64(0), nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count", nil)
 			w := httptest.NewRecorder()
@@ -579,7 +577,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should return internal server error when service fails", func() {
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 0).Return(nil, errors.New("database error")).Once()
+			testRunRepo.On("CountByProjectID", mock.Anything, "project-123").Return(int64(0), errors.New("database error")).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count?project_id=project-123", nil)
 			w := httptest.NewRecorder()
@@ -920,6 +918,319 @@ var _ = Describe("TestRunHandler", func() {
 
 			Expect(result["id"]).To(Equal(uint(1)))
 			Expect(result["tags"]).To(HaveLen(0))
+		})
+	})
+
+	Describe("getSuiteRuns", func() {
+		It("should return suite runs for a valid test run ID", func() {
+			now := time.Now()
+			suiteRuns := []*domain.SuiteRun{
+				{
+					ID:           1,
+					TestRunID:    1,
+					Name:         "Suite One",
+					PackageName:  "pkg/one",
+					Status:       "passed",
+					StartTime:    now,
+					TotalTests:   5,
+					PassedTests:  5,
+					FailedTests:  0,
+					SkippedTests: 0,
+					Duration:     2 * time.Second,
+				},
+			}
+
+			suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(1)).Return(suiteRuns, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response []map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(HaveLen(1))
+			Expect(response[0]["id"]).To(BeNumerically("==", 1))
+			Expect(response[0]["testRunId"]).To(BeNumerically("==", 1))
+			Expect(response[0]["name"]).To(Equal("Suite One"))
+			Expect(response[0]["status"]).To(Equal("passed"))
+
+			suiteRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return bad request for invalid test run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/abc/suite-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return internal server error when service fails", func() {
+			suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(1)).Return(nil, errors.New("database error")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			suiteRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return empty list when no suite runs exist", func() {
+			suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(2)).Return([]*domain.SuiteRun{}, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/2/suite-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response []map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(HaveLen(0))
+
+			suiteRunRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("getSuiteRun", func() {
+		It("should return a suite run for a valid suite run ID", func() {
+			now := time.Now()
+			suiteRun := &domain.SuiteRun{
+				ID:           1,
+				TestRunID:    1,
+				Name:         "Suite One",
+				PackageName:  "pkg/one",
+				Status:       "passed",
+				StartTime:    now,
+				TotalTests:   5,
+				PassedTests:  5,
+				FailedTests:  0,
+				SkippedTests: 0,
+				Duration:     2 * time.Second,
+			}
+
+			suiteRunRepo.On("GetByID", mock.Anything, uint(1)).Return(suiteRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response["id"]).To(BeNumerically("==", 1))
+			Expect(response["testRunId"]).To(BeNumerically("==", 1))
+			Expect(response["name"]).To(Equal("Suite One"))
+			Expect(response["status"]).To(Equal("passed"))
+
+			suiteRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return bad request for invalid suite run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/abc", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return not found when suite run does not exist", func() {
+			suiteRunRepo.On("GetByID", mock.Anything, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/999", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			suiteRunRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("getSpecRuns", func() {
+		It("should return spec runs for a valid suite run ID", func() {
+			now := time.Now()
+			specRuns := []*domain.SpecRun{
+				{
+					ID:         1,
+					SuiteRunID: 1,
+					Name:       "it should work",
+					Status:     "passed",
+					StartTime:  now,
+					Duration:   500 * time.Millisecond,
+				},
+			}
+
+			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(1)).Return(specRuns, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response []map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(HaveLen(1))
+			Expect(response[0]["id"]).To(BeNumerically("==", 1))
+			Expect(response[0]["suiteRunId"]).To(BeNumerically("==", 1))
+			Expect(response[0]["name"]).To(Equal("it should work"))
+			Expect(response[0]["status"]).To(Equal("passed"))
+
+			specRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return bad request for invalid suite run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/abc/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return internal server error when service fails", func() {
+			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(1)).Return(nil, errors.New("database error")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			specRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return empty list when no spec runs exist", func() {
+			specRunRepo.On("FindBySuiteRunID", mock.Anything, uint(2)).Return([]*domain.SpecRun{}, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/2/spec-runs", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response []map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(HaveLen(0))
+
+			specRunRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("getSpecRun", func() {
+		It("should return a spec run for a valid spec run ID", func() {
+			now := time.Now()
+			specRun := &domain.SpecRun{
+				ID:             1,
+				SuiteRunID:     1,
+				Name:           "it should work",
+				Status:         "passed",
+				StartTime:      now,
+				Duration:       500 * time.Millisecond,
+				ErrorMessage:   "",
+				FailureMessage: "",
+				StackTrace:     "",
+				RetryCount:     0,
+				IsFlaky:        false,
+			}
+
+			specRunRepo.On("GetByID", mock.Anything, uint(1)).Return(specRun, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/1", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response["id"]).To(BeNumerically("==", 1))
+			Expect(response["suiteRunId"]).To(BeNumerically("==", 1))
+			Expect(response["name"]).To(Equal("it should work"))
+			Expect(response["status"]).To(Equal("passed"))
+			Expect(response["isFlaky"]).To(BeFalse())
+
+			specRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return bad request for invalid spec run ID", func() {
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/abc", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return not found when spec run does not exist", func() {
+			specRunRepo.On("GetByID", mock.Anything, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/1/suite-runs/1/spec-runs/999", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+			specRunRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("updateTestRun", func() {
+		It("should return not implemented", func() {
+			requestBody := map[string]interface{}{
+				"status": "completed",
+			}
+			jsonBody, _ := json.Marshal(requestBody)
+
+			req := httptest.NewRequest("PUT", "/api/v1/test-runs/1", bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response["error"]).To(Equal("Update test run not yet implemented"))
+		})
+	})
+
+	Describe("updateTestRunStatus (additional branches)", func() {
+		It("should return bad request for invalid JSON body", func() {
+			req := httptest.NewRequest("PUT", "/api/v1/admin/test-runs/run-123/status", bytes.NewBufferString("not-json"))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return internal server error when CompleteTestRun fails", func() {
+			testRun := &domain.TestRun{ID: 1, RunID: "run-456", ProjectID: "project-123", Status: "running"}
+			testRunRepo.On("GetByRunID", mock.Anything, "run-456").Return(testRun, nil).Once()
+			testRunRepo.On("GetByID", mock.Anything, uint(1)).Return(testRun, nil).Once()
+			suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(1)).Return(nil, errors.New("suite fetch error")).Once()
+
+			requestBody := map[string]interface{}{
+				"status": "completed",
+			}
+			jsonBody, _ := json.Marshal(requestBody)
+
+			req := httptest.NewRequest("PUT", "/api/v1/admin/test-runs/run-456/status", bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			testRunRepo.AssertExpectations(GinkgoT())
+			suiteRunRepo.AssertExpectations(GinkgoT())
 		})
 	})
 

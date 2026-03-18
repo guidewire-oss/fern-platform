@@ -38,11 +38,6 @@ func NewTestRunHandler(testingService *application.TestRunService, tagService *t
 func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	var req TestRunRequest
 
-	if c.Request.Body == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Request body is empty"})
-		return
-	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -404,7 +399,7 @@ func (h *TestRunHandler) createTestRun(c *gin.Context) {
 	response := map[string]interface{}{
 		"id":        testRun.ID,
 		"projectId": testRun.ProjectID,
-		"suiteId":   testRun.ProjectID,
+		"suiteId":   input.SuiteID,
 		"status":    testRun.Status,
 		"startTime": testRun.StartTime,
 		"endTime":   testRun.EndTime,
@@ -493,7 +488,7 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 func (h *TestRunHandler) countTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 
-	_, totalCount, err := h.testingService.ListTestRuns(c.Request.Context(), projectID, 0, 0)
+	totalCount, err := h.testingService.CountTestRunsByProject(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
