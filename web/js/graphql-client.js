@@ -6,9 +6,11 @@ class GraphQLClient {
     }
 
     async query(queryOrOptions, variables = {}) {
+        if (window._authRedirecting) return new Promise(() => {});
+
         // Handle both string queries and options objects
         let queryString, queryVariables;
-        
+
         if (typeof queryOrOptions === 'string') {
             queryString = queryOrOptions;
             queryVariables = variables;
@@ -18,9 +20,9 @@ class GraphQLClient {
         } else {
             throw new Error('Invalid query format');
         }
-        
+
         const endpoint = this.endpoint;
-        
+
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -36,9 +38,9 @@ class GraphQLClient {
 
         if (!response.ok) {
             if (response.status === 401) {
-                // Redirect to login
+                window._authRedirecting = true;
                 window.location.href = '/auth/login';
-                return;
+                return new Promise(() => {}); // never resolves — redirect is imminent
             }
             // Try to get error details
             const errorText = await response.text();
