@@ -212,6 +212,41 @@ var _ = Describe("UC-04: Project Management", Label("e2e"), func() {
 					return !projectExists
 				}, 10*time.Second).Should(BeTrue())
 			})
+
+			It("should display team options in alphabetical order in the create project dialog", func() {
+				// Open the create project modal
+				Expect(page.Click("button:has-text('New Project')")).To(Succeed())
+				_, err := page.WaitForSelector("text=Create New Project")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Ensure the modal is closed even if assertions fail
+				DeferCleanup(func() {
+					page.Click("button:has-text('Cancel')")
+				})
+
+				// Scope to the dialog container so we don't pick up other selects on the page
+				dialog := page.Locator("h3:has-text('Create New Project')").Locator("xpath=..")
+
+				// Get all options from the team select (excluding the "No team" placeholder)
+				options := dialog.Locator("select option:not([value=''])")
+				count, err := options.Count()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(count).To(BeNumerically(">", 0))
+
+				teamNames := make([]string, count)
+				for i := 0; i < count; i++ {
+					text, err := options.Nth(i).InnerText()
+					Expect(err).NotTo(HaveOccurred())
+					teamNames[i] = text
+				}
+
+				// Verify the list is sorted alphabetically (case-insensitive, matching localeCompare behaviour)
+				for i := 1; i < len(teamNames); i++ {
+					Expect(strings.ToLower(teamNames[i-1]) <= strings.ToLower(teamNames[i])).To(BeTrue(),
+						"Expected teams to be sorted alphabetically, but %q comes before %q",
+						teamNames[i-1], teamNames[i])
+				}
+			})
 		})
 
 		Context("As a regular user", func() {

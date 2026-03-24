@@ -6708,7 +6708,7 @@
                                     }}
                                 >
                                     {isAdmin && <option value="">No team</option>}
-                                    {teams.map(team => (
+                                    {[...teams].sort((a, b) => a.localeCompare(b)).map(team => (
                                         <option key={team} value={team}>{team}</option>
                                     ))}
                                 </select>
