@@ -216,19 +216,19 @@ func (h *DomainHandler) recordTestRun(c *gin.Context) {
 	}
 
 	// Convert request SuiteRuns to domain SuiteRuns
-	domainSuiteRuns := h.convertApiSuiteRunstoDomain(req.SuiteRuns)
+	domainSuiteRuns := ConvertApiSuiteRunsToDomain(req.SuiteRuns)
 
-	runLevelTags := h.convertApiTagsToDomain(req.Tags)
+	runLevelTags := ConvertApiTagsToDomain(req.Tags)
 
 	// Calculate counts and status for this batch
-	status := h.calculateOverallStatus(req.SuiteRuns)
+	status := CalculateOverallStatus(req.SuiteRuns)
 	// Use client-provided environment if present, otherwise default
 	environment := req.Environment
 	if environment == "" {
 		environment = "default"
 	}
 	totalTests, passedTests, failedTests, skippedTests :=
-		h.calculateOverallTestCounts(domainSuiteRuns)
+		CalculateOverallTestCounts(domainSuiteRuns)
 
 	// Determine runID
 	var runID string
@@ -278,7 +278,7 @@ func (h *DomainHandler) recordTestRun(c *gin.Context) {
 
 		// If it was newly created (not a duplicate), return immediately
 		if !alreadyExisted {
-			response := h.convertDomainTestRunToAPI(testRun)
+			response := ConvertDomainTestRunToAPI(testRun)
 			c.JSON(http.StatusCreated, response)
 			return
 		}
@@ -312,7 +312,7 @@ func (h *DomainHandler) recordTestRun(c *gin.Context) {
 		testRun.SkippedTests += skippedTests
 
 		// ✅ Merge run-level tags
-		testRun.Tags = h.mergeUniqueTags(testRun.Tags, runLevelTags)
+		testRun.Tags = MergeUniqueTags(testRun.Tags, runLevelTags)
 
 		// mark overall status as failed if any failed
 		if status == "failed" || testRun.Status == "failed" {
@@ -329,7 +329,7 @@ func (h *DomainHandler) recordTestRun(c *gin.Context) {
 		}
 	}
 
-	response := h.convertDomainTestRunToAPI(testRun)
+	response := ConvertDomainTestRunToAPI(testRun)
 	c.JSON(http.StatusCreated, response)
 }
 
@@ -581,7 +581,7 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 			h.logger.Debug("Service account request - returning all test runs for project")
 		} else {
 			// Regular user - filter by groups
-			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+			testRuns = FilterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser, h.projectService, h.logger)
 		}
 	} else {
 		// Get all recent test runs
@@ -597,7 +597,7 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 			h.logger.Debug("Service account request - returning all test runs")
 		} else {
 			// Regular user - filter by groups
-			testRuns = h.filterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser)
+			testRuns = FilterTestRunsByUserGroups(c.Request.Context(), testRuns, authUser, h.projectService, h.logger)
 		}
 	}
 
@@ -606,7 +606,7 @@ func (h *DomainHandler) getTestRuns(c *gin.Context) {
 	// Convert to API response
 	response := make([]gin.H, len(testRuns))
 	for i, tr := range testRuns {
-		response[i] = h.convertDomainTestRunToAPI(tr)
+		response[i] = ConvertDomainTestRunToAPI(tr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -663,7 +663,7 @@ func (h *DomainHandler) getProjects(c *gin.Context) {
 	// Convert to API response
 	response := make([]gin.H, len(projects))
 	for i, p := range projects {
-		response[i] = h.convertProjectToAPI(p)
+		response[i] = ConvertProjectToAPI(p)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -730,7 +730,7 @@ func (h *DomainHandler) createProject(c *gin.Context) {
 		}
 	}
 
-	response := h.convertProjectToAPI(project)
+	response := ConvertProjectToAPI(project)
 	c.JSON(http.StatusCreated, response)
 }
 
@@ -748,7 +748,7 @@ func (h *DomainHandler) getTestRun(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, h.convertDomainTestRunToAPI(testRun))
+	c.JSON(http.StatusOK, ConvertDomainTestRunToAPI(testRun))
 }
 
 func (h *DomainHandler) getTestRunByRunId(c *gin.Context) {

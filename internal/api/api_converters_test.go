@@ -10,14 +10,9 @@ import (
 	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 )
 
-var _ = Describe("DomainHandler helpers", func() {
-	var h *DomainHandler
+var _ = Describe("API Converter Functions", func() {
 
-	BeforeEach(func() {
-		h = &DomainHandler{}
-	})
-
-	Describe("convertSpecRuns", func() {
+	Describe("ConvertSpecRuns", func() {
 		It("computes durations, end pointers and sets error/failure messages correctly", func() {
 			start := time.Now()
 			end := start.Add(1500 * time.Millisecond)
@@ -29,7 +24,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				{ID: 4, SuiteID: 10, SpecDescription: "skipped", Status: "skipped", StartTime: time.Time{}, EndTime: time.Time{}},
 			}
 
-			domain := h.convertSpecRuns(req)
+			domain := ConvertSpecRuns(req)
 			Expect(domain).To(HaveLen(4))
 
 			// passed
@@ -106,7 +101,7 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertApiSuiteRunstoDomain", func() {
+	Describe("ConvertApiSuiteRunsToDomain", func() {
 		It("translates suites including durations, counts and statuses", func() {
 			start := time.Now()
 			end := start.Add(500 * time.Millisecond)
@@ -134,7 +129,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				},
 			}
 
-			ds := h.convertApiSuiteRunstoDomain(reqSuites)
+			ds := ConvertApiSuiteRunsToDomain(reqSuites)
 			Expect(ds).To(HaveLen(2))
 
 			// first suite assertions
@@ -192,7 +187,7 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertDomainTestRunToAPI", func() {
+	Describe("ConvertDomainTestRunToAPI", func() {
 		It("converts a domain TestRun into gin.H map and returns numeric seconds for duration", func() {
 			now := time.Now()
 			end := now.Add(3 * time.Second)
@@ -214,7 +209,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				Metadata:     map[string]interface{}{"k": "v"},
 			}
 
-			apiMap := h.convertDomainTestRunToAPI(tr)
+			apiMap := ConvertDomainTestRunToAPI(tr)
 			Expect(apiMap).To(HaveKeyWithValue("id", tr.ID))
 			Expect(apiMap).To(HaveKeyWithValue("runId", tr.RunID))
 			Expect(apiMap["duration"]).To(BeNumerically("~", 3.0, 0.0001))
@@ -223,7 +218,7 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertProjectToAPI", func() {
+	Describe("ConvertProjectToAPI", func() {
 		It("returns snapshot fields mapped to API map", func() {
 			// create project via constructor and mutate via setters
 			proj, err := projectsDomain.NewProject(projectsDomain.ProjectID("proj-1"), "MyProject", projectsDomain.Team("team-abc"))
@@ -237,7 +232,7 @@ var _ = Describe("DomainHandler helpers", func() {
 			proj.SetSetting("x", "y")
 
 			snap := proj.ToSnapshot()
-			apiMap := h.convertProjectToAPI(proj)
+			apiMap := ConvertProjectToAPI(proj)
 
 			Expect(apiMap["id"]).To(Equal(snap.ID))
 			Expect(apiMap["projectId"]).To(Equal(string(snap.ProjectID)))
@@ -253,9 +248,9 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertApiTagsToDomain", func() {
+	Describe("ConvertApiTagsToDomain", func() {
 		It("returns nil for empty tag array", func() {
-			tags := h.convertApiTagsToDomain([]Tag{})
+			tags := ConvertApiTagsToDomain([]Tag{})
 			Expect(tags).To(BeNil())
 		})
 
@@ -265,7 +260,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				{ID: 2, Name: "browser:chrome"},
 			}
 
-			domainTags := h.convertApiTagsToDomain(apiTags)
+			domainTags := ConvertApiTagsToDomain(apiTags)
 			Expect(domainTags).To(HaveLen(2))
 			Expect(domainTags[0].ID).To(Equal(uint(1)))
 			Expect(domainTags[0].Name).To(Equal("priority:high"))
@@ -352,7 +347,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				},
 			}
 
-			domain := h.convertSpecRuns(req)
+			domain := ConvertSpecRuns(req)
 			Expect(domain).To(HaveLen(1))
 			Expect(domain[0].Tags).To(HaveLen(2))
 			Expect(domain[0].Tags[0].ID).To(Equal(uint(1)))
@@ -360,7 +355,7 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertApiSuiteRunstoDomain with tags", func() {
+	Describe("ConvertApiSuiteRunsToDomain with tags", func() {
 		It("converts tags from API SuiteRuns to domain SuiteRuns", func() {
 			start := time.Now()
 			end := start.Add(500 * time.Millisecond)
@@ -390,7 +385,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				},
 			}
 
-			ds := h.convertApiSuiteRunstoDomain(reqSuites)
+			ds := ConvertApiSuiteRunsToDomain(reqSuites)
 			Expect(ds).To(HaveLen(1))
 			Expect(ds[0].Tags).To(HaveLen(1))
 			Expect(ds[0].Tags[0].ID).To(Equal(uint(1)))
@@ -400,7 +395,7 @@ var _ = Describe("DomainHandler helpers", func() {
 		})
 	})
 
-	Describe("convertDomainTestRunToAPI with tags", func() {
+	Describe("ConvertDomainTestRunToAPI with tags", func() {
 		It("includes tags in the API response", func() {
 			now := time.Now()
 			end := now.Add(3 * time.Second)
@@ -426,7 +421,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				Metadata: map[string]interface{}{"k": "v"},
 			}
 
-			apiMap := h.convertDomainTestRunToAPI(tr)
+			apiMap := ConvertDomainTestRunToAPI(tr)
 			Expect(apiMap).To(HaveKey("tags"))
 			tags := apiMap["tags"].([]testingDomain.Tag)
 			Expect(tags).To(HaveLen(2))
@@ -472,7 +467,7 @@ var _ = Describe("DomainHandler helpers", func() {
 			}
 
 			// Convert to domain (this is what happens in recordTestRun)
-			domainSuiteRuns := h.convertApiSuiteRunstoDomain(req.SuiteRuns)
+			domainSuiteRuns := ConvertApiSuiteRunsToDomain(req.SuiteRuns)
 
 			// Verify tags made it through
 			Expect(domainSuiteRuns).To(HaveLen(1))
@@ -518,7 +513,7 @@ var _ = Describe("DomainHandler helpers", func() {
 			}
 
 			// Convert to domain
-			domainSpecRuns := h.convertSpecRuns(apiSpecRuns)
+			domainSpecRuns := ConvertSpecRuns(apiSpecRuns)
 
 			Expect(domainSpecRuns[0].Tags).To(HaveLen(2))
 			Expect(domainSpecRuns[0].Tags[0].ID).To(Equal(uint(10)))
@@ -561,7 +556,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				},
 			}
 
-			domainSuiteRuns := h.convertApiSuiteRunstoDomain(apiSuiteRuns)
+			domainSuiteRuns := ConvertApiSuiteRunsToDomain(apiSuiteRuns)
 
 			// Verify suite has tags
 			Expect(domainSuiteRuns[0].Tags).To(HaveLen(2))
@@ -641,7 +636,7 @@ var _ = Describe("DomainHandler helpers", func() {
 			}
 
 			// Convert to domain
-			domainSuiteRuns := h.convertApiSuiteRunstoDomain(apiSuiteRuns)
+			domainSuiteRuns := ConvertApiSuiteRunsToDomain(apiSuiteRuns)
 
 			// Verify all tags are propagated
 			Expect(domainSuiteRuns).To(HaveLen(2))
@@ -699,7 +694,7 @@ var _ = Describe("DomainHandler helpers", func() {
 				},
 			}
 
-			domainSuiteRuns := h.convertApiSuiteRunstoDomain(apiSuiteRuns)
+			domainSuiteRuns := ConvertApiSuiteRunsToDomain(apiSuiteRuns)
 
 			// Suite 1 should have tags
 			Expect(domainSuiteRuns[0].Tags).To(HaveLen(1))

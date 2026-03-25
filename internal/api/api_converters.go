@@ -92,10 +92,7 @@ func ConvertDomainTestRunToAPI(tr *testingDomain.TestRun) gin.H {
 	}
 }
 
-// convertDomainTestRunToAPI delegates to the package-level function for backward compatibility
-func (h *DomainHandler) convertDomainTestRunToAPI(tr *testingDomain.TestRun) gin.H {
-	return ConvertDomainTestRunToAPI(tr)
-}
+
 
 // ConvertProjectToAPI converts a domain Project to API response format
 func ConvertProjectToAPI(p *projectsDomain.Project) gin.H {
@@ -115,10 +112,7 @@ func ConvertProjectToAPI(p *projectsDomain.Project) gin.H {
 	}
 }
 
-// convertProjectToAPI delegates to the package-level function for backward compatibility
-func (h *DomainHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
-	return ConvertProjectToAPI(p)
-}
+
 
 // Request to Domain conversion methods (package-level functions)
 
@@ -173,10 +167,7 @@ func ConvertApiSuiteRunsToDomain(reqSuiteRuns []SuiteRun) []testingDomain.SuiteR
 	return domainSuiteRuns // []testingDomain.SuiteRun
 }
 
-// convertApiSuiteRunstoDomain delegates to the package-level function for backward compatibility
-func (h *DomainHandler) convertApiSuiteRunstoDomain(reqSuiteRuns []SuiteRun) []testingDomain.SuiteRun {
-	return ConvertApiSuiteRunsToDomain(reqSuiteRuns)
-}
+
 
 // ConvertSpecRuns converts request SpecRuns to domain SpecRuns
 // Returns []*testingDomain.SpecRun (slice of pointers)
@@ -231,10 +222,7 @@ func ConvertSpecRuns(reqSpecRuns []SpecRun) []*testingDomain.SpecRun {
 	return domainSpecRuns // []*testingDomain.SpecRun
 }
 
-// convertSpecRuns delegates to the package-level function for backward compatibility
-func (h *DomainHandler) convertSpecRuns(reqSpecRuns []SpecRun) []*testingDomain.SpecRun {
-	return ConvertSpecRuns(reqSpecRuns)
-}
+
 
 // Calculation and status helper methods (package-level functions)
 
@@ -250,10 +238,7 @@ func CalculateOverallStatus(suiteRuns []SuiteRun) string {
 	return "passed"
 }
 
-// calculateOverallStatus delegates to the package-level function for backward compatibility
-func (h *DomainHandler) calculateOverallStatus(suiteRuns []SuiteRun) string {
-	return CalculateOverallStatus(suiteRuns)
-}
+
 
 // CalculateTestCounts calculates test statistics from SpecRuns
 func CalculateTestCounts(specRuns []*testingDomain.SpecRun) (total, passed, failed, skipped int) {
@@ -273,10 +258,7 @@ func CalculateTestCounts(specRuns []*testingDomain.SpecRun) (total, passed, fail
 	return total, passed, failed, skipped
 }
 
-// calculateTestCounts delegates to the package-level function for backward compatibility
-func (h *DomainHandler) calculateTestCounts(specRuns []*testingDomain.SpecRun) (total, passed, failed, skipped int) {
-	return CalculateTestCounts(specRuns)
-}
+
 
 // CalculateOverallTestCounts calculates total test statistics from all suite runs
 func CalculateOverallTestCounts(suiteRuns []testingDomain.SuiteRun) (total, passed, failed, skipped int) {
@@ -289,10 +271,7 @@ func CalculateOverallTestCounts(suiteRuns []testingDomain.SuiteRun) (total, pass
 	return total, passed, failed, skipped
 }
 
-// calculateOverallTestCounts delegates to the package-level function for backward compatibility
-func (h *DomainHandler) calculateOverallTestCounts(suiteRuns []testingDomain.SuiteRun) (total, passed, failed, skipped int) {
-	return CalculateOverallTestCounts(suiteRuns)
-}
+
 
 // CalculateSuiteStatus determines suite status based on spec runs
 func CalculateSuiteStatus(specRuns []*testingDomain.SpecRun) string {
@@ -321,10 +300,7 @@ func CalculateSuiteStatus(specRuns []*testingDomain.SpecRun) string {
 	return "passed"
 }
 
-// calculateSuiteStatus delegates to the package-level function for backward compatibility
-func (h *DomainHandler) calculateSuiteStatus(specRuns []*testingDomain.SpecRun) string {
-	return CalculateSuiteStatus(specRuns)
-}
+
 
 // ConvertApiTagsToDomain converts API tags to domain tags
 func ConvertApiTagsToDomain(apiTags []Tag) []testingDomain.Tag {
@@ -344,10 +320,7 @@ func ConvertApiTagsToDomain(apiTags []Tag) []testingDomain.Tag {
 	return domainTags
 }
 
-// convertApiTagsToDomain delegates to the package-level function for backward compatibility
-func (h *DomainHandler) convertApiTagsToDomain(apiTags []Tag) []testingDomain.Tag {
-	return ConvertApiTagsToDomain(apiTags)
-}
+
 
 // MergeUniqueTags merges two tag slices, removing duplicates by ID
 func MergeUniqueTags(existingTags, newTags []testingDomain.Tag) []testingDomain.Tag {
@@ -376,10 +349,7 @@ func MergeUniqueTags(existingTags, newTags []testingDomain.Tag) []testingDomain.
 	return tags
 }
 
-// mergeUniqueTags delegates to the package-level function for backward compatibility
-func (h *DomainHandler) mergeUniqueTags(existingTags, newTags []testingDomain.Tag) []testingDomain.Tag {
-	return MergeUniqueTags(existingTags, newTags)
-}
+
 
 // FilterTestRunsByUserGroups filters test runs to only include those from projects
 // whose team matches any of the user's groups
@@ -422,7 +392,4 @@ func FilterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.T
 	return filtered
 }
 
-// filterTestRunsByUserGroups delegates to the package-level function for backward compatibility
-func (h *DomainHandler) filterTestRunsByUserGroups(ctx context.Context, testRuns []*testingDomain.TestRun, user *authDomain.User) []*testingDomain.TestRun {
-	return FilterTestRunsByUserGroups(ctx, testRuns, user, h.projectService, h.logger)
-}
+
