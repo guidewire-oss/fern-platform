@@ -63,7 +63,7 @@ var _ = Describe("API Converter Functions", func() {
 				{Status: "weird"},
 			}
 
-			total, passed, failed, skipped := h.calculateTestCounts(specs)
+			total, passed, failed, skipped := CalculateTestCounts(specs)
 			Expect(total).To(Equal(len(specs)))
 			Expect(passed).To(Equal(2))
 			Expect(failed).To(Equal(3))
@@ -73,7 +73,7 @@ var _ = Describe("API Converter Functions", func() {
 
 	Describe("calculateSuiteStatus", func() {
 		It("returns unknown for empty", func() {
-			Expect(h.calculateSuiteStatus([]*testingDomain.SpecRun{})).To(Equal("unknown"))
+			Expect(CalculateSuiteStatus([]*testingDomain.SpecRun{})).To(Equal("unknown"))
 		})
 
 		It("returns failed when any failure/error present", func() {
@@ -81,7 +81,7 @@ var _ = Describe("API Converter Functions", func() {
 				{Status: "passed"},
 				{Status: "fail"},
 			}
-			Expect(h.calculateSuiteStatus(specs)).To(Equal("failed"))
+			Expect(CalculateSuiteStatus(specs)).To(Equal("failed"))
 		})
 
 		It("returns skipped when skipped present but no failures", func() {
@@ -89,7 +89,7 @@ var _ = Describe("API Converter Functions", func() {
 				{Status: "passed"},
 				{Status: "skipped"},
 			}
-			Expect(h.calculateSuiteStatus(specs)).To(Equal("skipped"))
+			Expect(CalculateSuiteStatus(specs)).To(Equal("skipped"))
 		})
 
 		It("returns passed when all passing", func() {
@@ -97,7 +97,7 @@ var _ = Describe("API Converter Functions", func() {
 				{Status: "pass"},
 				{Status: "passed"},
 			}
-			Expect(h.calculateSuiteStatus(specs)).To(Equal("passed"))
+			Expect(CalculateSuiteStatus(specs)).To(Equal("passed"))
 		})
 	})
 
@@ -161,7 +161,7 @@ var _ = Describe("API Converter Functions", func() {
 				{TotalTests: 3, PassedTests: 2, FailedTests: 1, SkippedTests: 0},
 			}
 
-			total, passed, failed, skipped := h.calculateOverallTestCounts(suites)
+			total, passed, failed, skipped := CalculateOverallTestCounts(suites)
 			Expect(total).To(Equal(5))
 			Expect(passed).To(Equal(4))
 			Expect(failed).To(Equal(1))
@@ -175,7 +175,7 @@ var _ = Describe("API Converter Functions", func() {
 				{SuiteName: "s1", SpecRuns: []SpecRun{{SpecDescription: "a", Status: "passed"}}},
 				{SuiteName: "s2", SpecRuns: []SpecRun{{SpecDescription: "b", Status: "failed"}}},
 			}
-			Expect(h.calculateOverallStatus(suites)).To(Equal("failed"))
+			Expect(CalculateOverallStatus(suites)).To(Equal("failed"))
 		})
 
 		It("returns passed if no failed specs", func() {
@@ -183,7 +183,7 @@ var _ = Describe("API Converter Functions", func() {
 				{SuiteName: "s1", SpecRuns: []SpecRun{{SpecDescription: "a", Status: "skipped"}}},
 				{SuiteName: "s2", SpecRuns: []SpecRun{{SpecDescription: "b", Status: "pass"}}},
 			}
-			Expect(h.calculateOverallStatus(suites)).To(Equal("passed"))
+			Expect(CalculateOverallStatus(suites)).To(Equal("passed"))
 		})
 	})
 
@@ -281,7 +281,7 @@ var _ = Describe("API Converter Functions", func() {
 				{ID: 3, Name: "smoke", Category: "", Value: "smoke"},
 			}
 
-			merged := h.mergeUniqueTags(existing, newTags)
+			merged := MergeUniqueTags(existing, newTags)
 			Expect(merged).To(HaveLen(3)) // 1, 2, 3
 
 			tagIDs := make(map[uint]bool)
@@ -304,7 +304,7 @@ var _ = Describe("API Converter Functions", func() {
 				{ID: 2, Name: "tag2"},
 			}
 
-			merged := h.mergeUniqueTags(existing, newTags)
+			merged := MergeUniqueTags(existing, newTags)
 			Expect(merged).To(HaveLen(2))
 			for _, tag := range merged {
 				Expect(tag.ID).NotTo(Equal(uint(0)))
@@ -316,13 +316,13 @@ var _ = Describe("API Converter Functions", func() {
 				{ID: 1, Name: "tag1"},
 			}
 
-			merged1 := h.mergeUniqueTags(existing, []testingDomain.Tag{})
+			merged1 := MergeUniqueTags(existing, []testingDomain.Tag{})
 			Expect(merged1).To(HaveLen(1))
 
-			merged2 := h.mergeUniqueTags([]testingDomain.Tag{}, existing)
+			merged2 := MergeUniqueTags([]testingDomain.Tag{}, existing)
 			Expect(merged2).To(HaveLen(1))
 
-			merged3 := h.mergeUniqueTags([]testingDomain.Tag{}, []testingDomain.Tag{})
+			merged3 := MergeUniqueTags([]testingDomain.Tag{}, []testingDomain.Tag{})
 			Expect(merged3).To(HaveLen(0))
 		})
 	})
