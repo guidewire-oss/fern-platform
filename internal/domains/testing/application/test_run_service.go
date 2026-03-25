@@ -56,7 +56,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
 			// Another thread already created this test run
 			// Try to fetch the existing one
-			fmt.Println("Duplicate found: fetching existing test run")
 			if testRun.RunID != "" {
 				existing, fetchErr := s.testRunRepo.GetByRunID(ctx, testRun.RunID)
 				if fetchErr == nil && existing != nil {
@@ -68,7 +67,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		return nil, false, fmt.Errorf("failed to create test run: %w", err)
 	}
 
-	fmt.Println("New test run created with ID:", testRun.ID)
 	return testRun, false, nil // false = newly created
 }
 

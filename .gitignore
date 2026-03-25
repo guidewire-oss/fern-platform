@@ -2,6 +2,9 @@
 .claude/
 CLAUDE.md
 
+# Intent app settings
+.intent/
+
 # macOS system files
 .DS_Store
 
