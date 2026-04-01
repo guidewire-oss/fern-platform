@@ -87,11 +87,11 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	// Public routes (no authentication required)
 	publicGroup := v1.Group("")
 	h.healthHandler.RegisterRoutes(publicGroup)
-	h.testRunHandler.RegisterPublicRoutes(publicGroup)
 
 	// User routes (require authentication)
 	userGroup := v1.Group("")
 	userGroup.Use(h.authMiddleware.RequireAuth())
+	h.testRunHandler.RegisterSubmissionRoutes(userGroup)
 
 	// Manager routes (require manager role - admin or team manager)
 	managerGroup := v1.Group("")

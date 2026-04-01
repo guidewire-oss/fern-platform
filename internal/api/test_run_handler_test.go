@@ -1422,7 +1422,7 @@ var _ = Describe("TestRunHandler", func() {
 		BeforeEach(func() {
 			publicRouter = gin.New()
 			publicGroup = publicRouter.Group("/api/v1")
-			handler.RegisterPublicRoutes(publicGroup)
+			handler.RegisterSubmissionRoutes(publicGroup)
 		})
 
 		Describe("recordTestRun", func() {

@@ -885,13 +885,13 @@ func (h *TestRunHandler) RegisterRoutes(userGroup, adminGroup *gin.RouterGroup) 
 	adminGroup.POST("/test-runs/bulk-delete", h.bulkDeleteTestRuns)
 }
 
-// RegisterPublicRoutes registers public (unauthenticated) test submission routes
+// RegisterSubmissionRoutes registers authenticated test submission routes
 // These are compatible with the legacy Fern Reporter API
-func (h *TestRunHandler) RegisterPublicRoutes(publicGroup *gin.RouterGroup) {
-	publicGroup.POST("/test-runs", h.recordTestRun)
-	publicGroup.POST("/test-runs/start", h.startTestRun)
-	publicGroup.POST("/test-runs/complete", h.completeTestRun)
-	publicGroup.POST("/suite-runs", h.addSuiteRun)
-	publicGroup.POST("/spec-runs", h.addSpecRun)
-	publicGroup.PUT("/test-runs/:id", h.updateTestRunPublic)
+func (h *TestRunHandler) RegisterSubmissionRoutes(userGroup *gin.RouterGroup) {
+	userGroup.POST("/test-runs", h.recordTestRun)
+	userGroup.POST("/test-runs/start", h.startTestRun)
+	userGroup.POST("/test-runs/complete", h.completeTestRun)
+	userGroup.POST("/suite-runs", h.addSuiteRun)
+	userGroup.POST("/spec-runs", h.addSpecRun)
+	userGroup.PUT("/test-runs/:id", h.updateTestRunPublic)
 }
