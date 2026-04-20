@@ -116,6 +116,16 @@ func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockTestRunRepository) CountAll(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) CountSince(ctx context.Context, t time.Time) (int64, error) {
+	args := m.Called(ctx, t)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
 type MockSuiteRunRepository struct {
 	mock.Mock

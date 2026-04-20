@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotFound is returned by repositories when a requested resource is not found
@@ -36,6 +37,12 @@ type TestRunRepository interface {
 
 	// CountByProjectID counts test runs for a project
 	CountByProjectID(ctx context.Context, projectID string) (int64, error)
+
+	// CountAll counts all test runs across every project
+	CountAll(ctx context.Context) (int64, error)
+
+	// CountSince counts test runs inserted at or after t (by created_at).
+	CountSince(ctx context.Context, t time.Time) (int64, error)
 
 	// GetRecent retrieves recent test runs across all projects
 	GetRecent(ctx context.Context, limit int) ([]*TestRun, error)

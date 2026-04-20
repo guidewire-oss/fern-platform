@@ -2576,15 +2576,10 @@
         }
 
         // Modern Header component
-        function Header({ health, projects, testRuns, onOpenSettings }) {
+        function Header({ health, projects, totalTestRuns, recentTestRuns, onOpenSettings }) {
             const { theme, toggleTheme } = useUserPreferences();
             const { user, loading, login, logout } = useAuth();
             const activeProjects = projects.filter(p => p.isActive).length;
-            const recentRuns = testRuns.filter(tr => {
-                const runDate = new Date(tr.startTime);
-                const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                return runDate > dayAgo;
-            }).length;
 
             const getThemeIcon = () => {
                 switch (theme) {
@@ -2635,11 +2630,11 @@
                                     <span className="stat-label">Active Projects</span>
                                 </div>
                                 <div className="stat-item">
-                                    <span className="stat-value">{testRuns.length}</span>
+                                    <span className="stat-value">{totalTestRuns ?? 0}</span>
                                     <span className="stat-label">Total Runs</span>
                                 </div>
                                 <div className="stat-item">
-                                    <span className="stat-value">{recentRuns}</span>
+                                    <span className="stat-value">{recentTestRuns ?? 0}</span>
                                     <span className="stat-label">Recent Runs</span>
                                 </div>
                             </div>
@@ -8737,7 +8732,7 @@
         // Main App component
         function FernPlatform() {
             const { route, navigate } = useRouter();
-            const [appData, setAppData] = useState({ health: null, projects: [], testRuns: [] });
+            const [appData, setAppData] = useState({ health: null, projects: [], totalTestRuns: 0, recentTestRuns: 0 });
             const [showSettings, setShowSettings] = useState(false);
 
             useEffect(() => {
@@ -8759,7 +8754,8 @@
                     setAppData({
                         health: summaryData.dashboardSummary.health,
                         projects: projectList,
-                        testRuns: [] // Pages will load their own test runs as needed
+                        totalTestRuns: summaryData.dashboardSummary.totalTestRuns ?? 0,
+                        recentTestRuns: summaryData.dashboardSummary.recentTestRuns ?? 0
                     });
                 } catch (err) {
                     console.error('Failed to fetch app data:', err);

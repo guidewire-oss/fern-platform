@@ -818,6 +818,8 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(1), nil)
 				mockTestRunRepo.On("GetRecent", mock.Anything, 100).Return([]*testingDomain.TestRun{}, nil)
+				mockTestRunRepo.On("CountAll", mock.Anything).Return(int64(0), nil)
+				mockTestRunRepo.On("CountSince", mock.Anything, mock.Anything).Return(int64(0), nil)
 				mockTestRunRepo.On("GetLatestByProjectID", mock.Anything, "proj-1", 1).Return([]*testingDomain.TestRun{}, nil)
 
 				result, err := resolver.Query().(*queryResolver).DashboardSummary_domain(ctx)

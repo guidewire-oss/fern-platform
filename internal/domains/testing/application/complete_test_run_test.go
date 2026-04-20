@@ -34,6 +34,10 @@ func (m *mockTestRunRepo) CountByProjectID(ctx context.Context, projectID string
 func (m *mockTestRunRepo) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	return nil, nil
 }
+func (m *mockTestRunRepo) CountAll(ctx context.Context) (int64, error) { return 0, nil }
+func (m *mockTestRunRepo) CountSince(ctx context.Context, t time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockTestRunRepo) GetByRunID(ctx context.Context, runID string) (*domain.TestRun, error) {
 	args := m.Called(ctx, runID)
 	return args.Get(0).(*domain.TestRun), args.Error(1)

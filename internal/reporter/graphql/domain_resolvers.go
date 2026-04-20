@@ -911,8 +911,27 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 		r.logger.WithError(err).Error("Failed to get recent test runs for dashboard")
 	}
 
+	// Fall back to len(recentRuns) (capped at 100) if the count queries fail,
+	// so a transient DB error doesn't silently zero out the dashboard.
 	totalTestRuns := len(recentRuns)
-	recentTestRuns := len(recentRuns)
+	if totalCount, err := r.testingService.CountAllTestRuns(ctx); err != nil {
+		r.logger.WithError(err).Error("Failed to count total test runs for dashboard")
+	} else {
+		totalTestRuns = int(totalCount)
+	}
+
+	recentTestRuns := 0
+	if recentCount, err := r.testingService.CountTestRunsSince(ctx, time.Now().Add(-24*time.Hour)); err != nil {
+		r.logger.WithError(err).Error("Failed to count recent test runs for dashboard")
+		dayAgo := time.Now().Add(-24 * time.Hour)
+		for _, tr := range recentRuns {
+			if tr.StartTime.After(dayAgo) {
+				recentTestRuns++
+			}
+		}
+	} else {
+		recentTestRuns = int(recentCount)
+	}
 	overallPassRate := float64(0)
 	totalTestsExecuted := 0
 	avgDuration := 0

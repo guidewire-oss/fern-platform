@@ -244,6 +244,25 @@ func (r *GormTestRunRepository) CountByProjectID(ctx context.Context, projectID 
 	return count, err
 }
 
+// CountAll counts all test runs across every project
+func (r *GormTestRunRepository) CountAll(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&database.TestRun{}).Count(&count).Error
+	return count, err
+}
+
+// CountSince counts test runs whose row was inserted at or after t.
+// Uses created_at (not start_time) because start_time can be zero for rows
+// written before the run actually begins; created_at is always set by GORM.
+func (r *GormTestRunRepository) CountSince(ctx context.Context, t time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&database.TestRun{}).
+		Where("created_at >= ?", t).
+		Count(&count).Error
+	return count, err
+}
+
 // GetRecent retrieves recent test runs across all projects
 func (r *GormTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	var dbTestRuns []database.TestRun

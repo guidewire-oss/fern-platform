@@ -139,6 +139,16 @@ func (m *MockTestRunRepository) GetRecent(ctx context.Context, limit int) ([]*do
 	return args.Get(0).([]*domain.TestRun), args.Error(1)
 }
 
+func (m *MockTestRunRepository) CountAll(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockTestRunRepository) CountSince(ctx context.Context, t time.Time) (int64, error) {
+	args := m.Called(ctx, t)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockTestRunRepository) GetTestRunSummary(ctx context.Context, projectID string) (*domain.TestRunSummary, error) {
 	args := m.Called(ctx, projectID)
 	if args.Get(0) == nil {

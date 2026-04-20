@@ -266,6 +266,16 @@ func (s *TestRunService) GetRecentTestRuns(ctx context.Context, limit int) ([]*d
 	return s.testRunRepo.GetRecent(ctx, limit)
 }
 
+// CountAllTestRuns returns the total number of test runs across every project.
+func (s *TestRunService) CountAllTestRuns(ctx context.Context) (int64, error) {
+	return s.testRunRepo.CountAll(ctx)
+}
+
+// CountTestRunsSince returns the number of test runs inserted at or after t (by created_at).
+func (s *TestRunService) CountTestRunsSince(ctx context.Context, t time.Time) (int64, error) {
+	return s.testRunRepo.CountSince(ctx, t)
+}
+
 // CreateSuiteRun creates a new suite run
 func (s *TestRunService) CreateSuiteRun(ctx context.Context, suiteRun *domain.SuiteRun) error {
 	if suiteRun.TestRunID == 0 {
