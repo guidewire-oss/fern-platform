@@ -6,9 +6,11 @@ class GraphQLClient {
     }
 
     async query(queryOrOptions, variables = {}) {
+        if (window._authRedirecting) return new Promise(() => {});
+
         // Handle both string queries and options objects
         let queryString, queryVariables;
-        
+
         if (typeof queryOrOptions === 'string') {
             queryString = queryOrOptions;
             queryVariables = variables;
@@ -18,9 +20,9 @@ class GraphQLClient {
         } else {
             throw new Error('Invalid query format');
         }
-        
+
         const endpoint = this.endpoint;
-        
+
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -36,9 +38,9 @@ class GraphQLClient {
 
         if (!response.ok) {
             if (response.status === 401) {
-                // Redirect to login
+                window._authRedirecting = true;
                 window.location.href = '/auth/login';
-                return;
+                return new Promise(() => {}); // never resolves — redirect is imminent
             }
             // Try to get error details
             const errorText = await response.text();
@@ -63,24 +65,10 @@ class GraphQLClient {
 
 // Export queries
 const QUERIES = {
-    GET_DASHBOARD_DATA: `
-        query GetDashboardData {
-            dashboardSummary {
-                health {
-                    status
-                    service
-                    timestamp
-                }
-                projectCount
-                activeProjectCount
-                totalTestRuns
-                recentTestRuns
-                overallPassRate
-                totalTestsExecuted
-                averageTestDuration
-            }
-            
-            projects(first: 100) {
+    // Optimized queries for better performance
+    GET_PROJECTS_LIST: `
+        query GetProjectsList($first: Int) {
+            projects(first: $first) {
                 edges {
                     node {
                         id
@@ -100,8 +88,86 @@ const QUERIES = {
                 }
                 totalCount
             }
-            
-            recentTestRuns(limit: 100) {
+        }
+    `,
+
+    GET_DASHBOARD_SUMMARY: `
+        query GetDashboardSummary {
+            dashboardSummary {
+                health {
+                    status
+                    service
+                    timestamp
+                }
+                projectCount
+                activeProjectCount
+                totalTestRuns
+                recentTestRuns
+                overallPassRate
+                totalTestsExecuted
+                averageTestDuration
+            }
+        }
+    `,
+
+    GET_RECENT_TEST_RUNS_SUMMARY: `
+        query GetRecentTestRunsSummary($limit: Int) {
+            recentTestRuns(limit: $limit) {
+                id
+                runId
+                projectId
+                branch
+                status
+                startTime
+                endTime
+                duration
+                totalTests
+                passedTests
+                failedTests
+                skippedTests
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
+            }
+        }
+    `,
+    
+    /**
+     * Lazy-loads test history for a single project's TestHistoryChart.
+     * Maps to the `recentTestRuns` GraphQL query with a required projectId.
+     * Fetches up to `limit` runs (default 10); chart displays the last 20.
+     */
+    GET_PROJECT_TEST_RUNS: `
+        query GetProjectTestRuns($projectId: String!, $limit: Int) {
+            recentTestRuns(projectId: $projectId, limit: $limit) {
+                id
+                runId
+                projectId
+                branch
+                status
+                startTime
+                endTime
+                duration
+                totalTests
+                passedTests
+                failedTests
+                skippedTests
+                tags {
+                    id
+                    name
+                    category
+                    value
+                }
+            }
+        }
+    `,
+
+    GET_RECENT_TEST_RUNS_DETAILED: `
+        query GetRecentTestRunsDetailed($limit: Int) {
+            recentTestRuns(limit: $limit) {
                 id
                 runId
                 projectId
@@ -278,7 +344,6 @@ const QUERIES = {
                 canManage
                 stats {
                     totalTestRuns
-                    recentTestRuns
                     uniqueBranches
                     successRate
                     averageDuration
@@ -454,5 +519,11 @@ const QUERIES = {
 const graphqlClient = new GraphQLClient();
 
 // Make it available globally for the existing code
-window.graphqlClient = graphqlClient;
-window.GRAPHQL_QUERIES = QUERIES;
+if (typeof window !== 'undefined') {
+    window.graphqlClient = graphqlClient;
+    window.GRAPHQL_QUERIES = QUERIES;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { QUERIES, GraphQLClient };
+}

@@ -145,14 +145,14 @@ func TestProjectService_DeleteProject(t *testing.T) {
 		projectID := domain.ProjectID("non-existent-project")
 
 		// Set up expectations
-		mockRepo.On("FindByProjectID", ctx, projectID).Return(nil, assert.AnError)
+		mockRepo.On("FindByProjectID", ctx, projectID).Return(nil, domain.ErrProjectNotFound)
 
 		// Act
 		err := service.DeleteProject(ctx, projectID)
 
 		// Assert
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get project")
+		assert.Contains(t, err.Error(), "project not found")
 		mockRepo.AssertExpectations(t)
 	})
 
@@ -235,4 +235,65 @@ func TestProjectService_CreateProject(t *testing.T) {
 		assert.Contains(t, err.Error(), "already exists")
 		mockRepo.AssertExpectations(t)
 	})
+}
+
+func TestProjectService_GetProject(t *testing.T) {
+	t.Run("should return ErrProjectNotFound when project not found", func(t *testing.T) {
+		ctx := context.Background()
+		mockRepo := new(MockProjectRepository)
+		mockPermRepo := new(MockProjectPermissionRepository)
+		service := application.NewProjectService(mockRepo, mockPermRepo)
+
+		projectID := domain.ProjectID("missing-project")
+
+		mockRepo.On("FindByProjectID", ctx, projectID).
+			Return(nil, domain.ErrProjectNotFound)
+
+		project, err := service.GetProject(ctx, projectID)
+
+		assert.Nil(t, project)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, domain.ErrProjectNotFound)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("should wrap error when repository fails", func(t *testing.T) {
+		ctx := context.Background()
+		mockRepo := new(MockProjectRepository)
+		mockPermRepo := new(MockProjectPermissionRepository)
+		service := application.NewProjectService(mockRepo, mockPermRepo)
+
+		projectID := domain.ProjectID("test-project")
+
+		mockRepo.On("FindByProjectID", ctx, projectID).
+			Return(nil, assert.AnError)
+
+		project, err := service.GetProject(ctx, projectID)
+
+		assert.Nil(t, project)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get project")
+
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestProjectService_UpdateProject_NotFound(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockProjectRepository)
+	mockPermRepo := new(MockProjectPermissionRepository)
+	service := application.NewProjectService(mockRepo, mockPermRepo)
+
+	projectID := domain.ProjectID("missing")
+
+	mockRepo.On("FindByProjectID", ctx, projectID).
+		Return(nil, domain.ErrProjectNotFound)
+
+	err := service.UpdateProject(ctx, projectID, application.UpdateProjectRequest{})
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrProjectNotFound)
+
+	mockRepo.AssertExpectations(t)
 }

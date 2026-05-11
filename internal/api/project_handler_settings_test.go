@@ -3,11 +3,18 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/guidewire-oss/fern-platform/internal/api"
+	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
+	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
+	testHelpers "github.com/guidewire-oss/fern-platform/internal/testhelpers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,5 +105,263 @@ func TestProjectHandlerSettingsAreProcessed(t *testing.T) {
 		settings, ok := expectedResponse["settings"].(map[string]interface{})
 		assert.True(t, ok, "Settings should be a map, not a string")
 		assert.Equal(t, "maven", settings["buildTool"])
+	})
+}
+
+func TestGetProject_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		user := router.Group("")
+		handler.RegisterRoutes(user, user, user)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		req := httptest.NewRequest("GET", "/projects/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		user := router.Group("")
+		handler.RegisterRoutes(user, user, user)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		req := httptest.NewRequest("GET", "/projects/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestGetProjectByProjectID_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		user := router.Group("")
+		handler.RegisterRoutes(user, user, user)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		req := httptest.NewRequest("GET", "/projects/by-project-id/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		user := router.Group("")
+		handler.RegisterRoutes(user, user, user)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		req := httptest.NewRequest("GET", "/projects/by-project-id/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestUpdateProject_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		body := bytes.NewBuffer([]byte(`{}`))
+		req := httptest.NewRequest("PUT", "/projects/p1", body)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		body := bytes.NewBuffer([]byte(`{}`))
+		req := httptest.NewRequest("PUT", "/projects/p1", body)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestDeleteProject_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		req := httptest.NewRequest("DELETE", "/projects/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		req := httptest.NewRequest("DELETE", "/projects/p1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestActivateProject_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		req := httptest.NewRequest("POST", "/projects/p1/activate", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		req := httptest.NewRequest("POST", "/projects/p1/activate", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestDeactivateProject_ErrorCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("project not found", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(nil, projectsDomain.ErrProjectNotFound)
+
+		req := httptest.NewRequest("POST", "/projects/p1/deactivate", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("db internal error", func(t *testing.T) {
+		repo := new(testHelpers.MockProjectRepository)
+		service := projectsApp.NewProjectService(repo, nil)
+		handler := api.NewProjectHandler(service, nil)
+
+		router := gin.New()
+		manager := router.Group("")
+		handler.RegisterRoutes(manager, manager, manager)
+
+		repo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("p1")).
+			Return(&projectsDomain.Project{}, errors.New("db error"))
+
+		req := httptest.NewRequest("POST", "/projects/p1/deactivate", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }

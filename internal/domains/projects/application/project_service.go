@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
@@ -65,6 +66,9 @@ func (s *ProjectService) CreateProject(ctx context.Context, projectID domain.Pro
 func (s *ProjectService) GetProject(ctx context.Context, projectID domain.ProjectID) (*domain.Project, error) {
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 	return project, nil
@@ -75,6 +79,9 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID domain.Pro
 	// Get the project
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return err
+		}
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
@@ -124,6 +131,9 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID domain.Pro
 func (s *ProjectService) DeactivateProject(ctx context.Context, projectID domain.ProjectID) error {
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return err
+		}
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
@@ -140,6 +150,9 @@ func (s *ProjectService) DeactivateProject(ctx context.Context, projectID domain
 func (s *ProjectService) ActivateProject(ctx context.Context, projectID domain.ProjectID) error {
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return err
+		}
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
@@ -156,6 +169,9 @@ func (s *ProjectService) ActivateProject(ctx context.Context, projectID domain.P
 func (s *ProjectService) DeleteProject(ctx context.Context, projectID domain.ProjectID) error {
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return err
+		}
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
@@ -181,7 +197,10 @@ func (s *ProjectService) GrantPermission(ctx context.Context, projectID domain.P
 	// Check if project exists
 	_, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
-		return fmt.Errorf("project not found: %w", err)
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			return err
+		}
+		return fmt.Errorf("failed to get project: %w", err)
 	}
 
 	// Create permission
@@ -217,6 +236,10 @@ func (s *ProjectService) GetOrCreateProject(ctx context.Context, projectID domai
 	project, err := s.projectRepo.FindByProjectID(ctx, projectID)
 	if err == nil {
 		return project, nil
+	}
+
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
 	// Create new project if not found

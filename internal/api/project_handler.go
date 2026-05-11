@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -105,7 +106,11 @@ func (h *ProjectHandler) getProject(c *gin.Context) {
 	// Otherwise treat as project ID string
 	project, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(projectIDStr))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
 		return
 	}
 
@@ -118,7 +123,11 @@ func (h *ProjectHandler) getProjectByProjectID(c *gin.Context) {
 
 	project, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(projectID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
 		return
 	}
 
@@ -167,6 +176,10 @@ func (h *ProjectHandler) updateProject(c *gin.Context) {
 
 	// Update project
 	if err := h.projectService.UpdateProject(c.Request.Context(), projectsDomain.ProjectID(projectID), updates); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -174,7 +187,11 @@ func (h *ProjectHandler) updateProject(c *gin.Context) {
 	// Get updated project
 	project, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(projectID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
 		return
 	}
 
@@ -186,6 +203,10 @@ func (h *ProjectHandler) deleteProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
 	if err := h.projectService.DeleteProject(c.Request.Context(), projectsDomain.ProjectID(projectID)); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -230,6 +251,10 @@ func (h *ProjectHandler) activateProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
 	if err := h.projectService.ActivateProject(c.Request.Context(), projectsDomain.ProjectID(projectID)); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -242,6 +267,10 @@ func (h *ProjectHandler) deactivateProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
 	if err := h.projectService.DeactivateProject(c.Request.Context(), projectsDomain.ProjectID(projectID)); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

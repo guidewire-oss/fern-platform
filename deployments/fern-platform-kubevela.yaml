@@ -14,6 +14,7 @@ spec:
         namespace: fern-platform
         instances: 1
         storageSize: 0.5Gi
+        imageName: "ghcr.io/cloudnative-pg/postgresql:17.5"
 
     # Redis Cache
     - name: redis

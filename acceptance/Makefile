@@ -47,6 +47,11 @@ test-runs: deps
 test-projects: deps
 	ginkgo -v ./projects
 
+# Run performance tests only
+.PHONY: test-performance
+test-performance: deps
+	ginkgo -v ./performance
+
 # Run tests in watch mode
 .PHONY: watch
 watch: deps

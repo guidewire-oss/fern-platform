@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,6 +90,14 @@ func (m *MockTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 	return args.Get(0).([]*domain.TestRun), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) FindByProjectID(ctx context.Context, projectID string) ([]*domain.TestRun, error) {
 	args := m.Called(ctx, projectID)
 	if args.Get(0) == nil {
@@ -126,6 +135,14 @@ func (m *MockTestRunRepository) GetStatsByProjectID(ctx context.Context, project
 	return args.Get(0).(map[string]interface{}), args.Error(1)
 }
 
+func (m *MockTestRunRepository) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
 	args := m.Called(ctx, projectID)
 	return args.Get(0).(int64), args.Error(1)
@@ -145,6 +162,22 @@ func (m *MockTestRunRepository) GetTestRunSummary(ctx context.Context, projectID
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*domain.TestRunSummary), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	args := m.Called(ctx, projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ProjectStatsResult), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.DashboardStatsResult), args.Error(1)
 }
 
 // Mock suite run repository
@@ -238,6 +271,14 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		fixtures = testhelpers.NewFixtureBuilder()
 	})
 
+	Describe("ValidateTestRun", func() {
+		It("should return error when testRun is nil", func() {
+			err := application.ValidateTestRun(nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("testRun cannot be nil"))
+		})
+	})
+
 	Describe("CreateTestRun", func() {
 		It("should create a test run successfully", func() {
 			testRun := &domain.TestRun{
@@ -253,6 +294,125 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			_, _, err := service.CreateTestRun(ctx, testRun)
 			Expect(err).NotTo(HaveOccurred())
+
+			mockTestRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when testRun is nil", func() {
+			result, alreadyExisted, err := service.CreateTestRun(ctx, nil)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("testRun cannot be nil"))
+			Expect(result).To(BeNil())
+			Expect(alreadyExisted).To(BeFalse())
+		})
+
+		It("should allow test run with spec name of length less than max length", func() {
+			validName := make([]byte, 200)
+			for i := range validName {
+				validName[i] = 'a'
+			}
+
+			testRun := &domain.TestRun{
+				ProjectID: "proj-123",
+				SuiteRuns: []domain.SuiteRun{
+					{
+						Name: "suite-1",
+						SpecRuns: []*domain.SpecRun{
+							{
+								Name: string(validName),
+							},
+						},
+					},
+				},
+			}
+
+			mockTestRunRepo.On("Create", ctx, testRun).Return(nil)
+
+			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(alreadyExisted).To(BeFalse())
+
+			mockTestRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when one of the spec name exceeds max length", func() {
+			longName := strings.Repeat("a", 256)
+
+			testRun := &domain.TestRun{
+				ProjectID: "proj-123",
+				SuiteRuns: []domain.SuiteRun{
+					{
+						Name: "suite-1",
+						SpecRuns: []*domain.SpecRun{
+							{
+								Name: longName,
+							},
+						},
+					},
+				},
+			}
+
+			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid test run"))
+			Expect(result).To(BeNil())
+			Expect(alreadyExisted).To(BeFalse())
+
+			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+		})
+
+		It("should validate spec name length using rune count (unicode)", func() {
+			// each "你" is 1 rune but 3 bytes
+			longName := strings.Repeat("你", 256)
+
+			testRun := &domain.TestRun{
+				ProjectID: "proj-123",
+				SuiteRuns: []domain.SuiteRun{
+					{
+						Name: "suite-1",
+						SpecRuns: []*domain.SpecRun{
+							{
+								Name: longName,
+							},
+						},
+					},
+				},
+			}
+
+			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid test run"))
+			Expect(result).To(BeNil())
+			Expect(alreadyExisted).To(BeFalse())
+
+			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+		})
+
+		It("should ignore nil spec runs during validation", func() {
+			testRun := &domain.TestRun{
+				ProjectID: "proj-123",
+				SuiteRuns: []domain.SuiteRun{
+					{
+						Name: "suite-1",
+						SpecRuns: []*domain.SpecRun{
+							nil,
+						},
+					},
+				},
+			}
+
+			mockTestRunRepo.On("Create", ctx, testRun).Return(nil)
+
+			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(alreadyExisted).To(BeFalse())
 
 			mockTestRunRepo.AssertExpectations(GinkgoT())
 		})
@@ -335,7 +495,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				fixtures.TestRun("proj-123", testhelpers.WithTestRunID("test-2")),
 			}
 
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-123", 100).Return(runs, nil)
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "proj-123", 100).Return(runs, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-123", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -345,7 +505,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should return empty slice when no runs found", func() {
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "proj-999", 100).Return([]*domain.TestRun{}, nil)
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "proj-999", 100).Return([]*domain.TestRun{}, nil)
 
 			results, err := service.GetProjectTestRuns(ctx, "proj-999", 100)
 			Expect(err).NotTo(HaveOccurred())
@@ -353,7 +513,7 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 		})
 
 		It("should validate ProjectID parameter", func() {
-			mockTestRunRepo.On("GetLatestByProjectID", ctx, "", 100).Return(nil, errors.New("ProjectID is required"))
+			mockTestRunRepo.On("GetLatestByProjectIDTagsOnly", ctx, "", 100).Return(nil, errors.New("ProjectID is required"))
 
 			results, err := service.GetProjectTestRuns(ctx, "", 100)
 			Expect(err).To(HaveOccurred())
@@ -645,6 +805,60 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			mockTestRunRepo.AssertExpectations(GinkgoT())
 			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when testRun is nil", func() {
+			suites := []domain.SuiteRun{
+				{
+					Name: "Suite 1",
+					SpecRuns: []*domain.SpecRun{
+						{Name: "Spec 1"},
+					},
+				},
+			}
+
+			err := service.CreateTestRunWithSuites(ctx, nil, suites)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("testRun cannot be nil"))
+
+			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockSuiteRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
+		})
+
+		It("should return error when spec name exceeds max length in CreateTestRunWithSuites", func() {
+			longName := strings.Repeat("a", 256)
+
+			testRun := &domain.TestRun{
+				ProjectID: "proj-123",
+				RunID:     "test-123",
+				Status:    "running",
+			}
+
+			suites := []domain.SuiteRun{
+				{
+					Name: "Suite 1",
+					SpecRuns: []*domain.SpecRun{
+						{
+							Name: longName,
+						},
+					},
+				},
+			}
+
+			mockTestRunRepo.On("Create", ctx, testRun).Return(nil)
+			mockSuiteRepo.On("Create", ctx, mock.Anything).Return(nil)
+
+			err := service.CreateTestRunWithSuites(ctx, testRun, suites)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid test run"))
+
+			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
+			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockSuiteRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
 		})
 
 		It("should return error when test run creation fails", func() {
@@ -1721,6 +1935,263 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			Expect(err).NotTo(HaveOccurred())
 
 			mockTestRunRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSuiteRun", func() {
+		It("should get suite run successfully", func() {
+			suiteRun := &domain.SuiteRun{
+				ID:         1,
+				TestRunID:  1,
+				Name:       "Suite 1",
+				Status:     "passed",
+				TotalTests: 10,
+			}
+
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSuiteRun(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(suiteRun))
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite run not found", func() {
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			result, err := service.GetSuiteRun(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRunsBySuiteRunID", func() {
+		It("should get spec runs successfully", func() {
+			specRuns := []*domain.SpecRun{
+				{ID: 1, SuiteRunID: 1, Name: "Spec 1", Status: "passed"},
+				{ID: 2, SuiteRunID: 1, Name: "Spec 2", Status: "failed"},
+			}
+
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return(specRuns, nil).Once()
+
+			result, err := service.GetSpecRunsBySuiteRunID(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRuns))
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when query fails", func() {
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(999)).Return(nil, errors.New("db error")).Once()
+
+			result, err := service.GetSpecRunsBySuiteRunID(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRun", func() {
+		It("should get spec run successfully", func() {
+			specRun := &domain.SpecRun{
+				ID:         1,
+				SuiteRunID: 1,
+				Name:       "Spec 1",
+				Status:     "passed",
+			}
+
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+
+			result, err := service.GetSpecRun(ctx, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRun))
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when spec run not found", func() {
+			mockSpecRepo.On("GetByID", ctx, uint(999)).Return(nil, errors.New("not found")).Once()
+
+			result, err := service.GetSpecRun(ctx, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSuiteRunWithParentValidation", func() {
+		It("should return suite run when parent matches", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSuiteRunWithParentValidation(ctx, 1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(suiteRun))
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite run not found", func() {
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
+
+			result, err := service.GetSuiteRunWithParentValidation(ctx, 1, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite belongs to different test run", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSuiteRunWithParentValidation(ctx, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRunsWithParentValidation", func() {
+		It("should return spec runs when parent matches", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+			specRuns := []*domain.SpecRun{
+				{ID: 1, SuiteRunID: 1, Name: "Spec 1"},
+				{ID: 2, SuiteRunID: 1, Name: "Spec 2"},
+			}
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return(specRuns, nil).Once()
+
+			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRuns))
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return empty list when suite is valid but has no spec runs", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return([]*domain.SpecRun{}, nil).Once()
+
+			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(0))
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite run not found", func() {
+			mockSuiteRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
+
+			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when suite belongs to different test run", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when spec list lookup fails", func() {
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return(nil, errors.New("db error")).Once()
+
+			result, err := service.GetSpecRunsWithParentValidation(ctx, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+	})
+
+	Describe("GetSpecRunWithParentValidation", func() {
+		It("should return spec run when full parent chain matches", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 1, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(specRun))
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when spec run not found", func() {
+			mockSpecRepo.On("GetByID", ctx, uint(999)).Return(nil, domain.ErrNotFound).Once()
+
+			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 999)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when spec belongs to different suite", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 2, Name: "Spec 1"}
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+
+			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when parent suite belongs to different test run", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+			suiteRun := &domain.SuiteRun{ID: 1, TestRunID: 2, Name: "Suite 1"}
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil).Once()
+
+			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, application.ErrNotFound)).To(BeTrue())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should return error when parent suite lookup fails", func() {
+			specRun := &domain.SpecRun{ID: 1, SuiteRunID: 1, Name: "Spec 1"}
+			mockSpecRepo.On("GetByID", ctx, uint(1)).Return(specRun, nil).Once()
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(nil, errors.New("db error")).Once()
+
+			result, err := service.GetSpecRunWithParentValidation(ctx, 1, 1, 1)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(BeNil())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
+			mockSuiteRepo.AssertExpectations(GinkgoT())
 		})
 	})
 })

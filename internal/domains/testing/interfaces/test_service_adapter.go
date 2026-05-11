@@ -2,7 +2,9 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -244,6 +246,10 @@ func (a *TestServiceAdapter) CreateTestRunWithSuites() gin.HandlerFunc {
 
 		// Create test run with suites
 		if err := a.service.CreateTestRunWithSuites(c.Request.Context(), testRun, suites); err != nil {
+			if errors.Is(err, domain.ErrInvalidTestRun) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 			a.logger.WithError(err).Error("Failed to create test run with suites")
 			c.JSON(500, gin.H{"error": "Failed to create test run"})
 			return

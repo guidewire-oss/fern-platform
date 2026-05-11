@@ -1160,7 +1160,13 @@ func TestConvertProjectToGraphQL(t *testing.T) {
 func TestGetTestRun_domain(t *testing.T) {
 	now := time.Now()
 
-	t.Run("with valid ID", func(t *testing.T) {
+	adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "admin",
+		Role:   authDomain.RoleAdmin,
+		Groups: []authDomain.UserGroup{},
+	})
+
+	t.Run("with valid ID as admin", func(t *testing.T) {
 		mockRepo := new(testhelpers.MockTestRunRepository)
 		testingService := testingApp.NewTestRunService(mockRepo, nil, nil)
 
@@ -1183,7 +1189,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.GetTestRun_domain(context.Background(), "123")
+		result, err := queryResolver.GetTestRun_domain(adminCtx, "123")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1193,6 +1199,20 @@ func TestGetTestRun_domain(t *testing.T) {
 		mockRepo.AssertExpectations(t)
 	})
 
+	t.Run("unauthenticated request is rejected", func(t *testing.T) {
+		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
+		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.GetTestRun_domain(context.Background(), "123")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "not authenticated")
+	})
+
 	t.Run("with invalid ID format", func(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -1200,7 +1220,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.GetTestRun_domain(context.Background(), "not-a-number")
+		result, err := queryResolver.GetTestRun_domain(adminCtx, "not-a-number")
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -1218,12 +1238,123 @@ func TestGetTestRun_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.GetTestRun_domain(context.Background(), "999")
+		result, err := queryResolver.GetTestRun_domain(adminCtx, "999")
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
 
 		mockRepo.AssertExpectations(t)
+	})
+}
+
+// TestAuthorizationNegativeCases validates that resolvers reject unauthenticated
+// and cross-team access correctly (P2-4).
+func TestAuthorizationNegativeCases(t *testing.T) {
+	logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+
+	nonAdminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "user1",
+		Role:   authDomain.RoleUser,
+		Groups: []authDomain.UserGroup{{GroupName: "team-a"}},
+	})
+
+	t.Run("RecentTestRuns_domain: non-admin without projectId gets access denied", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.RecentTestRuns_domain(nonAdminCtx, nil, nil)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "access denied")
+	})
+
+	t.Run("RecentTestRuns_domain: unauthenticated request returns empty (admin-required check)", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.RecentTestRuns_domain(context.Background(), nil, nil)
+
+		// unauthenticated user has no role — treated same as non-admin
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("ListProjects_domain: unauthenticated request is rejected", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.ListProjects_domain(context.Background(), nil, nil, nil)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "not authenticated")
+	})
+
+	t.Run("Project_domain: unauthenticated request is rejected", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.Project_domain(context.Background(), "1")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "not authenticated")
+	})
+
+	t.Run("DashboardSummary_domain: unauthenticated request is rejected", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.DashboardSummary_domain(context.Background())
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "not authenticated")
+	})
+
+	t.Run("TreemapData_domain: unauthenticated request is rejected", func(t *testing.T) {
+		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.TreemapData_domain(context.Background(), nil, nil)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "not authenticated")
+	})
+
+	t.Run("GetTestRun_domain: non-admin accessing another team's run gets access denied", func(t *testing.T) {
+		mockRunRepo := new(testhelpers.MockTestRunRepository)
+		mockProjRepo := new(testhelpers.MockProjectRepository)
+		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
+
+		testRun := &testingDomain.TestRun{
+			ID:        42,
+			RunID:     "run-42",
+			ProjectID: "proj-other-team",
+		}
+		mockRunRepo.On("GetByID", mock.Anything, uint(42)).Return(testRun, nil)
+
+		otherTeamProject, _ := projectsDomain.NewProject(
+			projectsDomain.ProjectID("proj-other-team"),
+			"Other Team Project",
+			projectsDomain.Team("team-b"),
+		)
+		mockProjRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("proj-other-team")).Return(otherTeamProject, nil)
+
+		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
+		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
+
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.GetTestRun_domain(nonAdminCtx, "42")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "access denied")
 	})
 }
 
@@ -1265,7 +1396,12 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.RecentTestRuns_domain(context.Background(), nil, nil)
+		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID: "admin",
+			Role:   authDomain.RoleAdmin,
+			Groups: []authDomain.UserGroup{},
+		})
+		result, err := queryResolver.RecentTestRuns_domain(adminCtx, nil, nil)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1294,7 +1430,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 			},
 		}
 
-		mockRepo.On("GetLatestByProjectID", mock.Anything, projectID, 10).Return(testRuns, nil)
+		mockRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, projectID, 10).Return(testRuns, nil)
 
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -1327,7 +1463,12 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.RecentTestRuns_domain(context.Background(), nil, &limit)
+		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID: "admin",
+			Role:   authDomain.RoleAdmin,
+			Groups: []authDomain.UserGroup{},
+		})
+		result, err := queryResolver.RecentTestRuns_domain(adminCtx, nil, &limit)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1348,7 +1489,12 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.RecentTestRuns_domain(context.Background(), nil, nil)
+		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID: "admin",
+			Role:   authDomain.RoleAdmin,
+			Groups: []authDomain.UserGroup{},
+		})
+		result, err := queryResolver.RecentTestRuns_domain(adminCtx, nil, nil)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -1356,10 +1502,61 @@ func TestRecentTestRuns_domain(t *testing.T) {
 
 		mockRepo.AssertExpectations(t)
 	})
+
+	t.Run("with project filter and large limit for lazy loading", func(t *testing.T) {
+		mockRepo := new(testhelpers.MockTestRunRepository)
+		testingService := testingApp.NewTestRunService(mockRepo, nil, nil)
+
+		projectID := "proj-1"
+		limit := 50 // Simulates lazy-loading scenario where UI fetches 50 runs for a specific project
+		testRuns := make([]*testingDomain.TestRun, 20)
+		
+		// Create 20 test runs for the project
+		for i := 0; i < 20; i++ {
+			testRuns[i] = &testingDomain.TestRun{
+				ID:        uint(i + 1),
+				RunID:     fmt.Sprintf("run-%d", i+1),
+				ProjectID: projectID,
+				Status:    "completed",
+				StartTime: now.Add(time.Duration(-i) * time.Hour),
+				Duration:  5 * time.Second,
+				Tags:      []testingDomain.Tag{},
+				SuiteRuns: []testingDomain.SuiteRun{},
+			}
+		}
+
+		mockRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, projectID, limit).Return(testRuns, nil)
+
+		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
+		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+
+		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.RecentTestRuns_domain(context.Background(), &projectID, &limit)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Len(t, result, 20)
+		// Verify all runs belong to the same project
+		for i, run := range result {
+			assert.Equal(t, projectID, run.ProjectID, "Run %d should belong to project %s", i, projectID)
+		}
+		// Verify runs are in chronological order (most recent first based on our test data)
+		assert.Equal(t, "run-1", result[0].RunID)
+		assert.Equal(t, "run-20", result[19].RunID)
+
+		mockRepo.AssertExpectations(t)
+	})
 }
+
 
 // Test GetProject_domain
 func TestGetProject_domain(t *testing.T) {
+	adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{},
+	})
+
 	t.Run("with existing project", func(t *testing.T) {
 		mockRepo := new(testhelpers.MockProjectRepository)
 		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
@@ -1380,7 +1577,7 @@ func TestGetProject_domain(t *testing.T) {
 		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.GetProject_domain(context.Background(), projectID)
+		result, err := queryResolver.GetProject_domain(adminCtx, projectID)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1404,17 +1601,22 @@ func TestGetProject_domain(t *testing.T) {
 		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.GetProject_domain(context.Background(), projectID)
+		result, err := queryResolver.GetProject_domain(adminCtx, projectID)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
 
 		mockRepo.AssertExpectations(t)
 	})
+
 }
 
 // Test ListProjects_domain
 func TestListProjects_domain(t *testing.T) {
+	adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{},
+	})
+
 	t.Run("with default pagination", func(t *testing.T) {
 		mockRepo := new(testhelpers.MockProjectRepository)
 		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
@@ -1432,7 +1634,7 @@ func TestListProjects_domain(t *testing.T) {
 		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.ListProjects_domain(context.Background(), nil, nil, nil)
+		result, err := queryResolver.ListProjects_domain(adminCtx, nil, nil, nil)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1461,7 +1663,7 @@ func TestListProjects_domain(t *testing.T) {
 		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.ListProjects_domain(context.Background(), &limit, &offset, nil)
+		result, err := queryResolver.ListProjects_domain(adminCtx, &limit, &offset, nil)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1551,13 +1753,16 @@ func TestDeleteProject_domain(t *testing.T) {
 
 // Test Project_domain
 func TestProject_domain(t *testing.T) {
+	adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "admin", Role: authDomain.RoleAdmin, Groups: []authDomain.UserGroup{},
+	})
+
 	t.Run("find by database ID", func(t *testing.T) {
 		mockRepo := new(testhelpers.MockProjectRepository)
 		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
 		projectService := projectsApp.NewProjectService(mockRepo, mockPermRepo)
 
 		proj1, _ := projectsDomain.NewProject(projectsDomain.ProjectID("proj-1"), "Project 1", projectsDomain.Team("team1"))
-		// Set ID on proj1 (need to use reflection or find setter)
 		projects := []*projectsDomain.Project{proj1}
 
 		mockRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(1), nil)
@@ -1568,11 +1773,9 @@ func TestProject_domain(t *testing.T) {
 		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		// This test will fail to find the project since we can't easily set the ID
-		// But it will still execute the code path
-		result, err := queryResolver.Project_domain(context.Background(), "999")
+		// ID 999 won't match proj1, so we expect a not-found error
+		result, err := queryResolver.Project_domain(adminCtx, "999")
 
-		// Expect error since ID won't match
 		assert.Error(t, err)
 		assert.Nil(t, result)
 

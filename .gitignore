@@ -2,6 +2,9 @@
 .claude/
 CLAUDE.md
 
+# Intent app settings
+.intent/
+
 # macOS system files
 .DS_Store
 
@@ -34,6 +37,9 @@ fern-platform-atmos-dev.yaml
 # Test and debug files
 test-jira-ui.html
 acceptance/test_config.json
+
+# Local developer scripts (not for the team)
+scripts/local/
 EOF < /dev/null
 bin/fern-platform
 

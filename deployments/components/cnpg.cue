@@ -26,8 +26,12 @@ template: {
 				description: parameter.description
 			}
 
+			if parameter.imageName != "" {
+				imageName: parameter.imageName
+			}
+
 			if parameter.imageName == "" {
-				imageName: "ghcr.io/cloudnative-pg/postgresql:13.13-13"
+				imageName: "ghcr.io/cloudnative-pg/postgresql:17.5"
 			}
 
 			if parameter.instances > 0 {

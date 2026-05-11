@@ -1,7 +1,7 @@
 # Fern Platform - Testing Makefile
 # Handles all testing workflows using Dagger where appropriate
 
-.PHONY: test test-unit test-acceptance test-playwright coverage fmt lint vet
+.PHONY: test test-unit test-acceptance test-playwright test-performance coverage fmt lint vet
 
 # Test targets
 test: test-unit ## Run unit tests (default)
@@ -20,6 +20,12 @@ test-playwright: ## Run Playwright tests via Dagger (no k8s required)
 	@echo "🧪 Running Playwright tests via Dagger..."
 	cd ci && dagger call acceptance-test-playwright --source=..
 	@echo "✅ Playwright tests completed"
+
+test-performance: ## Run GraphQL performance regression tests
+	@echo "🧪 Running performance tests..."
+	@echo "Note: Requires test data. Run './scripts/insert-test-data.sh' if not already done."
+	cd acceptance && go run github.com/onsi/ginkgo/v2/ginkgo -v --label-filter="performance" ./performance
+	@echo "✅ Performance tests completed"
 
 coverage: test-unit ## Generate test coverage report
 	@echo "📊 Generating coverage report..."

@@ -29,6 +29,7 @@ var _ = Describe("DomainResolvers", func() {
 		logger    *logging.Logger
 		db        *gorm.DB
 		ctx       context.Context
+		adminCtx  context.Context
 	)
 
 	BeforeEach(func() {
@@ -45,6 +46,11 @@ var _ = Describe("DomainResolvers", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		ctx = context.Background()
+		adminCtx = context.WithValue(ctx, "user", &authDomain.User{
+			UserID: "admin",
+			Role:   authDomain.RoleAdmin,
+			Groups: []authDomain.UserGroup{},
+		})
 	})
 
 	Describe("GetTestRun_domain", func() {
@@ -75,7 +81,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("GetByID", mock.Anything, uint(123)).Return(testRun, nil)
 
-				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(ctx, "123")
+				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(adminCtx, "123")
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -87,7 +93,7 @@ var _ = Describe("DomainResolvers", func() {
 
 		Context("with invalid ID format", func() {
 			It("should return an error", func() {
-				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(ctx, "invalid")
+				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(adminCtx, "invalid")
 
 				Expect(err).To(HaveOccurred())
 				Expect(result).To(BeNil())
@@ -98,7 +104,7 @@ var _ = Describe("DomainResolvers", func() {
 			It("should return an error", func() {
 				mockRepo.On("GetByID", mock.Anything, uint(999)).Return(nil, gorm.ErrRecordNotFound)
 
-				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(ctx, "999")
+				result, err := resolver.Query().(*queryResolver).GetTestRun_domain(adminCtx, "999")
 
 				Expect(err).To(HaveOccurred())
 				Expect(result).To(BeNil())
@@ -145,7 +151,12 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("GetRecent", mock.Anything, 10).Return(testRuns, nil)
 
-				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(ctx, nil, nil)
+				adminCtx := context.WithValue(ctx, "user", &authDomain.User{
+					UserID: "admin",
+					Role:   authDomain.RoleAdmin,
+					Groups: []authDomain.UserGroup{},
+				})
+				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(adminCtx, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(HaveLen(2))
@@ -171,7 +182,7 @@ var _ = Describe("DomainResolvers", func() {
 					},
 				}
 
-				mockRepo.On("GetLatestByProjectID", mock.Anything, projectID, 10).Return(testRuns, nil)
+				mockRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, projectID, 10).Return(testRuns, nil)
 
 				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(ctx, &projectID, nil)
 
@@ -187,7 +198,12 @@ var _ = Describe("DomainResolvers", func() {
 				limit := 5
 				mockRepo.On("GetRecent", mock.Anything, limit).Return([]*testingDomain.TestRun{}, nil)
 
-				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(ctx, nil, &limit)
+				adminCtx := context.WithValue(ctx, "user", &authDomain.User{
+					UserID: "admin",
+					Role:   authDomain.RoleAdmin,
+					Groups: []authDomain.UserGroup{},
+				})
+				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(adminCtx, nil, &limit)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -267,7 +283,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("FindAll", mock.Anything, 50, 0).Return(projects, int64(2), nil)
 
-				result, err := resolver.Query().(*queryResolver).ListProjects_domain(ctx, nil, nil, nil)
+				result, err := resolver.Query().(*queryResolver).ListProjects_domain(adminCtx, nil, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(HaveLen(2))
@@ -286,7 +302,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("FindAll", mock.Anything, limit, offset).Return(projects, int64(1), nil)
 
-				result, err := resolver.Query().(*queryResolver).ListProjects_domain(ctx, &limit, &offset, nil)
+				result, err := resolver.Query().(*queryResolver).ListProjects_domain(adminCtx, &limit, &offset, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(HaveLen(1))
@@ -392,7 +408,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(1), nil)
 
-				result, err := resolver.Query().(*queryResolver).Project_domain(ctx, "999")
+				result, err := resolver.Query().(*queryResolver).Project_domain(adminCtx, "999")
 
 				// Will return error since ID won't match
 				Expect(err).To(HaveOccurred())
@@ -817,10 +833,11 @@ var _ = Describe("DomainResolvers", func() {
 				projects = append(projects, proj1)
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(1), nil)
-				mockTestRunRepo.On("GetRecent", mock.Anything, 100).Return([]*testingDomain.TestRun{}, nil)
-				mockTestRunRepo.On("GetLatestByProjectID", mock.Anything, "proj-1", 1).Return([]*testingDomain.TestRun{}, nil)
+				mockTestRunRepo.On("GetDashboardStats", mock.Anything).Return(&testingDomain.DashboardStatsResult{
+					TotalTestRuns: 0, TotalTestsExecuted: 0, PassedTests: 0, AvgDurationMs: 0,
+				}, nil)
 
-				result, err := resolver.Query().(*queryResolver).DashboardSummary_domain(ctx)
+				result, err := resolver.Query().(*queryResolver).DashboardSummary_domain(adminCtx)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -842,9 +859,9 @@ var _ = Describe("DomainResolvers", func() {
 			resolver = NewResolver(testingService, nil, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
-				UserID: "test-user",
-				Email:  "test@example.com",
-				Role:   authDomain.RoleUser,
+				UserID: "admin",
+				Email:  "admin@example.com",
+				Role:   authDomain.RoleAdmin,
 				Groups: []authDomain.UserGroup{},
 			}
 			authCtx = context.WithValue(ctx, "user", user)
@@ -883,10 +900,11 @@ var _ = Describe("DomainResolvers", func() {
 		})
 
 		Context("without project filter", func() {
-			It("should return empty results when no test runs exist", func() {
+			It("should return empty results for admin with no filter", func() {
+				// Admins with no projectId filter get an empty result from ListTestRuns (no runs in DB).
 				mockRepo.On("FindAll", mock.Anything, 20, 0).Return([]*testingDomain.TestRun{}, int64(0), nil)
 
-				result, err := resolver.Query().(*queryResolver).TestRuns_domain(ctx, nil, nil, nil, nil, nil)
+				result, err := resolver.Query().(*queryResolver).TestRuns_domain(authCtx, nil, nil, nil, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -987,27 +1005,20 @@ var _ = Describe("DomainResolvers", func() {
 						StartTime: time.Now(),
 						SuiteRuns: []testingDomain.SuiteRun{
 							{
-								ID:        1,
+								ID:   1,
 								Name: "Suite 1",
-								SpecRuns: []*testingDomain.SpecRun{
-									{
-										ID:       1,
-										Name: "Spec 1",
-										Status:   "passed",
-										Duration: 100 * time.Millisecond,
-									},
-								},
 							},
 						},
 					},
 				}
 
-				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{project}, int64(1), nil)
-				mockRepo.On("GetLatestByProjectID", mock.Anything, projectID, 1000).Return(testRuns, nil)
-				mockRepo.On("CountByProjectID", mock.Anything, projectID).Return(int64(1), nil)
-				mockRepo.On("GetWithDetails", mock.Anything, uint(1)).Return(testRuns[0], nil)
+				adminUser := &authDomain.User{UserID: "admin-1", Role: authDomain.RoleAdmin}
+				adminCtx := context.WithValue(ctx, "user", adminUser)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(ctx, &projectID, &days)
+				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{project}, int64(1), nil)
+				mockRepo.On("FindByDateRangeForProjects", mock.Anything, []string{projectID}, mock.Anything, mock.Anything).Return(testRuns, nil)
+
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, &projectID, &days)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -1016,9 +1027,12 @@ var _ = Describe("DomainResolvers", func() {
 
 		Context("without project ID", func() {
 			It("should return treemap data for all projects", func() {
+				adminUser := &authDomain.User{UserID: "admin-1", Role: authDomain.RoleAdmin}
+				adminCtx := context.WithValue(ctx, "user", adminUser)
+
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(ctx, nil, nil)
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())

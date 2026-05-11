@@ -5,7 +5,10 @@
 -- This SQL script generates comprehensive test data for the Fern Platform database.
 -- It creates a realistic dataset that simulates test execution patterns across
 -- different types of software projects, providing data for all dashboard views,
--- analytics features, and trend analysis.
+-- analytics features, trend analysis, and performance testing.
+--
+-- The script generates ~100-120 test runs with nested suite and spec data to ensure
+-- GraphQL queries are tested at production-like scale.
 --
 -- Data Generated:
 -- 1. Projects (3 total):
@@ -14,9 +17,10 @@
 --    - Mobile Banking App: React Native project with stable test results
 --
 -- 2. Test Runs:
---    - Multiple runs per project spanning several days
+--    - 30-40 runs per project spanning several days
 --    - Mix of completed, failed, and running statuses
 --    - Realistic execution times and branch names
+--    - Total: ~100-120 test runs across all projects
 --
 -- 3. Test Suites:
 --    - 2-5 suites per test run
@@ -79,8 +83,9 @@ BEGIN
         FROM project_details 
         WHERE project_id IN ('550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440003')
     LOOP
-        -- Create 3-5 test runs per project
-        FOR i IN 1..3 + floor(random() * 3)::int LOOP
+        -- Create 30-40 test runs per project (for realistic performance testing)
+        -- This generates enough data to test query performance at scale
+        FOR i IN 1..30 + floor(random() * 11)::int LOOP
             total_tests := 0;
             passed_tests := 0;
             failed_tests := 0;

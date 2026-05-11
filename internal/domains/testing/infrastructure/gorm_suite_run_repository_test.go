@@ -323,7 +323,7 @@ var _ = Describe("GormSuiteRunRepository", func() {
 				suiteRun, err := repository.GetByID(ctx, id)
 
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("suite run not found"))
+				Expect(err).To(Equal(domain.ErrNotFound))
 				Expect(suiteRun).To(BeNil())
 			})
 		})
@@ -512,7 +512,7 @@ var _ = Describe("GormSuiteRunRepository", func() {
 				suiteRun, err := repository.GetWithSpecRuns(ctx, id)
 
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("suite run not found"))
+				Expect(err).To(Equal(domain.ErrNotFound))
 				Expect(suiteRun).To(BeNil())
 			})
 		})

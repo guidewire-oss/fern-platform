@@ -81,11 +81,12 @@ type Project {
 
 type ProjectStats {
   totalTestRuns: Int!
-  recentTestRuns: Int!
   uniqueBranches: Int!
+  # Range: 0.0–1.0 (fraction, not percentage). Multiply by 100 for display.
   successRate: Float!
   averageDuration: Int!
   lastRunTime: Time
+  recentTestRuns: Int! @deprecated(reason: "Use the top-level recentTestRuns query instead")
 }
 
 # Tag Types
@@ -132,6 +133,7 @@ type TestRunStats {
   totalRuns: Int!
   statusCounts: [StatusCount!]!
   averageDuration: Int!
+  # Range: 0.0–1.0 (fraction, not percentage). Multiply by 100 for display.
   successRate: Float!
 }
 

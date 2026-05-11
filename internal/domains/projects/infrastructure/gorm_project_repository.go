@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
@@ -54,8 +55,8 @@ func (r *GormProjectRepository) Save(ctx context.Context, project *domain.Projec
 func (r *GormProjectRepository) FindByID(ctx context.Context, id uint) (*domain.Project, error) {
 	var dbProject database.ProjectDetails
 	if err := r.db.WithContext(ctx).First(&dbProject, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("project not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrProjectNotFound
 		}
 		return nil, fmt.Errorf("failed to find project: %w", err)
 	}
@@ -67,8 +68,8 @@ func (r *GormProjectRepository) FindByID(ctx context.Context, id uint) (*domain.
 func (r *GormProjectRepository) FindByProjectID(ctx context.Context, projectID domain.ProjectID) (*domain.Project, error) {
 	var dbProject database.ProjectDetails
 	if err := r.db.WithContext(ctx).Where("project_id = ?", string(projectID)).First(&dbProject).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("project not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrProjectNotFound
 		}
 		return nil, fmt.Errorf("failed to find project: %w", err)
 	}

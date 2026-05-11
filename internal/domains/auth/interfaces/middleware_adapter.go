@@ -323,6 +323,12 @@ func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 			return
 		}
 
+		// Prevent proxies and browsers from caching this redirect — a cached response
+		// would have the Set-Cookie header stripped, so the oauth_state cookie would
+		// never reach the browser and every subsequent login attempt would fail.
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+		c.Header("Pragma", "no-cache")
+
 		// Store state in session/cookie for validation
 		isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 		c.SetCookie("oauth_state", state, 600, "/", "", isSecure, true) // 10 minutes

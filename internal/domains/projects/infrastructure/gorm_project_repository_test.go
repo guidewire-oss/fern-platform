@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/projects/infrastructure"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,4 +90,50 @@ func TestProjectDeletion_Integration(t *testing.T) {
 		db.Model(&TestRun{}).Where("project_id = ?", project.ProjectID()).Count(&count)
 		assert.Equal(t, int64(0), count, "Test runs should be cascade deleted")
 	*/
+}
+
+func TestGormProjectRepository_FindByID_NotFound(t *testing.T) {
+	t.Run("should return ErrProjectNotFound when record not found", func(t *testing.T) {
+		db, mock, gormDB := setupMockDB(t)
+		defer db.Close()
+
+		repo := infrastructure.NewGormProjectRepository(gormDB)
+		ctx := context.Background()
+		projectID := uint(123)
+
+		mock.ExpectQuery(`SELECT .* FROM "project_details"`).
+    		WithArgs(projectID, sqlmock.AnyArg()).
+    		WillReturnError(gorm.ErrRecordNotFound)
+
+		project, err := repo.FindByID(ctx, projectID)
+
+		assert.Nil(t, project)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, domain.ErrProjectNotFound)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestGormProjectRepository_FindByProjectID_NotFound(t *testing.T) {
+	t.Run("should return ErrProjectNotFound when record not found", func(t *testing.T) {
+		db, mock, gormDB := setupMockDB(t)
+		defer db.Close()
+
+		repo := infrastructure.NewGormProjectRepository(gormDB)
+		ctx := context.Background()
+		projectID := domain.ProjectID("proj-123")
+
+		mock.ExpectQuery(`SELECT .* FROM "project_details"`).
+			WithArgs(string(projectID), sqlmock.AnyArg()).
+			WillReturnError(gorm.ErrRecordNotFound)
+
+		project, err := repo.FindByProjectID(ctx, projectID)
+
+		assert.Nil(t, project)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, domain.ErrProjectNotFound)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }

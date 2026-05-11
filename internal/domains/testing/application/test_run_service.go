@@ -2,14 +2,24 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
 )
+
+const (
+	MaxSpecNameLength = 255
+)
+
+// ErrNotFound is returned when a resource is not found or parent-child validation fails
+// It wraps domain.ErrNotFound for application-level error handling
+var ErrNotFound = fmt.Errorf("resource not found: %w", domain.ErrNotFound)
 
 // TestRunService handles test run business logic
 type TestRunService struct {
@@ -31,12 +41,47 @@ func NewTestRunService(
 	}
 }
 
+// ValidateTestRun does validation of test run details
+func ValidateTestRun(testRun *domain.TestRun) error {
+	if testRun == nil {
+		return fmt.Errorf("testRun cannot be nil")
+	}
+
+	for _, suite := range testRun.SuiteRuns {
+		for _, spec := range suite.SpecRuns {
+			if spec == nil {
+				continue
+			}
+			if utf8.RuneCountInString(spec.Name) > MaxSpecNameLength {
+				return fmt.Errorf(
+					"%w: spec name exceeds %d characters (suite: %s, spec: %s)",
+					domain.ErrInvalidTestRun,
+					MaxSpecNameLength,
+					suite.Name,
+					spec.Name,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 // CreateTestRun creates a new test run
 // Returns the test run (existing or newly created), a flag indicating if it already existed, and any error
 func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.TestRun) (*domain.TestRun, bool, error) {
 	// Validate test run
+	if testRun == nil {
+		return nil, false, fmt.Errorf("testRun cannot be nil")
+	}
+
 	if testRun.ProjectID == "" {
 		return nil, false, fmt.Errorf("project ID is required")
+	}
+
+	// Validate individual spec names
+	if err := ValidateTestRun(testRun); err != nil {
+		return nil, false, err
 	}
 
 	// Set default values
@@ -51,7 +96,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
 			// Another thread already created this test run
 			// Try to fetch the existing one
-			fmt.Println("Duplicate found: fetching existing test run")
 			if testRun.RunID != "" {
 				existing, fetchErr := s.testRunRepo.GetByRunID(ctx, testRun.RunID)
 				if fetchErr == nil && existing != nil {
@@ -63,7 +107,6 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 		return nil, false, fmt.Errorf("failed to create test run: %w", err)
 	}
 
-	fmt.Println("New test run created with ID:", testRun.ID)
 	return testRun, false, nil // false = newly created
 }
 
@@ -150,9 +193,25 @@ func (s *TestRunService) GetTestRunWithDetails(ctx context.Context, id uint) (*d
 	return s.testRunRepo.GetWithDetails(ctx, id)
 }
 
-// GetProjectTestRuns retrieves test runs for a project
+// GetProjectTestRuns retrieves test runs for a project (Tags only; no SuiteRuns/SpecRuns preloaded).
+// Used by the lazy-load chart path which only needs top-level run fields.
 func (s *TestRunService) GetProjectTestRuns(ctx context.Context, projectID string, limit int) ([]*domain.TestRun, error) {
-	return s.testRunRepo.GetLatestByProjectID(ctx, projectID, limit)
+	return s.testRunRepo.GetLatestByProjectIDTagsOnly(ctx, projectID, limit)
+}
+
+// CountProjectTestRuns counts total test runs for a project
+func (s *TestRunService) CountProjectTestRuns(ctx context.Context, projectID string) (int64, error) {
+	return s.testRunRepo.CountByProjectID(ctx, projectID)
+}
+
+// GetProjectStats returns aggregated stats for a project in a single query.
+func (s *TestRunService) GetProjectStats(ctx context.Context, projectID string) (*domain.ProjectStatsResult, error) {
+	return s.testRunRepo.GetProjectStats(ctx, projectID)
+}
+
+// GetTestRunsForProjectsInDateRange fetches test runs for multiple projects in one query.
+func (s *TestRunService) GetTestRunsForProjectsInDateRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
+	return s.testRunRepo.FindByDateRangeForProjects(ctx, projectIDs, startDate, endDate)
 }
 
 // GetTestRunSummary retrieves test run summary for a project
@@ -217,32 +276,42 @@ func (s *TestRunService) updateSuiteStatistics(ctx context.Context, suiteRunID u
 
 // CreateTestRunWithSuites creates a test run with all its suites and specs in one transaction
 func (s *TestRunService) CreateTestRunWithSuites(ctx context.Context, testRun *domain.TestRun, suites []domain.SuiteRun) error {
-	// Create the test run
-	createdTestRun, _, err := s.CreateTestRun(ctx, testRun)
-	if err != nil {
-		return err
+	if testRun == nil {
+		return fmt.Errorf("testRun cannot be nil")
 	}
 
-	// Use the returned test run (either new or existing)
-	if createdTestRun != nil {
-		testRun = createdTestRun
+	// Validate suite runs for test spec name length
+	testRun.SuiteRuns = suites
+	if err := ValidateTestRun(testRun); err != nil {
+		return err
 	}
+	testRun.SuiteRuns = nil
 
 	// Always add the suite runs, whether test run is new or existing
 	// This handles the concurrent creation case where another thread created the test run
 
 	// Create all suites
+	createdTestRun, _, err := s.CreateTestRun(ctx, testRun)
+	if err != nil {
+		return err
+	}
+
+	if createdTestRun != nil {
+		testRun = createdTestRun
+	}
+
+	// Create suites + specs
 	for _, suite := range suites {
 		suite.TestRunID = testRun.ID
 		if err := s.suiteRunRepo.Create(ctx, &suite); err != nil {
 			return fmt.Errorf("failed to create suite run: %w", err)
 		}
 
-		// Create specs for this suite
 		if len(suite.SpecRuns) > 0 {
 			for _, spec := range suite.SpecRuns {
 				spec.SuiteRunID = suite.ID
 			}
+
 			if err := s.specRunRepo.CreateBatch(ctx, suite.SpecRuns); err != nil {
 				return fmt.Errorf("failed to create spec runs: %w", err)
 			}
@@ -261,6 +330,11 @@ func (s *TestRunService) GetTestRunByRunID(ctx context.Context, runID string) (*
 // GetRecentTestRuns retrieves recent test runs across all projects
 func (s *TestRunService) GetRecentTestRuns(ctx context.Context, limit int) ([]*domain.TestRun, error) {
 	return s.testRunRepo.GetRecent(ctx, limit)
+}
+
+// GetDashboardStats returns platform-wide aggregate stats.
+func (s *TestRunService) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
+	return s.testRunRepo.GetDashboardStats(ctx)
 }
 
 // CreateSuiteRun creates a new suite run
@@ -291,7 +365,7 @@ func (s *TestRunService) CreateSpecRun(ctx context.Context, specRun *domain.Spec
 	if specRun.Status == "" {
 		specRun.Status = "pending"
 	}
-	
+
 	// Only auto-set StartTime if both StartTime and EndTime are zero
 	if specRun.StartTime.IsZero() && (specRun.EndTime == nil || specRun.EndTime.IsZero()) {
 		specRun.StartTime = time.Now()
@@ -344,6 +418,104 @@ func (s *TestRunService) ListTestRuns(ctx context.Context, projectID string, lim
 // GetSuiteRunsByTestRunID retrieves all suite runs for a test run
 func (s *TestRunService) GetSuiteRunsByTestRunID(ctx context.Context, testRunID uint) ([]*domain.SuiteRun, error) {
 	return s.suiteRunRepo.FindByTestRunID(ctx, testRunID)
+}
+
+// GetSuiteRun retrieves a single suite run by ID
+func (s *TestRunService) GetSuiteRun(ctx context.Context, id uint) (*domain.SuiteRun, error) {
+	return s.suiteRunRepo.GetByID(ctx, id)
+}
+
+// GetSuiteRunWithParentValidation retrieves a suite run and validates it belongs to the specified test run
+func (s *TestRunService) GetSuiteRunWithParentValidation(ctx context.Context, testRunID, suiteID uint) (*domain.SuiteRun, error) {
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		// Check if it's a not-found error from the repository
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		// Otherwise it's an internal/database error - return as-is
+		return nil, err
+	}
+
+	// Validate parent-child relationship
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, ErrNotFound
+	}
+
+	return suiteRun, nil
+}
+
+// GetSpecRunsBySuiteRunID retrieves all spec runs for a suite run
+func (s *TestRunService) GetSpecRunsBySuiteRunID(ctx context.Context, suiteRunID uint) ([]*domain.SpecRun, error) {
+	return s.specRunRepo.FindBySuiteRunID(ctx, suiteRunID)
+}
+
+// GetSpecRunsWithParentValidation retrieves spec runs for a suite and validates the suite belongs to the specified test run
+func (s *TestRunService) GetSpecRunsWithParentValidation(ctx context.Context, testRunID, suiteID uint) ([]*domain.SpecRun, error) {
+	// First validate the suite belongs to the test run
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		// Check if it's a not-found error from the repository
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		// Otherwise it's an internal/database error - return as-is
+		return nil, err
+	}
+
+	// Validate parent-child relationship
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, ErrNotFound
+	}
+
+	// Now fetch spec runs for this validated suite
+	// Note: FindBySuiteRunID errors are NOT wrapped as ErrNotFound - they're internal failures
+	return s.specRunRepo.FindBySuiteRunID(ctx, suiteID)
+}
+
+// GetSpecRun retrieves a single spec run by ID
+func (s *TestRunService) GetSpecRun(ctx context.Context, id uint) (*domain.SpecRun, error) {
+	return s.specRunRepo.GetByID(ctx, id)
+}
+
+// GetSpecRunWithParentValidation retrieves a spec run and validates the full parent chain
+func (s *TestRunService) GetSpecRunWithParentValidation(ctx context.Context, testRunID, suiteID, specID uint) (*domain.SpecRun, error) {
+	// Fetch the spec run
+	specRun, err := s.specRunRepo.GetByID(ctx, specID)
+	if err != nil {
+		// Check if it's a not-found error from the repository
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		// Otherwise it's an internal/database error - return as-is
+		return nil, err
+	}
+
+	// Validate spec belongs to the specified suite
+	if specRun.SuiteRunID != suiteID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, ErrNotFound
+	}
+
+	// Fetch and validate the parent suite belongs to the specified test run
+	suiteRun, err := s.suiteRunRepo.GetByID(ctx, suiteID)
+	if err != nil {
+		// Check if it's a not-found error from the repository
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		// Otherwise it's an internal/database error - return as-is
+		return nil, err
+	}
+
+	if suiteRun.TestRunID != testRunID {
+		// Return not found to avoid revealing existence under different parent
+		return nil, ErrNotFound
+	}
+
+	return specRun, nil
 }
 
 // UpdateTestRun updates an existing test run

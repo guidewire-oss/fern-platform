@@ -1026,13 +1026,15 @@ var _ = Describe("Schema Resolvers - Ginkgo Tests", func() {
 		})
 
 		Context("Stats", func() {
-			It("should return nil (not implemented)", func() {
+			It("should return empty stats when testing service is nil", func() {
 				ctx := context.Background()
 				project := &model.Project{ProjectID: "proj-1"}
 				pr := &projectResolver{resolver}
 				result, err := pr.Stats(ctx, project)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result).To(BeNil())
+				Expect(result).ToNot(BeNil())
+				Expect(result.TotalTestRuns).To(Equal(0))
+				Expect(result.LastRunTime).To(BeNil())
 			})
 		})
 	})

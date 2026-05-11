@@ -4,6 +4,7 @@ package testhelpers
 
 import (
 	"context"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 
@@ -250,6 +251,22 @@ func (m *MockTestRunRepository) GetLatestByProjectID(ctx context.Context, projec
 	return args.Get(0).([]*testingDomain.TestRun), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetLatestByProjectIDTagsOnly(ctx context.Context, projectID string, limit int) ([]*testingDomain.TestRun, error) {
+	args := m.Called(ctx, projectID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.TestRun), args.Error(1)
+}
+
+func (m *MockTestRunRepository) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*testingDomain.TestRun, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.TestRun), args.Error(1)
+}
+
 func (m *MockTestRunRepository) CountByProjectID(ctx context.Context, projectID string) (int64, error) {
 	args := m.Called(ctx, projectID)
 	return args.Get(0).(int64), args.Error(1)
@@ -277,6 +294,22 @@ func (m *MockTestRunRepository) GetTestRunSummary(ctx context.Context, projectID
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*testingDomain.TestRunSummary), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetProjectStats(ctx context.Context, projectID string) (*testingDomain.ProjectStatsResult, error) {
+	args := m.Called(ctx, projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*testingDomain.ProjectStatsResult), args.Error(1)
+}
+
+func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*testingDomain.DashboardStatsResult, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*testingDomain.DashboardStatsResult), args.Error(1)
 }
 
 func (m *MockTestRunRepository) Create(ctx context.Context, testRun *testingDomain.TestRun) error {

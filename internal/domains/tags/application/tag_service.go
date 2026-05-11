@@ -13,7 +13,10 @@ type TagService struct {
 	tagRepo domain.TagRepository
 }
 
-//go:generate mockgen -destination=../mocks/mock_tag_service.go -package=mocks github.com/guidewire-oss/fern-platform/internal/domains/tags/application TagServiceInterface
+// Changed from reflect mode to source mode for Go 1.24 compatibility
+// Old: //go:generate mockgen -destination=../mocks/mock_tag_service.go -package=mocks github.com/guidewire-oss/fern-platform/internal/domains/tags/application TagServiceInterface
+// Reflect mode requires github.com/golang/mock/mockgen/model in go.mod, which we don't have
+//go:generate mockgen -source=tag_service.go -destination=../mocks/mock_tag_service.go -package=mocks
 
 type TagServiceInterface interface {
 	CreateTag(ctx context.Context, name string) (*domain.Tag, error)
