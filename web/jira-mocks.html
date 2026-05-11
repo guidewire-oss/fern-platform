@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fern Platform - JIRA Integration Mocks</title>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="/web/css/font-awesome.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #10b981;
+            --primary-dark: #047857;
+            --primary-light: #34d399;
+            --secondary: #3b82f6;
+            --accent: #8b5cf6;
+            --jira: #0052cc;
+            --jira-light: #e6f0ff;
+
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --info: #06b6d4;
+            --muted: #6b7280;
+
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #f1f5f9;
+            --bg-elevated: #ffffff;
+
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-tertiary: #94a3b8;
+            --text-inverse: #ffffff;
+
+            --border-light: #e2e8f0;
+            --border-medium: #cbd5e1;
+
+            --shadow-sm: 0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+
+            --transition-fast: 150ms ease-in-out;
+            --transition-normal: 250ms ease-in-out;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-elevated: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #64748b;
+            --text-inverse: #0f172a;
+            --border-light: #334155;
+            --border-medium: #475569;
+            --jira-light: #0a1f3d;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            transition: background-color var(--transition-normal), color var(--transition-normal);
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid var(--border-light);
+            position: sticky; top: 0; z-index: 1000;
+            box-shadow: var(--shadow-lg);
+        }
+        .header-content {
+            max-width: 1400px; margin: 0 auto; padding: 1rem 2rem;
+            display: flex; align-items: center; justify-content: space-between;
+            min-height: 80px;
+        }
+        .logo-section { display: flex; align-items: center; gap: 1rem; }
+        .logo-icon { font-size: 2rem; }
+        .logo-text { font-size: 1.5rem; font-weight: 800; color: #ffffff; letter-spacing: -0.02em; }
+        .logo-text span { color: var(--primary); }
+        .logo-subtitle { font-size: 0.75rem; color: #94a3b8; font-weight: 400; margin-top: 0.1rem; }
+        .mock-badge {
+            background: var(--jira); color: white;
+            padding: 0.25rem 0.75rem; border-radius: 9999px;
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em;
+        }
+
+        /* Navigation */
+        .navigation {
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .nav-content {
+            max-width: 1400px; margin: 0 auto; padding: 0 2rem;
+            display: flex; gap: 0.25rem; overflow-x: auto;
+        }
+        .nav-button {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.875rem 1.25rem; border: none; background: none;
+            color: var(--text-secondary); font-size: 0.875rem; font-weight: 500;
+            cursor: pointer; white-space: nowrap;
+            border-bottom: 2px solid transparent;
+            transition: color var(--transition-fast), border-color var(--transition-fast);
+            font-family: inherit;
+        }
+        .nav-button:hover { color: var(--primary); }
+        .nav-button.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .nav-button.jira-nav { border-left: 3px solid var(--jira); background: linear-gradient(90deg, rgba(0,82,204,0.05) 0%, transparent 100%); }
+
+        /* Main layout */
+        .main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+        /* Screen switcher tabs */
+        .screen-tabs {
+            display: flex; gap: 0.5rem; margin-bottom: 2rem;
+            background: var(--bg-secondary); padding: 0.375rem;
+            border-radius: var(--radius-lg); width: fit-content;
+        }
+        .screen-tab {
+            padding: 0.5rem 1.25rem; border: none; border-radius: var(--radius-md);
+            font-size: 0.875rem; font-weight: 500; cursor: pointer;
+            background: none; color: var(--text-secondary); font-family: inherit;
+            transition: all var(--transition-fast);
+        }
+        .screen-tab.active {
+            background: var(--bg-primary); color: var(--text-primary);
+            box-shadow: var(--shadow-sm); font-weight: 600;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-elevated); border: 1px solid var(--border-light);
+            border-radius: var(--radius-xl); box-shadow: var(--shadow-sm);
+        }
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-light);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-title { font-size: 1rem; font-weight: 600; }
+        .card-body { padding: 1.5rem; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 1.25rem; border-radius: var(--radius-md);
+            font-size: 0.875rem; font-weight: 500; cursor: pointer;
+            border: none; font-family: inherit;
+            transition: all var(--transition-fast);
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-primary:disabled { background: var(--muted); cursor: not-allowed; opacity: 0.6; }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-medium); }
+        .btn-secondary:hover { background: var(--border-light); }
+        .btn-jira { background: var(--jira); color: white; }
+        .btn-jira:hover { background: #0043a8; }
+        .btn-sm { padding: 0.375rem 0.875rem; font-size: 0.8rem; }
+
+        /* Form elements */
+        .form-label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.375rem; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
+        .form-control {
+            width: 100%; padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-medium); border-radius: var(--radius-md);
+            background: var(--bg-primary); color: var(--text-primary);
+            font-size: 0.875rem; font-family: inherit;
+            transition: border-color var(--transition-fast);
+        }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(16,185,129,.1); }
+        select.form-control { cursor: pointer; }
+
+        /* Badges */
+        .badge {
+            display: inline-flex; align-items: center;
+            padding: 0.2rem 0.6rem; border-radius: 9999px;
+            font-size: 0.7rem; font-weight: 600;
+        }
+        .badge-required { background: #fef2f2; color: #dc2626; }
+        .badge-optional { background: var(--bg-tertiary); color: var(--text-tertiary); }
+        .badge-success { background: #ecfdf5; color: #065f46; }
+        .badge-jira { background: var(--jira-light); color: var(--jira); }
+        .badge-warning { background: #fffbeb; color: #92400e; }
+        .badge-info { background: #ecfeff; color: #155e75; }
+
+        /* Status dot */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-dot.mapped { background: var(--success); }
+        .status-dot.unmapped { background: var(--border-medium); }
+        .status-dot.error { background: var(--error); }
+
+        /* Field mapping row */
+        .mapping-row {
+            display: grid; grid-template-columns: 1fr 2rem 1fr;
+            align-items: center; gap: 1rem;
+            padding: 0.875rem 0; border-bottom: 1px solid var(--border-light);
+        }
+        .mapping-row:last-child { border-bottom: none; }
+        .fern-field {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.625rem 0.875rem;
+            background: var(--bg-secondary); border-radius: var(--radius-md);
+            border: 1px solid var(--border-light);
+        }
+        .field-name { font-size: 0.875rem; font-weight: 500; }
+        .field-mapped-check { color: var(--success); font-size: 1rem; }
+        .arrow-icon { color: var(--text-tertiary); text-align: center; font-size: 1rem; }
+
+        /* Progress bar */
+        .progress-bar-wrap { background: var(--bg-tertiary); border-radius: 9999px; height: 8px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+        .progress-bar-fill.green { background: var(--success); }
+        .progress-bar-fill.blue { background: var(--secondary); }
+
+        /* Stat row */
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; }
+        .stat-label { font-size: 0.875rem; color: var(--text-secondary); }
+        .stat-value { font-size: 0.875rem; font-weight: 600; }
+
+        /* JIRA issue chip */
+        .jira-chip {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.375rem 0.75rem; border-radius: var(--radius-md);
+            background: var(--jira-light); border: 1px solid rgba(0,82,204,.15);
+            font-size: 0.8rem; cursor: pointer; text-decoration: none;
+            transition: all var(--transition-fast);
+        }
+        .jira-chip:hover { background: #cce0ff; border-color: var(--jira); }
+        .jira-key { font-weight: 700; color: var(--jira); }
+        .jira-title { color: var(--text-secondary); max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Section header */
+        .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+        .section-icon { font-size: 1.25rem; }
+        .section-title { font-size: 1.25rem; font-weight: 700; }
+        .section-subtitle { font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.125rem; }
+
+        /* Toggle */
+        .toggle-wrap { display: flex; align-items: center; gap: 0.75rem; }
+        .toggle { width: 44px; height: 24px; border-radius: 9999px; background: var(--border-medium); position: relative; cursor: pointer; transition: background var(--transition-fast); border: none; }
+        .toggle.on { background: var(--primary); }
+        .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: white; transition: left var(--transition-fast); }
+        .toggle.on::after { left: 22px; }
+
+        /* Checkbox group */
+        .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .checkbox-chip {
+            display: flex; align-items: center; gap: 0.375rem;
+            padding: 0.375rem 0.75rem; border-radius: var(--radius-sm);
+            border: 1px solid var(--border-medium); background: var(--bg-primary);
+            font-size: 0.8rem; cursor: pointer; user-select: none;
+            transition: all var(--transition-fast);
+        }
+        .checkbox-chip.checked { background: #ecfdf5; border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+        /* Step indicator */
+        .step-wrap { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem; }
+        .step { display: flex; align-items: center; gap: 0.5rem; }
+        .step-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+        .step-dot.done { background: var(--success); color: white; }
+        .step-dot.active { background: var(--secondary); color: white; }
+        .step-dot.pending { background: var(--bg-tertiary); color: var(--text-tertiary); }
+        .step-label { font-size: 0.8rem; font-weight: 500; }
+        .step-label.active { color: var(--secondary); }
+        .step-label.done { color: var(--success); }
+        .step-label.pending { color: var(--text-tertiary); }
+        .step-line { flex: 1; height: 2px; background: var(--border-light); border-radius: 1px; }
+        .step-line.done { background: var(--success); }
+
+        /* Test spec row */
+        .spec-row {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-light);
+            gap: 1rem;
+        }
+        .spec-row:last-child { border-bottom: none; }
+        .spec-status { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+        .spec-status.pass { background: var(--success); }
+        .spec-status.fail { background: var(--error); }
+        .spec-name { font-size: 0.875rem; font-weight: 500; flex: 1; }
+        .spec-meta { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.125rem; }
+        .spec-tags { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.375rem; }
+        .spec-tag { padding: 0.15rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.7rem; font-weight: 600; background: var(--bg-tertiary); color: var(--text-secondary); }
+        .spec-tag.jira-tag { background: var(--jira-light); color: var(--jira); }
+
+        /* Grid utilities */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-1 { gap: 0.5rem; }
+        .gap-2 { gap: 1rem; }
+        .gap-3 { gap: 1.5rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mb-3 { margin-bottom: 1.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .text-sm { font-size: 0.875rem; }
+        .text-xs { font-size: 0.75rem; }
+        .text-secondary { color: var(--text-secondary); }
+        .text-tertiary { color: var(--text-tertiary); }
+        .font-semibold { font-weight: 600; }
+        .w-full { width: 100%; }
+
+        /* Divider */
+        .divider { border: none; border-top: 1px solid var(--border-light); margin: 1.5rem 0; }
+
+        /* Alert */
+        .alert { padding: 0.875rem 1rem; border-radius: var(--radius-md); font-size: 0.875rem; border: 1px solid; }
+        .alert-info { background: #ecfeff; border-color: #a5f3fc; color: #155e75; }
+        .alert-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+        .alert-success { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+
+        /* Scrollable mapping list */
+        .mapping-list { max-height: 420px; overflow-y: auto; }
+
+        /* Connection status */
+        .conn-status { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1rem; border-radius: var(--radius-md); font-size: 0.8rem; font-weight: 600; }
+        .conn-status.connected { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .conn-status.disconnected { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    </style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// ─── Shared header & nav ──────────────────────────────────────────────────────
+
+function Header({ onToggleTheme, dark }) {
+    return (
+        <header className="header">
+            <div className="header-content">
+                <div className="logo-section">
+                    <span className="logo-icon">🌿</span>
+                    <div>
+                        <div className="logo-text">Fern <span>Platform</span></div>
+                        <div className="logo-subtitle">Modern Test Intelligence</div>
+                    </div>
+                    <span className="mock-badge">JIRA MOCK</span>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={onToggleTheme}>
+                    {dark ? '☀️ Light' : '🌙 Dark'}
+                </button>
+            </div>
+        </header>
+    );
+}
+
+function Nav({ screen, setScreen }) {
+    const navMain = [
+        { id: 'dashboard', label: '📊 Dashboard' },
+        { id: 'test-summaries', label: '📈 Test Summaries' },
+        { id: 'test-runs', label: '📋 Test Runs' },
+        { id: 'projects', label: '📁 Projects' },
+    ];
+    const navJira = [
+        { id: 'jira-field-mapping', label: '🗂️ JIRA Field Mapping' },
+        { id: 'jira-sync', label: '🔄 JIRA Sync' },
+        { id: 'jira-test-detail', label: '🧪 Test Detail (JIRA tags)' },
+    ];
+    return (
+        <nav className="navigation">
+            <div className="nav-content">
+                {navMain.map(i => (
+                    <button key={i.id} className={`nav-button ${screen === i.id ? 'active' : ''}`} onClick={() => setScreen(i.id)}>
+                        {i.label}
+                    </button>
+                ))}
+                {navJira.map(i => (
+                    <button key={i.id} className={`nav-button jira-nav ${screen === i.id ? 'active' : ''}`} onClick={() => setScreen(i.id)}>
+                        {i.label}
+                    </button>
+                ))}
+            </div>
+        </nav>
+    );
+}
+
+// ─── Placeholder for existing screens ────────────────────────────────────────
+
+function Placeholder({ label }) {
+    return (
+        <div style={{ textAlign: 'center', padding: '6rem 2rem', color: 'var(--text-tertiary)' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</div>
+            <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>Existing screen — not mocked here</div>
+        </div>
+    );
+}
+
+// ─── Screen 1: JIRA Field Mapping (issue #26) ────────────────────────────────
+
+const FERN_FIELDS = [
+    { id: 'req-id',     label: 'Requirement ID',          required: true,  mapped: 'Issue Key',     info: 'Unique identifier' },
+    { id: 'req-title',  label: 'Requirement Title',        required: true,  mapped: 'Summary',       info: 'Short description' },
+    { id: 'req-desc',   label: 'Requirement Description',  required: false, mapped: 'Description',   info: 'Rich text body' },
+    { id: 'req-parent', label: 'Parent Requirement',       required: false, mapped: 'Epic Link',     info: 'Hierarchy link' },
+    { id: 'req-type',   label: 'Requirement Type',         required: false, mapped: 'Issue Type',    info: 'Story / Bug / Task' },
+    { id: 'req-ver',    label: 'Release Version',          required: false, mapped: null,            info: 'Target release' },
+    { id: 'req-status', label: 'Requirement Status',       required: false, mapped: 'Status',        info: 'Current state' },
+    { id: 'req-tags',   label: 'Tags / Labels',            required: false, mapped: 'Labels',        info: 'Multi-value' },
+];
+
+const JIRA_FIELDS = [
+    '— unmapped —',
+    ...['Assignee', 'Components', 'Description', 'Epic Link', 'Fix Version/s',
+        'Issue Key', 'Issue Type', 'Labels', 'Priority', 'Reporter',
+        'Sprint', 'Status', 'Story Points', 'Summary'].sort(),
+];
+
+function FieldMappingScreen() {
+    const [mappings, setMappings] = useState(() => {
+        const m = {};
+        FERN_FIELDS.forEach(f => { m[f.id] = f.mapped || '— unmapped —'; });
+        return m;
+    });
+    const [connected] = useState(true);
+    const [saved, setSaved] = useState(false);
+
+    const requiredMapped = FERN_FIELDS.filter(f => f.required).every(f => mappings[f.id] !== '— unmapped —');
+
+    const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
+
+    const usedFields = Object.values(mappings).filter(v => v !== '— unmapped —');
+    const isConflict = (fieldId, value) => {
+        if (value === '— unmapped —') return false;
+        return Object.entries(mappings).some(([k, v]) => k !== fieldId && v === value);
+    };
+
+    return (
+        <div>
+            <div className="section-header">
+                <span className="section-icon">🗂️</span>
+                <div>
+                    <div className="section-title">JIRA Field Mapping</div>
+                    <div className="section-subtitle">Map JIRA fields to Fern requirement fields — issue <strong>#26</strong></div>
+                </div>
+            </div>
+
+            <div className="grid-2 mb-3">
+                {/* Connection status */}
+                <div className="card">
+                    <div className="card-body">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-sm">JIRA Connection</span>
+                            <span className={`conn-status ${connected ? 'connected' : 'disconnected'}`}>
+                                {connected ? '✓ Connected' : '✗ Disconnected'}
+                            </span>
+                        </div>
+                        <div className="text-xs text-secondary">
+                            <div>Instance: <strong>guidewire.atlassian.net</strong></div>
+                            <div>Project: <strong>PROJ</strong> &nbsp;·&nbsp; 142 issues available</div>
+                        </div>
+                    </div>
+                </div>
+                {/* Mapping summary */}
+                <div className="card">
+                    <div className="card-body">
+                        <div className="font-semibold text-sm mb-2">Mapping Summary</div>
+                        <div className="flex gap-2">
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--success)' }}>
+                                    {Object.values(mappings).filter(v => v !== '— unmapped —').length}
+                                </div>
+                                <div className="text-xs text-secondary">Mapped</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-tertiary)' }}>
+                                    {Object.values(mappings).filter(v => v === '— unmapped —').length}
+                                </div>
+                                <div className="text-xs text-secondary">Unmapped</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: requiredMapped ? 'var(--success)' : 'var(--error)' }}>
+                                    {requiredMapped ? '✓' : '✗'}
+                                </div>
+                                <div className="text-xs text-secondary">Required</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {!requiredMapped && (
+                <div className="alert alert-warning mb-3">
+                    ⚠️ <strong>Requirement ID</strong> and <strong>Requirement Title</strong> must be mapped before saving.
+                </div>
+            )}
+            {saved && (
+                <div className="alert alert-success mb-3">
+                    ✓ Field mapping saved successfully.
+                </div>
+            )}
+
+            <div className="card">
+                <div className="card-header">
+                    <span className="card-title">Field Mappings</span>
+                    <div className="flex items-center gap-1">
+                        <span className="text-xs text-tertiary" style={{ marginRight: '0.5rem' }}>
+                            Fern Field → JIRA Field
+                        </span>
+                        <button className="btn btn-secondary btn-sm">Reset</button>
+                        <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={!requiredMapped}>
+                            Save Mapping
+                        </button>
+                    </div>
+                </div>
+
+                {/* Column headers */}
+                <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2rem 1fr', gap: '1rem' }}>
+                        <div className="text-xs font-semibold text-tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fern Requirement Field</div>
+                        <div></div>
+                        <div className="text-xs font-semibold text-tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maps to JIRA Field</div>
+                    </div>
+                </div>
+
+                <div className="mapping-list" style={{ padding: '0 1.5rem' }}>
+                    {FERN_FIELDS.map(field => {
+                        const isMapped = mappings[field.id] !== '— unmapped —';
+                        const conflict = isConflict(field.id, mappings[field.id]);
+                        return (
+                            <div key={field.id} className="mapping-row">
+                                {/* Fern field */}
+                                <div className="fern-field">
+                                    <span className={`status-dot ${isMapped ? 'mapped' : 'unmapped'}`}></span>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="flex items-center gap-1">
+                                            <span className="field-name">{field.label}</span>
+                                            {field.required
+                                                ? <span className="badge badge-required">required</span>
+                                                : <span className="badge badge-optional">optional</span>
+                                            }
+                                        </div>
+                                        <div className="text-xs text-tertiary">{field.info}</div>
+                                    </div>
+                                    {isMapped && <span className="field-mapped-check">✓</span>}
+                                </div>
+
+                                {/* Arrow */}
+                                <div className="arrow-icon">→</div>
+
+                                {/* JIRA field select */}
+                                <div>
+                                    <select
+                                        className="form-control"
+                                        style={conflict ? { borderColor: 'var(--error)' } : {}}
+                                        value={mappings[field.id]}
+                                        onChange={e => setMappings(m => ({ ...m, [field.id]: e.target.value }))}
+                                    >
+                                        {JIRA_FIELDS.map(jf => (
+                                            <option key={jf} value={jf}>{jf}</option>
+                                        ))}
+                                    </select>
+                                    {conflict && (
+                                        <div className="text-xs" style={{ color: 'var(--error)', marginTop: '0.25rem' }}>
+                                            ⚠️ This JIRA field is already mapped to another requirement field
+                                        </div>
+                                    )}
+                                    {field.id === 'req-ver' && mappings[field.id] === 'Fix Version/s' && (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                            <select className="form-control" style={{ fontSize: '0.75rem' }}>
+                                                <option>Use first version only</option>
+                                                <option>Concatenate all versions</option>
+                                                <option>Create separate entries per version</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="alert alert-info mt-2">
+                ℹ️ Mappings are stored per project. Changes take effect on the next JIRA sync.
+            </div>
+        </div>
+    );
+}
+
+// ─── Screen 2: JIRA Sync (issue #27) ─────────────────────────────────────────
+
+const ISSUE_TYPES = ['Epic', 'Story', 'Task', 'Bug', 'Sub-task'];
+
+function SyncScreen() {
+    const [step, setStep] = useState('config'); // config | progress | summary
+    const [syncMode, setSyncMode] = useState('full');
+    const [selectedTypes, setSelectedTypes] = useState(['Epic', 'Story', 'Task', 'Bug']);
+    const [jql, setJql] = useState('');
+    const [progress, setProgress] = useState(0);
+    const [processed, setProcessed] = useState(0);
+    const total = 142;
+    const succeeded = Math.floor(processed * 0.97);
+    const failed = processed - succeeded;
+
+    const toggleType = (t) => {
+        setSelectedTypes(s => s.includes(t) ? s.filter(x => x !== t) : [...s, t]);
+    };
+
+    const startSync = () => {
+        setStep('progress');
+        setProgress(0); setProcessed(0);
+        const interval = setInterval(() => {
+            setProcessed(p => {
+                const next = Math.min(p + Math.floor(Math.random() * 8) + 3, total);
+                setProgress(Math.round((next / total) * 100));
+                if (next >= total) {
+                    clearInterval(interval);
+                    setTimeout(() => setStep('summary'), 600);
+                }
+                return next;
+            });
+        }, 120);
+    };
+
+    return (
+        <div>
+            <div className="section-header">
+                <span className="section-icon">🔄</span>
+                <div>
+                    <div className="section-title">Synchronize JIRA Requirements</div>
+                    <div className="section-subtitle">Pull JIRA issues into Fern as requirements — issue <strong>#27</strong></div>
+                </div>
+            </div>
+
+            {/* Step indicator */}
+            <div className="step-wrap mb-3">
+                <div className="step">
+                    <div className={`step-dot ${step === 'config' ? 'active' : 'done'}`}>{step === 'config' ? '1' : '✓'}</div>
+                    <span className={`step-label ${step === 'config' ? 'active' : 'done'}`}>Configure</span>
+                </div>
+                <div className={`step-line ${step !== 'config' ? 'done' : ''}`}></div>
+                <div className="step">
+                    <div className={`step-dot ${step === 'progress' ? 'active' : step === 'summary' ? 'done' : 'pending'}`}>
+                        {step === 'summary' ? '✓' : '2'}
+                    </div>
+                    <span className={`step-label ${step === 'progress' ? 'active' : step === 'summary' ? 'done' : 'pending'}`}>Syncing</span>
+                </div>
+                <div className={`step-line ${step === 'summary' ? 'done' : ''}`}></div>
+                <div className="step">
+                    <div className={`step-dot ${step === 'summary' ? 'done' : 'pending'}`}>{step === 'summary' ? '✓' : '3'}</div>
+                    <span className={`step-label ${step === 'summary' ? 'done' : 'pending'}`}>Complete</span>
+                </div>
+            </div>
+
+            {step === 'config' && (
+                <div className="grid-2">
+                    <div className="flex flex-col gap-2">
+                        {/* Sync mode */}
+                        <div className="card">
+                            <div className="card-header"><span className="card-title">Sync Mode</span></div>
+                            <div className="card-body flex flex-col gap-1">
+                                {[
+                                    { id: 'full', label: 'Full Sync', desc: 'Import all matching issues from JIRA' },
+                                    { id: 'incremental', label: 'Incremental Sync', desc: 'Only process issues changed since last sync' },
+                                ].map(m => (
+                                    <label key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: `1px solid ${syncMode === m.id ? 'var(--primary)' : 'var(--border-light)'}`, background: syncMode === m.id ? '#ecfdf5' : 'var(--bg-primary)', cursor: 'pointer' }}>
+                                        <input type="radio" name="syncMode" value={m.id} checked={syncMode === m.id} onChange={() => setSyncMode(m.id)} style={{ marginTop: '3px' }} />
+                                        <div>
+                                            <div className="font-semibold text-sm">{m.label}</div>
+                                            <div className="text-xs text-secondary">{m.desc}</div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Issue types */}
+                        <div className="card">
+                            <div className="card-header"><span className="card-title">Issue Types to Include</span></div>
+                            <div className="card-body">
+                                <div className="checkbox-group">
+                                    {ISSUE_TYPES.map(t => (
+                                        <div key={t} className={`checkbox-chip ${selectedTypes.includes(t) ? 'checked' : ''}`} onClick={() => toggleType(t)}>
+                                            {selectedTypes.includes(t) ? '✓ ' : ''}{t}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        {/* Filters */}
+                        <div className="card">
+                            <div className="card-header"><span className="card-title">Filters</span> <span className="badge badge-optional">optional</span></div>
+                            <div className="card-body flex flex-col gap-2">
+                                <div>
+                                    <label className="form-label">Date Range — Updated After</label>
+                                    <input type="date" className="form-control" />
+                                </div>
+                                <div>
+                                    <label className="form-label">JQL Filter</label>
+                                    <input
+                                        className="form-control"
+                                        placeholder='e.g. project = PROJ AND labels = "fern-tracked"'
+                                        value={jql}
+                                        onChange={e => setJql(e.target.value)}
+                                    />
+                                    <div className="text-xs text-tertiary" style={{ marginTop: '0.375rem' }}>Advanced users only. Leave blank to sync all issues matching the type filter.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Summary before start */}
+                        <div className="card">
+                            <div className="card-header"><span className="card-title">Ready to Sync</span></div>
+                            <div className="card-body">
+                                <div className="stat-row"><span className="stat-label">Mode</span><span className="stat-value">{syncMode === 'full' ? 'Full Sync' : 'Incremental'}</span></div>
+                                <div className="stat-row"><span className="stat-label">Issue types</span><span className="stat-value">{selectedTypes.join(', ') || 'None selected'}</span></div>
+                                <div className="stat-row"><span className="stat-label">Available issues</span><span className="stat-value">142</span></div>
+                                <div className="stat-row"><span className="stat-label">Last synced</span><span className="stat-value text-tertiary">Never</span></div>
+                                <hr className="divider" style={{ margin: '0.75rem 0' }} />
+                                <button className="btn btn-jira w-full" onClick={startSync} disabled={selectedTypes.length === 0}>
+                                    🔄 Start Sync
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {step === 'progress' && (
+                <div className="card" style={{ maxWidth: '640px', margin: '0 auto' }}>
+                    <div className="card-header">
+                        <span className="card-title">🔄 Sync in Progress…</span>
+                        <span className="badge badge-info">Running</span>
+                    </div>
+                    <div className="card-body flex flex-col gap-2">
+                        <div className="alert alert-info">
+                            Sync continues even if you navigate away.
+                        </div>
+                        <div>
+                            <div className="flex justify-between mb-1">
+                                <span className="text-sm text-secondary">Progress</span>
+                                <span className="text-sm font-semibold">{progress}%</span>
+                            </div>
+                            <div className="progress-bar-wrap">
+                                <div className="progress-bar-fill blue" style={{ width: `${progress}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="grid-2">
+                            <div className="stat-row"><span className="stat-label">Total issues</span><span className="stat-value">{total}</span></div>
+                            <div className="stat-row"><span className="stat-label">Processed</span><span className="stat-value">{processed}</span></div>
+                            <div className="stat-row"><span className="stat-label" style={{ color: 'var(--success)' }}>Imported</span><span className="stat-value" style={{ color: 'var(--success)' }}>{succeeded}</span></div>
+                            <div className="stat-row"><span className="stat-label" style={{ color: failed > 0 ? 'var(--error)' : 'var(--text-secondary)' }}>Failed</span><span className="stat-value" style={{ color: failed > 0 ? 'var(--error)' : 'var(--text-secondary)' }}>{failed}</span></div>
+                        </div>
+                        <div className="text-xs text-tertiary" style={{ fontStyle: 'italic' }}>
+                            Estimated time remaining: ~{Math.ceil((total - processed) / 35)}s
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {step === 'summary' && (
+                <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+                    <div className="alert alert-success mb-3">✓ Synchronization complete.</div>
+                    <div className="card mb-2">
+                        <div className="card-header"><span className="card-title">Sync Summary</span></div>
+                        <div className="card-body">
+                            <div className="stat-row"><span className="stat-label">Total requirements imported</span><span className="stat-value" style={{ color: 'var(--success)' }}>138</span></div>
+                            <div className="stat-row"><span className="stat-label">Requirements updated</span><span className="stat-value">12</span></div>
+                            <div className="stat-row"><span className="stat-label">Already up-to-date (skipped)</span><span className="stat-value text-tertiary">0</span></div>
+                            <div className="stat-row"><span className="stat-label">Parent-child relationships created</span><span className="stat-value">23</span></div>
+                            <div className="stat-row"><span className="stat-label" style={{ color: 'var(--error)' }}>Failed</span><span className="stat-value" style={{ color: 'var(--error)' }}>4</span></div>
+                        </div>
+                    </div>
+                    <div className="card mb-2">
+                        <div className="card-header">
+                            <span className="card-title">Failed Items</span>
+                            <span className="badge badge-warning">4 errors</span>
+                        </div>
+                        <div className="card-body">
+                            {['PROJ-88', 'PROJ-91', 'PROJ-107', 'PROJ-122'].map((key, i) => (
+                                <div key={key} className="stat-row">
+                                    <span className="jira-key" style={{ fontSize: '0.8rem' }}>{key}</span>
+                                    <span className="text-xs text-secondary">{['Missing required field: Summary', 'Epic link references unknown issue', 'Description exceeds max length (10,000 chars)', 'Duplicate Requirement ID'][i]}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex gap-1">
+                        <button className="btn btn-secondary" onClick={() => setStep('config')}>Configure New Sync</button>
+                        <button className="btn btn-jira">Retry Failed Items</button>
+                        <button className="btn btn-primary">View Imported Requirements →</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Screen 3: Test Detail with JIRA tags (issue #28) ────────────────────────
+
+const SPECS = [
+    {
+        name: 'should calculate premium correctly for standard policy',
+        suite: 'PremiumCalculatorSpec',
+        status: 'pass', duration: '1.2s',
+        tags: ['jira:PROJ-45', 'jira:PROJ-46', 'smoke'],
+        jiraIssues: [
+            { key: 'PROJ-45', title: 'Premium calculation for standard policy types', status: 'Done', type: 'Story' },
+            { key: 'PROJ-46', title: 'Premium rounding rules for multi-vehicle policies', status: 'In Progress', type: 'Task' },
+        ],
+    },
+    {
+        name: 'should reject policy with invalid coverage dates',
+        suite: 'PolicyValidationSpec',
+        status: 'pass', duration: '0.4s',
+        tags: ['jira:PROJ-52', 'regression'],
+        jiraIssues: [
+            { key: 'PROJ-52', title: 'Validate coverage start/end date constraints', status: 'Done', type: 'Story' },
+        ],
+    },
+    {
+        name: 'should apply multi-vehicle discount',
+        suite: 'PremiumCalculatorSpec',
+        status: 'fail', duration: '0.9s',
+        tags: ['jira:PROJ-UNKNOWN-99', 'unit'],
+        jiraIssues: [],
+        warning: 'PROJ-UNKNOWN-99 is not a known requirement — sync JIRA to resolve.',
+    },
+    {
+        name: 'should generate renewal notice PDF',
+        suite: 'DocumentGenerationSpec',
+        status: 'pass', duration: '3.1s',
+        tags: ['jira:PROJ-61', 'integration'],
+        jiraIssues: [
+            { key: 'PROJ-61', title: 'Automated renewal notice generation', status: 'In Review', type: 'Story' },
+        ],
+    },
+    {
+        name: 'should handle concurrent policy updates',
+        suite: 'ConcurrencySpec',
+        status: 'pass', duration: '2.7s',
+        tags: ['performance'],
+        jiraIssues: [],
+    },
+];
+
+const STATUS_COLOR = { Done: 'var(--success)', 'In Progress': 'var(--secondary)', 'In Review': 'var(--warning)', 'To Do': 'var(--text-tertiary)' };
+const TYPE_ICON = { Story: '📖', Task: '✅', Bug: '🐛', Epic: '⚡' };
+
+function TestDetailScreen() {
+    const [selected, setSelected] = useState(0);
+    const spec = SPECS[selected];
+
+    return (
+        <div>
+            <div className="section-header">
+                <span className="section-icon">🧪</span>
+                <div>
+                    <div className="section-title">Test Detail — JIRA Requirement Links</div>
+                    <div className="section-subtitle">Tests tagged with <code>@jira:PROJ-NNN</code> show linked requirements — issue <strong>#28</strong></div>
+                </div>
+            </div>
+
+            {/* Breadcrumb */}
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>
+                Test Runs → <strong style={{ color: 'var(--text-secondary)' }}>run-2026-05-11-001</strong> → PremiumCalculatorSpec
+            </div>
+
+            <div className="grid-2" style={{ gridTemplateColumns: '1fr 1.4fr', alignItems: 'start' }}>
+                {/* Spec list */}
+                <div className="card">
+                    <div className="card-header">
+                        <span className="card-title">Specs</span>
+                        <span className="badge badge-success">4 passed</span>
+                        <span className="badge badge-required" style={{ marginLeft: '0.25rem' }}>1 failed</span>
+                    </div>
+                    <div>
+                        {SPECS.map((s, i) => (
+                            <div
+                                key={i}
+                                className="spec-row"
+                                style={{ cursor: 'pointer', background: selected === i ? 'var(--bg-secondary)' : undefined }}
+                                onClick={() => setSelected(i)}
+                            >
+                                <span className={`spec-status ${s.status}`}></span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="spec-name">{s.name}</div>
+                                    <div className="spec-meta">{s.suite} · {s.duration}</div>
+                                    <div className="spec-tags">
+                                        {s.tags.map(t => (
+                                            <span key={t} className={`spec-tag ${t.startsWith('jira:') ? 'jira-tag' : ''}`}>{t}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Detail pane */}
+                <div className="flex flex-col gap-2">
+                    {/* Spec info */}
+                    <div className="card">
+                        <div className="card-header">
+                            <span className="card-title" style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{spec.name}</span>
+                            <span className="badge" style={{ background: spec.status === 'pass' ? '#ecfdf5' : '#fef2f2', color: spec.status === 'pass' ? '#065f46' : '#dc2626' }}>
+                                {spec.status === 'pass' ? '✓ passed' : '✗ failed'}
+                            </span>
+                        </div>
+                        <div className="card-body">
+                            <div className="stat-row"><span className="stat-label">Suite</span><span className="stat-value text-sm">{spec.suite}</span></div>
+                            <div className="stat-row"><span className="stat-label">Duration</span><span className="stat-value text-sm">{spec.duration}</span></div>
+                            <div className="stat-row">
+                                <span className="stat-label">Tags</span>
+                                <div className="spec-tags">
+                                    {spec.tags.map(t => (
+                                        <span key={t} className={`spec-tag ${t.startsWith('jira:') ? 'jira-tag' : ''}`}>{t}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* JIRA requirements */}
+                    <div className="card">
+                        <div className="card-header">
+                            <div className="flex items-center gap-1">
+                                <span style={{ color: 'var(--jira)', fontWeight: 700, fontSize: '0.9rem' }}>⬡</span>
+                                <span className="card-title">Linked JIRA Requirements</span>
+                            </div>
+                            {spec.jiraIssues.length > 0
+                                ? <span className="badge badge-jira">{spec.jiraIssues.length} linked</span>
+                                : <span className="badge badge-optional">none</span>
+                            }
+                        </div>
+                        <div className="card-body">
+                            {spec.warning && (
+                                <div className="alert alert-warning mb-2">
+                                    ⚠️ {spec.warning}
+                                </div>
+                            )}
+                            {spec.jiraIssues.length === 0 && !spec.warning && (
+                                <div className="text-sm text-tertiary">No JIRA requirements linked to this test.</div>
+                            )}
+                            {spec.jiraIssues.map(issue => (
+                                <div key={issue.key} style={{ padding: '0.875rem', borderRadius: 'var(--radius-md)', background: 'var(--jira-light)', border: '1px solid rgba(0,82,204,.12)', marginBottom: '0.75rem' }}>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-1">
+                                            <span>{TYPE_ICON[issue.type] || '📄'}</span>
+                                            <span className="jira-key">{issue.key}</span>
+                                            <span className="badge badge-optional" style={{ fontSize: '0.65rem' }}>{issue.type}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="status-dot" style={{ background: STATUS_COLOR[issue.status] || 'var(--muted)' }}></span>
+                                            <span className="text-xs font-semibold" style={{ color: STATUS_COLOR[issue.status] || 'var(--muted)' }}>{issue.status}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-sm" style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>{issue.title}</div>
+                                    <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '0.2rem 0.625rem' }}>
+                                        View in JIRA ↗
+                                    </button>
+                                </div>
+                            ))}
+                            {spec.jiraIssues.length > 0 && (
+                                <div className="text-xs text-tertiary" style={{ marginTop: '0.25rem' }}>
+                                    Linked via <code>@jira:</code> tags parsed at ingestion time.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── App shell ────────────────────────────────────────────────────────────────
+
+function App() {
+    const [screen, setScreen] = useState('jira-field-mapping');
+    const [dark, setDark] = useState(false);
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    }, [dark]);
+
+    const renderScreen = () => {
+        switch (screen) {
+            case 'jira-field-mapping': return <FieldMappingScreen />;
+            case 'jira-sync':          return <SyncScreen />;
+            case 'jira-test-detail':   return <TestDetailScreen />;
+            default:                   return <Placeholder label={screen} />;
+        }
+    };
+
+    return (
+        <>
+            <Header onToggleTheme={() => setDark(d => !d)} dark={dark} />
+            <Nav screen={screen} setScreen={setScreen} />
+            <main className="main">
+                {renderScreen()}
+            </main>
+        </>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
