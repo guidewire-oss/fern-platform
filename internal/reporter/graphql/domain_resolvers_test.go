@@ -1259,15 +1259,44 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 		Groups: []authDomain.UserGroup{{GroupName: "team-a"}},
 	})
 
-	t.Run("RecentTestRuns_domain: non-admin without projectId gets access denied", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+	t.Run("RecentTestRuns_domain: non-admin without projectId gets runs scoped to their teams", func(t *testing.T) {
+		mockRunRepo := new(testhelpers.MockTestRunRepository)
+		mockProjRepo := new(testhelpers.MockProjectRepository)
+		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
+
+		teamAProject, _ := projectsDomain.NewProject(
+			projectsDomain.ProjectID("proj-team-a"),
+			"Team A Project",
+			projectsDomain.Team("team-a"),
+		)
+		teamBProject, _ := projectsDomain.NewProject(
+			projectsDomain.ProjectID("proj-team-b"),
+			"Team B Project",
+			projectsDomain.Team("team-b"),
+		)
+		mockProjRepo.On("FindAll", mock.Anything, 1000, 0).Return(
+			[]*projectsDomain.Project{teamAProject, teamBProject}, int64(2), nil,
+		)
+
+		teamARuns := []*testingDomain.TestRun{
+			{ID: 1, RunID: "run-1", ProjectID: "proj-team-a", Status: "completed", Tags: []testingDomain.Tag{}, SuiteRuns: []testingDomain.SuiteRun{}},
+		}
+		mockRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "proj-team-a", 10).Return(teamARuns, nil)
+
+		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
+		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
+
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.RecentTestRuns_domain(nonAdminCtx, nil, nil)
 
-		assert.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "access denied")
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Len(t, result, 1)
+		assert.Equal(t, "run-1", result[0].RunID)
+		mockRunRepo.AssertExpectations(t)
+		mockProjRepo.AssertExpectations(t)
 	})
 
 	t.Run("RecentTestRuns_domain: unauthenticated request returns empty (admin-required check)", func(t *testing.T) {
@@ -1840,6 +1869,57 @@ func TestTreemapData_domain(t *testing.T) {
 func TestTestRuns_domain(t *testing.T) {
 	t.Run("with pagination", func(t *testing.T) {
 		t.Skip("Requires service setup with mocked repositories")
+	})
+
+	t.Run("non-admin without projectId gets runs scoped to their teams", func(t *testing.T) {
+		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
+		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+
+		nonAdminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID: "user1",
+			Role:   authDomain.RoleUser,
+			Groups: []authDomain.UserGroup{{GroupName: "team-a"}},
+		})
+
+		mockRunRepo := new(testhelpers.MockTestRunRepository)
+		mockProjRepo := new(testhelpers.MockProjectRepository)
+		mockPermRepo := new(testhelpers.MockProjectPermissionRepository)
+
+		teamAProject, _ := projectsDomain.NewProject(
+			projectsDomain.ProjectID("proj-team-a"),
+			"Team A Project",
+			projectsDomain.Team("team-a"),
+		)
+		teamBProject, _ := projectsDomain.NewProject(
+			projectsDomain.ProjectID("proj-team-b"),
+			"Team B Project",
+			projectsDomain.Team("team-b"),
+		)
+		mockProjRepo.On("FindAll", mock.Anything, 1000, 0).Return(
+			[]*projectsDomain.Project{teamAProject, teamBProject}, int64(2), nil,
+		)
+
+		teamARuns := []*testingDomain.TestRun{
+			{ID: 1, RunID: "run-1", ProjectID: "proj-team-a", Status: "completed", Tags: []testingDomain.Tag{}, SuiteRuns: []testingDomain.SuiteRun{}},
+		}
+		mockRunRepo.On("GetLatestByProjectID", mock.Anything, "proj-team-a", mock.AnythingOfType("int")).Return(teamARuns, nil)
+		mockRunRepo.On("CountByProjectID", mock.Anything, "proj-team-a").Return(int64(1), nil)
+
+		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
+		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
+
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+		queryResolver := &queryResolver{resolver}
+
+		result, err := queryResolver.TestRuns_domain(nonAdminCtx, nil, nil, nil, nil, nil)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.NotNil(t, result.Edges)
+		assert.Len(t, result.Edges, 1)
+		assert.Equal(t, "run-1", result.Edges[0].Node.RunID)
+		mockRunRepo.AssertExpectations(t)
+		mockProjRepo.AssertExpectations(t)
 	})
 }
 

@@ -31,6 +31,48 @@ func userCanAccessProject(snapshot projectsDomain.ProjectSnapshot, teamMap map[s
 	return snapshot.Team != "" && teamMap[string(snapshot.Team)]
 }
 
+// getAccessibleProjectSnapshots returns snapshots for all projects the calling user's teams can access.
+func (r *Resolver) getAccessibleProjectSnapshots(ctx context.Context) ([]projectsDomain.ProjectSnapshot, error) {
+	projects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+	teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+	snapshots := make([]projectsDomain.ProjectSnapshot, 0, len(projects))
+	for _, p := range projects {
+		snap := p.ToSnapshot()
+		if userCanAccessProject(snap, teamMap) {
+			snapshots = append(snapshots, snap)
+		}
+	}
+	return snapshots, nil
+}
+
+// buildTestRunConnection assembles a paginated TestRunConnection from a pre-sliced run list.
+func (r *Resolver) buildTestRunConnection(runs []*testingDomain.TestRun, offset int, totalCount int64) *model.TestRunConnection {
+	edges := make([]*model.TestRunEdge, len(runs))
+	for i, run := range runs {
+		cursor := fmt.Sprintf("%d", offset+i)
+		edges[i] = &model.TestRunEdge{
+			Node:   r.convertTestRunToGraphQL(run),
+			Cursor: cursor,
+		}
+	}
+	pageInfo := &model.PageInfo{
+		HasNextPage:     offset+len(runs) < int(totalCount),
+		HasPreviousPage: offset > 0,
+	}
+	if len(edges) > 0 {
+		pageInfo.StartCursor = &edges[0].Cursor
+		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
+	}
+	return &model.TestRunConnection{
+		Edges:      edges,
+		PageInfo:   pageInfo,
+		TotalCount: int(totalCount),
+	}
+}
+
 // convertTestRunToGraphQL converts a domain test run to GraphQL model
 func (r *Resolver) convertTestRunToGraphQL(testRun *testingDomain.TestRun) *model.TestRun {
 	return r.ConvertTestRunToGraphQL(testRun)
@@ -230,11 +272,26 @@ func (r *queryResolver) RecentTestRuns_domain(ctx context.Context, projectID *st
 		}
 		testRuns, err = r.testingService.GetProjectTestRuns(ctx, *projectID, limitVal)
 	} else {
-		// Cross-project query — admins see all runs; non-admins get an access error.
-		if userErr != nil || user.Role != authDomain.RoleAdmin {
-			return nil, fmt.Errorf("access denied: projectId is required for non-admin users")
+		// Cross-project query — admins see all runs; non-admins see runs scoped to their teams.
+		if userErr != nil {
+			return nil, fmt.Errorf("user not authenticated")
 		}
-		testRuns, err = r.testingService.GetRecentTestRuns(ctx, limitVal)
+		if user.Role != authDomain.RoleAdmin {
+			snapshots, projErr := r.getAccessibleProjectSnapshots(ctx)
+			if projErr != nil {
+				return nil, projErr
+			}
+			// TODO: replace per-project loop with GetRecentTestRunsByProjectIDs(ctx, projectIDs, limitVal)
+			// to eliminate the N+1 query pattern.
+			for _, snap := range snapshots {
+				runs, runErr := r.testingService.GetProjectTestRuns(ctx, string(snap.ProjectID), limitVal)
+				if runErr == nil {
+					testRuns = append(testRuns, runs...)
+				}
+			}
+		} else {
+			testRuns, err = r.testingService.GetRecentTestRuns(ctx, limitVal)
+		}
 	}
 
 	if err != nil {
@@ -1197,8 +1254,31 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 	// Enforce team-based authorization for non-admin users.
 	if user.Role != authDomain.RoleAdmin {
 		if projectID == "" {
-			// No projectId and non-admin: return error rather than silently hiding all runs.
-			return nil, fmt.Errorf("access denied: projectId is required for non-admin users")
+			// No projectId — collect all accessible runs then paginate globally.
+			snapshots, projErr := r.getAccessibleProjectSnapshots(ctx)
+			if projErr != nil {
+				return nil, projErr
+			}
+			var allRuns []*testingDomain.TestRun
+			var totalCount int64
+			// TODO: replace per-project loop with a single GetRecentTestRunsByProjectIDs(ctx, projectIDs, pageSize, offset)
+			// call to eliminate the N+1 query pattern and give correct cross-project pagination.
+			perProjectLimit := pageSize + offset
+			for _, snap := range snapshots {
+				runs, count, runErr := r.testingService.ListTestRuns(ctx, string(snap.ProjectID), perProjectLimit, 0)
+				if runErr == nil {
+					allRuns = append(allRuns, runs...)
+					totalCount += count
+				}
+			}
+			start, end := offset, offset+pageSize
+			if start > len(allRuns) {
+				start = len(allRuns)
+			}
+			if end > len(allRuns) {
+				end = len(allRuns)
+			}
+			return r.buildTestRunConnection(allRuns[start:end], offset, totalCount), nil
 		}
 		project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
 		if err != nil || project == nil {
@@ -1211,38 +1291,11 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 		}
 	}
 
-	// Get test runs with pagination
 	testRuns, totalCount, err := r.testingService.ListTestRuns(ctx, projectID, pageSize, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list test runs: %w", err)
 	}
-
-	hasMore := offset+len(testRuns) < int(totalCount)
-
-	// Build edges
-	edges := make([]*model.TestRunEdge, len(testRuns))
-	for i, run := range testRuns {
-		edges[i] = &model.TestRunEdge{
-			Node:   r.convertTestRunToGraphQL(run),
-			Cursor: fmt.Sprintf("%d", offset+i), // Simple cursor
-		}
-	}
-
-	// Build page info
-	pageInfo := &model.PageInfo{
-		HasNextPage:     hasMore,
-		HasPreviousPage: offset > 0,
-	}
-	if len(edges) > 0 {
-		pageInfo.StartCursor = &edges[0].Cursor
-		pageInfo.EndCursor = &edges[len(edges)-1].Cursor
-	}
-
-	return &model.TestRunConnection{
-		Edges:      edges,
-		PageInfo:   pageInfo,
-		TotalCount: int(totalCount),
-	}, nil
+	return r.buildTestRunConnection(testRuns, offset, totalCount), nil
 }
 
 // Tags implementation using domain service with pagination
