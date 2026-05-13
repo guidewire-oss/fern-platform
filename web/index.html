@@ -7643,20 +7643,22 @@
             const fernFieldRefs = useRef({});
             const [jiraFields, setJiraFields] = useState([]);
             const [fernFields] = useState([
-                { id: 'requirement_id', name: 'Requirement ID', type: 'text', required: true, description: 'Unique identifier for the requirement' },
-                { id: 'title', name: 'Title', type: 'text', required: true, description: 'Brief title of the requirement' },
-                { id: 'description', name: 'Description', type: 'richtext', required: false, description: 'Detailed requirement description' },
-                { id: 'type', name: 'Type', type: 'select', required: false, description: 'Type of requirement (Epic, Story, Bug, etc.)' },
-                { id: 'parent_requirement', name: 'Parent Requirement', type: 'reference', required: false, description: 'Link to parent epic or story' },
-                { id: 'release', name: 'Release', type: 'text', required: false, description: 'Target release or fix version' },
-                { id: 'status', name: 'Status', type: 'select', required: false, description: 'Current workflow status' },
-                { id: 'tags', name: 'Tags', type: 'multivalue', required: false, description: 'Labels or categories' },
-                { id: 'priority', name: 'Priority', type: 'select', required: false, description: 'Priority level' },
-                { id: 'component', name: 'Component', type: 'text', required: false, description: 'Component or module' }
+                { id: 'requirement_id', name: 'Requirement ID', type: 'text', required: true, multiValue: false, description: 'Unique identifier for the requirement' },
+                { id: 'requirement_title', name: 'Requirement Title', type: 'text', required: true, multiValue: false, description: 'Brief title of the requirement' },
+                { id: 'description', name: 'Description', type: 'richtext', required: false, multiValue: false, description: 'Detailed requirement description' },
+                { id: 'parent_requirement', name: 'Parent Requirement', type: 'reference', required: false, multiValue: false, description: 'Link to parent epic or story' },
+                { id: 'requirement_type', name: 'Requirement Type', type: 'select', required: false, multiValue: false, description: 'Type of requirement (Epic, Story, Bug, etc.)' },
+                { id: 'release_version', name: 'Release Version', type: 'text', required: false, multiValue: false, description: 'Target release or fix version' },
+                { id: 'requirement_status', name: 'Requirement Status', type: 'select', required: false, multiValue: false, description: 'Current workflow status' },
+                { id: 'tags', name: 'Tags', type: 'multivalue', required: false, multiValue: true, description: 'Labels or categories' }
             ]);
             const [mappings, setMappings] = useState({});
+            const [reductionStrategies, setReductionStrategies] = useState({});
             const [loading, setLoading] = useState(true);
+            const [jiraFieldsLoading, setJiraFieldsLoading] = useState(true);
             const [saving, setSaving] = useState(false);
+            const [resetting, setResetting] = useState(false);
+            const [error, setError] = useState(null);
             const [draggingFrom, setDraggingFrom] = useState(null);
             const [dragLine, setDragLine] = useState(null);
             const [connectionLines, setConnectionLines] = useState([]);
@@ -7670,64 +7672,66 @@
 
             const fetchJiraFields = async () => {
                 try {
-                    // Simulated JIRA fields - in production, fetch from JIRA API
-                    const fields = [
-                        { id: 'issuekey', name: 'Issue Key', type: 'text', custom: false, example: 'PROJ-123' },
-                        { id: 'summary', name: 'Summary', type: 'text', custom: false, example: 'Add user authentication' },
-                        { id: 'description', name: 'Description', type: 'richtext', custom: false, example: 'As a user, I want to...' },
-                        { id: 'issuetype', name: 'Issue Type', type: 'select', custom: false, example: 'Story' },
-                        { id: 'status', name: 'Status', type: 'select', custom: false, example: 'In Progress' },
-                        { id: 'priority', name: 'Priority', type: 'select', custom: false, example: 'High' },
-                        { id: 'assignee', name: 'Assignee', type: 'user', custom: false, example: 'john.doe@company.com' },
-                        { id: 'reporter', name: 'Reporter', type: 'user', custom: false, example: 'jane.smith@company.com' },
-                        { id: 'fixVersions', name: 'Fix Version/s', type: 'multivalue', custom: false, example: 'v2.0, v2.1' },
-                        { id: 'components', name: 'Component/s', type: 'multivalue', custom: false, example: 'Backend, API' },
-                        { id: 'labels', name: 'Labels', type: 'multivalue', custom: false, example: 'feature, backend' },
-                        { id: 'epic', name: 'Epic Link', type: 'reference', custom: false, example: 'PROJ-100' },
-                        { id: 'customfield_10001', name: 'Story Points', type: 'number', custom: true, example: '5' },
-                        { id: 'customfield_10002', name: 'Sprint', type: 'text', custom: true, example: 'Sprint 42' },
-                        { id: 'customfield_10003', name: 'Customer', type: 'text', custom: true, example: 'Acme Corp' }
-                    ];
-                    setJiraFields(fields);
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_FIELDS, { connectionId: connection.id });
+                    setJiraFields((data.jiraFields || []).map(f => ({
+                        id: f.id,
+                        name: f.name,
+                        custom: f.custom,
+                        multiValue: f.multiValue,
+                        type: f.multiValue ? 'multivalue' : 'text'
+                    })));
                 } catch (err) {
                     console.error('Failed to fetch JIRA fields:', err);
+                    setError('Failed to load JIRA fields: ' + err.message);
                 } finally {
+                    setJiraFieldsLoading(false);
                     setLoading(false);
                 }
             };
 
+            const applyMappingEntries = (entries) => {
+                const newMappings = {};
+                const newReductionStrategies = {};
+                (entries || []).forEach(e => {
+                    const fernFieldId = e.fernField.toLowerCase();
+                    if (e.jiraFieldId) {
+                        newMappings[fernFieldId] = e.jiraFieldId;
+                    }
+                    if (e.reductionStrategy) {
+                        newReductionStrategies[fernFieldId] = e.reductionStrategy;
+                    }
+                });
+                setMappings(newMappings);
+                setReductionStrategies(newReductionStrategies);
+            };
+
             const loadExistingMappings = async () => {
                 try {
-                    // Load existing mappings - in production, fetch from backend
-                    const existingMappings = {
-                        'requirement_id': 'issuekey',
-                        'title': 'summary',
-                        'description': 'description',
-                        'type': 'issuetype',
-                        'parent_requirement': 'epic',
-                        'release': 'fixVersions',
-                        'tags': 'labels'
-                    };
-                    setMappings(existingMappings);
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_FIELD_MAPPING, { projectId: connection.projectId });
+                    applyMappingEntries(data.jiraFieldMapping?.entries ?? []);
                 } catch (err) {
                     console.error('Failed to load mappings:', err);
+                    setError('Failed to load existing mappings: ' + err.message);
+                } finally {
+                    setLoading(false);
                 }
             };
 
             // Update connection lines on scroll, resize, or mapping changes
             const updateConnectionLines = useCallback(() => {
                 if (!containerRef.current) return;
-                
+
                 const lines = [];
                 const containerRect = containerRef.current.getBoundingClientRect();
-                
+
                 Object.entries(mappings).forEach(([fernFieldId, jiraFieldId]) => {
                     const jiraEl = jiraFieldRefs.current[jiraFieldId];
                     const fernEl = fernFieldRefs.current[fernFieldId];
-                    
+
                     if (jiraEl && fernEl) {
                         const jiraRect = jiraEl.getBoundingClientRect();
                         const fernRect = fernEl.getBoundingClientRect();
+
                         
                         lines.push({
                             id: `${jiraFieldId}-${fernFieldId}`,
@@ -7742,6 +7746,13 @@
                 });
                 setConnectionLines(lines);
             }, [mappings]);
+
+            // Re-draw lines when JIRA fields load or become visible (refs aren't populated until their elements mount)
+            useEffect(() => {
+                if (jiraFields.length > 0 && !jiraFieldsLoading) {
+                    requestAnimationFrame(updateConnectionLines);
+                }
+            }, [jiraFields, jiraFieldsLoading, updateConnectionLines]);
 
             // Update lines when mappings change or on scroll/resize
             useEffect(() => {
@@ -7779,7 +7790,7 @@
                         window.removeEventListener('resize', handleScroll);
                     };
                 }
-            }, [mappings, updateConnectionLines]);
+            }, [mappings, updateConnectionLines, jiraFieldsLoading]);
 
             // Track mouse position for drag line
             const handleMouseMove = (e) => {
@@ -7795,7 +7806,7 @@
             // Start dragging from JIRA field
             const handleDragStart = (e, field) => {
                 if (Object.values(mappings).includes(field.id)) return;
-                
+
                 const jiraEl = jiraFieldRefs.current[field.id];
                 if (jiraEl && containerRef.current) {
                     const containerRect = containerRef.current.getBoundingClientRect();
@@ -7839,6 +7850,11 @@
                     delete updated[fernFieldId];
                     return updated;
                 });
+                setReductionStrategies(prev => {
+                    const updated = { ...prev };
+                    delete updated[fernFieldId];
+                    return updated;
+                });
             };
 
             const getFieldTypeIcon = (type) => {
@@ -7870,24 +7886,59 @@
             };
 
             const handleSave = async () => {
-                // Validate required fields are mapped
                 const unmappedRequired = fernFields
                     .filter(f => f.required && !mappings[f.id])
                     .map(f => f.name);
-                
                 if (unmappedRequired.length > 0) {
-                    alert(`Please map these required fields: ${unmappedRequired.join(', ')}`);
+                    setError(`Please map these required fields: ${unmappedRequired.join(', ')}`);
                     return;
                 }
 
+                const entries = Object.entries(mappings).map(([fernFieldId, jiraFieldId]) => {
+                    const jiraField = jiraFields.find(f => f.id === jiraFieldId);
+                    const fernField = fernFields.find(f => f.id === fernFieldId);
+                    const jiraIsMultiValue = jiraField?.multiValue || false;
+                    const fernIsMultiValue = fernField?.multiValue || false;
+                    const needsReduction = jiraIsMultiValue && !fernIsMultiValue;
+                    return {
+                        fernField: fernFieldId.toUpperCase(),
+                        jiraFieldId,
+                        jiraFieldIsMultiValue: jiraIsMultiValue,
+                        reductionStrategy: needsReduction ? (reductionStrategies[fernFieldId] || null) : null
+                    };
+                });
+                const missingReduction = entries
+                    .filter(e => e.jiraFieldIsMultiValue && !fernFields.find(f => f.id === e.fernField.toLowerCase())?.multiValue && !e.reductionStrategy)
+                    .map(e => fernFields.find(f => f.id === e.fernField.toLowerCase())?.name);
+                if (missingReduction.length > 0) {
+                    setError(`The following Fern fields are mapped to multi-value JIRA fields and need a reduction strategy: ${missingReduction.join(', ')}. Remove the mapping or select a reduction strategy.`);
+                    return;
+                }
                 try {
                     setSaving(true);
-                    // await graphqlClient.mutation(SAVE_FIELD_MAPPINGS, { connectionId: connection.id, mappings });
+                    setError(null);
+                    await graphqlClient.mutation(GRAPHQL_QUERIES.SAVE_JIRA_FIELD_MAPPING, {
+                        input: { projectId: connection.projectId, entries }
+                    });
                     onSuccess();
                 } catch (err) {
-                    alert(`Failed to save mappings: ${err.message}`);
+                    setError(`Failed to save mappings: ${err.message}`);
                 } finally {
                     setSaving(false);
+                }
+            };
+
+            const handleReset = async () => {
+                if (!confirm('Reset to default field mappings? This will replace your current configuration.')) return;
+                try {
+                    setResetting(true);
+                    setError(null);
+                    const data = await graphqlClient.mutation(GRAPHQL_QUERIES.RESET_JIRA_FIELD_MAPPING, { projectId: connection.projectId });
+                    applyMappingEntries(data.resetJiraFieldMapping?.entries ?? []);
+                } catch (err) {
+                    setError(`Failed to reset mappings: ${err.message}`);
+                } finally {
+                    setResetting(false);
                 }
             };
 
@@ -7959,12 +8010,53 @@
                         </div>
 
                         {/* Main Content with Visual Connections */}
-                        <div 
-                            ref={containerRef} 
+                        <div
+                            ref={containerRef}
                             onMouseMove={handleMouseMove}
                             style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+
+                            {/* No-connection prompt — shown when connection exists but is not yet confirmed working */}
+                            {connection.status !== 'connected' && (
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    height: '100%',
+                                    gap: '1.5rem',
+                                    padding: '3rem',
+                                    textAlign: 'center'
+                                }}>
+                                    <span style={{ fontSize: '4rem' }}>🔌</span>
+                                    <div>
+                                        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '600' }}>
+                                            No Active JIRA Connection
+                                        </h3>
+                                        <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: '400px' }}>
+                                            Field mapping requires an active JIRA connection for this project.
+                                            Configure and test a connection first, then return here to set up field mappings.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={onClose}
+                                        style={{
+                                            padding: '0.75rem 1.5rem',
+                                            border: '1px solid var(--primary)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--primary)10',
+                                            color: 'var(--primary)',
+                                            cursor: 'pointer',
+                                            fontWeight: '500',
+                                            fontSize: '0.875rem'
+                                        }}
+                                    >
+                                        Close and Configure Connection
+                                    </button>
+                                </div>
+                            )}
+
                             {/* SVG Overlay for Connection Lines */}
-                            <svg 
+                            {connection.status === 'connected' && <svg 
                                 ref={svgRef}
                                 style={{
                                     position: 'absolute',
@@ -8038,34 +8130,33 @@
                                         <circle cx={mousePos.x} cy={mousePos.y} r="4" fill="var(--primary)" opacity="0.6" />
                                     </g>
                                 )}
-                            </svg>
+                            </svg>}
 
-                            <div style={{ display: 'flex', height: '100%' }}>
+                            {connection.status === 'connected' && (jiraFieldsLoading ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                                    <span style={{ fontSize: '2rem' }}>⏳</span>
+                                </div>
+                            ) : <div style={{ display: 'flex', height: '100%' }}>
                                 {/* JIRA Fields Column */}
-                                <div 
+                                <div
                                     data-scrollable
-                                    style={{ 
-                                        flex: 1, 
+                                    style={{
+                                        flex: 1,
                                         padding: '1.5rem',
                                         overflowY: 'auto'
                                     }}>
-                                    <h3 style={{ 
-                                        margin: '0 0 1rem 0', 
-                                        fontSize: '1.125rem', 
+                                    <h3 style={{
+                                        margin: '0 0 1rem 0',
+                                        fontSize: '1.125rem',
                                         fontWeight: '600',
-                                        color: 'var(--text-primary)' 
+                                        color: 'var(--text-primary)'
                                     }}>
                                         <span style={{ marginRight: '0.5rem', fontSize: '1.25rem' }}>🎯</span>
                                         JIRA Fields
                                     </h3>
-                                    
-                                    {loading ? (
-                                        <div style={{ textAlign: 'center', padding: '2rem' }}>
-                                            <span style={{ fontSize: '2rem' }}>⏳</span>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            {jiraFields.map(field => {
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        {jiraFields.map(field => {
                                                 const isMapped = Object.values(mappings).includes(field.id);
                                                 const isDragging = draggingFrom?.field.id === field.id;
                                                 
@@ -8092,7 +8183,7 @@
                                                             }
                                                         }}
                                                         onMouseLeave={(e) => {
-                                                            if (!isMapped && !isSelected) {
+                                                            if (!isMapped) {
                                                                 e.currentTarget.style.transform = 'translateX(0)';
                                                                 e.currentTarget.style.boxShadow = 'none';
                                                             }
@@ -8160,7 +8251,6 @@
                                                 );
                                             })}
                                         </div>
-                                    )}
                                 </div>
 
                                 {/* Instructions in the middle */}
@@ -8293,44 +8383,80 @@
                                                                 {field.description}
                                                             </div>
                                                             {mappedJiraField && (
-                                                                <div style={{
-                                                                    marginTop: '0.5rem',
-                                                                    padding: '0.5rem',
-                                                                    background: 'var(--success)10',
-                                                                    borderRadius: 'var(--radius-md)',
-                                                                    fontSize: '0.875rem',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '0.5rem'
-                                                                }}>
-                                                                    <span style={{ color: 'var(--success)' }}>🔗</span>
-                                                                    <span style={{ fontWeight: '500' }}>{mappedJiraField.name}</span>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            removeMapping(field.id);
-                                                                        }}
-                                                                        style={{
-                                                                            marginLeft: 'auto',
-                                                                            background: 'none',
-                                                                            border: 'none',
-                                                                            color: 'var(--text-secondary)',
-                                                                            cursor: 'pointer',
-                                                                            padding: '0.25rem',
-                                                                            borderRadius: 'var(--radius-sm)',
-                                                                            fontSize: '0.75rem'
-                                                                        }}
-                                                                        onMouseEnter={(e) => {
-                                                                            e.target.style.background = 'var(--error)20';
-                                                                            e.target.style.color = 'var(--error)';
-                                                                        }}
-                                                                        onMouseLeave={(e) => {
-                                                                            e.target.style.background = 'none';
-                                                                            e.target.style.color = 'var(--text-secondary)';
-                                                                        }}
-                                                                    >
-                                                                        ✕
-                                                                    </button>
+                                                                <div style={{ marginTop: '0.5rem' }}>
+                                                                    <div style={{
+                                                                        padding: '0.5rem',
+                                                                        background: 'var(--success)10',
+                                                                        borderRadius: 'var(--radius-md)',
+                                                                        fontSize: '0.875rem',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.5rem'
+                                                                    }}>
+                                                                        <span style={{ color: 'var(--success)' }}>🔗</span>
+                                                                        <span style={{ fontWeight: '500' }}>{mappedJiraField.name}</span>
+                                                                        {mappedJiraField.multiValue && (
+                                                                            <span style={{
+                                                                                fontSize: '0.75rem',
+                                                                                background: 'var(--warning)20',
+                                                                                color: 'var(--warning)',
+                                                                                padding: '0.125rem 0.375rem',
+                                                                                borderRadius: 'var(--radius-sm)'
+                                                                            }}>multi-value</span>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                removeMapping(field.id);
+                                                                            }}
+                                                                            style={{
+                                                                                marginLeft: 'auto',
+                                                                                background: 'none',
+                                                                                border: 'none',
+                                                                                color: 'var(--text-secondary)',
+                                                                                cursor: 'pointer',
+                                                                                padding: '0.25rem',
+                                                                                borderRadius: 'var(--radius-sm)',
+                                                                                fontSize: '0.75rem'
+                                                                            }}
+                                                                            onMouseEnter={(e) => {
+                                                                                e.target.style.background = 'var(--error)20';
+                                                                                e.target.style.color = 'var(--error)';
+                                                                            }}
+                                                                            onMouseLeave={(e) => {
+                                                                                e.target.style.background = 'none';
+                                                                                e.target.style.color = 'var(--text-secondary)';
+                                                                            }}
+                                                                        >
+                                                                            ✕
+                                                                        </button>
+                                                                    </div>
+                                                                    {mappedJiraField.multiValue && !field.multiValue && (
+                                                                        <div style={{ marginTop: '0.5rem' }}>
+                                                                            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                                                                                Reduction strategy <span style={{ color: 'var(--error)' }}>*</span>
+                                                                            </label>
+                                                                            <select
+                                                                                value={reductionStrategies[field.id] || ''}
+                                                                                onChange={(e) => setReductionStrategies(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                                                                style={{
+                                                                                    width: '100%',
+                                                                                    padding: '0.375rem 0.5rem',
+                                                                                    border: `1px solid ${reductionStrategies[field.id] ? 'var(--border-medium)' : 'var(--error)'}`,
+                                                                                    borderRadius: 'var(--radius-sm)',
+                                                                                    background: 'var(--bg-surface)',
+                                                                                    color: 'var(--text-primary)',
+                                                                                    fontSize: '0.8125rem',
+                                                                                    cursor: 'pointer'
+                                                                                }}
+                                                                            >
+                                                                                <option value="">Select strategy...</option>
+                                                                                <option value="FIRST_VALUE">First value only</option>
+                                                                                <option value="CONCATENATE">Concatenate all values</option>
+                                                                                <option value="SEPARATE_ENTRIES">Create separate entries</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -8340,7 +8466,7 @@
                                         })}
                                     </div>
                                 </div>
-                            </div>
+                            </div>)}
                         </div>
 
                         {/* Footer */}
@@ -8349,88 +8475,106 @@
                             borderTop: '1px solid var(--border-light)',
                             background: 'var(--bg-secondary)',
                             display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
+                            flexDirection: 'column',
+                            gap: '1rem'
                         }}>
-                            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                                {Object.keys(mappings).length} of {fernFields.filter(f => f.required).length} required fields mapped
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                <button
-                                    onClick={() => setMappings({})}
-                                    style={{
-                                        padding: '0.75rem 1.5rem',
-                                        border: '1px solid var(--border-medium)',
-                                        borderRadius: 'var(--radius-md)',
-                                        background: 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        cursor: 'pointer',
-                                        fontWeight: '500',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.target.style.background = 'var(--bg-tertiary)';
-                                        e.target.style.borderColor = 'var(--error)';
-                                        e.target.style.color = 'var(--error)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.target.style.background = 'transparent';
-                                        e.target.style.borderColor = 'var(--border-medium)';
-                                        e.target.style.color = 'var(--text-secondary)';
-                                    }}
-                                >
-                                    Clear All
-                                </button>
-                                <button
-                                    onClick={onClose}
-                                    disabled={saving}
-                                    style={{
-                                        padding: '0.75rem 1.5rem',
-                                        border: '1px solid var(--border-medium)',
-                                        borderRadius: 'var(--radius-md)',
-                                        background: 'transparent',
-                                        color: 'var(--text-primary)',
-                                        cursor: saving ? 'not-allowed' : 'pointer',
-                                        fontWeight: '500',
-                                        opacity: saving ? 0.6 : 1,
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving || Object.keys(mappings).length === 0}
-                                    style={{
-                                        padding: '0.75rem 2rem',
-                                        border: 'none',
-                                        borderRadius: 'var(--radius-md)',
-                                        background: 'var(--primary)',
-                                        color: 'white',
-                                        cursor: saving || Object.keys(mappings).length === 0 ? 'not-allowed' : 'pointer',
-                                        fontWeight: '600',
-                                        opacity: saving || Object.keys(mappings).length === 0 ? 0.6 : 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        if (!saving && Object.keys(mappings).length > 0) {
-                                            e.target.style.background = 'var(--primary-dark)';
-                                            e.target.style.transform = 'translateY(-1px)';
-                                            e.target.style.boxShadow = 'var(--shadow-md)';
-                                        }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.target.style.background = 'var(--primary)';
-                                        e.target.style.transform = 'translateY(0)';
-                                        e.target.style.boxShadow = 'none';
-                                    }}
-                                >
-                                    {saving && <i className="fas fa-spinner fa-spin"></i>}
-                                    Save Mapping Configuration
-                                </button>
+                            {error && (
+                                <div style={{
+                                    padding: '0.75rem 1rem',
+                                    background: 'var(--error)10',
+                                    border: '1px solid var(--error)30',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--error)',
+                                    fontSize: '0.875rem'
+                                }}>
+                                    {error}
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                    {fernFields.filter(f => f.required && mappings[f.id]).length} of {fernFields.filter(f => f.required).length} required fields mapped
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                    <button
+                                        onClick={handleReset}
+                                        disabled={resetting || saving}
+                                        style={{
+                                            padding: '0.75rem 1.5rem',
+                                            border: '1px solid var(--border-medium)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'transparent',
+                                            color: 'var(--text-secondary)',
+                                            cursor: resetting || saving ? 'not-allowed' : 'pointer',
+                                            fontWeight: '500',
+                                            opacity: resetting || saving ? 0.6 : 1,
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (!resetting && !saving) {
+                                                e.target.style.background = 'var(--bg-tertiary)';
+                                                e.target.style.borderColor = 'var(--warning)';
+                                                e.target.style.color = 'var(--warning)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.target.style.background = 'transparent';
+                                            e.target.style.borderColor = 'var(--border-medium)';
+                                            e.target.style.color = 'var(--text-secondary)';
+                                        }}
+                                    >
+                                        {resetting ? 'Resetting...' : 'Reset to Defaults'}
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        disabled={saving || resetting}
+                                        style={{
+                                            padding: '0.75rem 1.5rem',
+                                            border: '1px solid var(--border-medium)',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'transparent',
+                                            color: 'var(--text-primary)',
+                                            cursor: saving || resetting ? 'not-allowed' : 'pointer',
+                                            fontWeight: '500',
+                                            opacity: saving || resetting ? 0.6 : 1,
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={saving || resetting || Object.keys(mappings).length === 0}
+                                        style={{
+                                            padding: '0.75rem 2rem',
+                                            border: 'none',
+                                            borderRadius: 'var(--radius-md)',
+                                            background: 'var(--primary)',
+                                            color: 'white',
+                                            cursor: saving || resetting || Object.keys(mappings).length === 0 ? 'not-allowed' : 'pointer',
+                                            fontWeight: '600',
+                                            opacity: saving || resetting || Object.keys(mappings).length === 0 ? 0.6 : 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (!saving && !resetting && Object.keys(mappings).length > 0) {
+                                                e.target.style.background = 'var(--primary-dark)';
+                                                e.target.style.transform = 'translateY(-1px)';
+                                                e.target.style.boxShadow = 'var(--shadow-md)';
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.target.style.background = 'var(--primary)';
+                                            e.target.style.transform = 'translateY(0)';
+                                            e.target.style.boxShadow = 'none';
+                                        }}
+                                    >
+                                        {saving && <i className="fas fa-spinner fa-spin"></i>}
+                                        Save Mapping Configuration
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -411,3 +411,10 @@ func (m *mockJiraClient) GetProject(ctx context.Context, url, projectKey, userna
 		Name: "Test Project",
 	}, nil
 }
+
+func (m *mockJiraClient) ListFields(ctx context.Context, baseURL, username, credential string, authType integrations.AuthenticationType) ([]integrations.JiraField, error) {
+	if !m.shouldSucceed {
+		return nil, assert.AnError
+	}
+	return []integrations.JiraField{}, nil
+}

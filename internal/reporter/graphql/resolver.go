@@ -18,14 +18,15 @@ import (
 
 // Resolver is the root GraphQL resolver
 type Resolver struct {
-	testingService        *testingApp.TestRunService
-	projectService        *projectsApp.ProjectService
-	tagService            *tagsApp.TagService
-	flakyDetectionService *analyticsApp.FlakyDetectionService
-	jiraConnectionService *integrations.JiraConnectionService
-	loaders               *dataloader.Loaders
-	db                    *gorm.DB
-	logger                *logging.Logger
+	testingService          *testingApp.TestRunService
+	projectService          *projectsApp.ProjectService
+	tagService              *tagsApp.TagService
+	flakyDetectionService   *analyticsApp.FlakyDetectionService
+	jiraConnectionService   *integrations.JiraConnectionService
+	jiraFieldMappingService *integrations.JiraFieldMappingService
+	loaders                 *dataloader.Loaders
+	db                      *gorm.DB
+	logger                  *logging.Logger
 }
 
 // NewResolver creates a new GraphQL resolver
@@ -35,17 +36,19 @@ func NewResolver(
 	tagService *tagsApp.TagService,
 	flakyDetectionService *analyticsApp.FlakyDetectionService,
 	jiraConnectionService *integrations.JiraConnectionService,
+	jiraFieldMappingService *integrations.JiraFieldMappingService,
 	db *gorm.DB,
 	logger *logging.Logger,
 ) *Resolver {
 	return &Resolver{
-		testingService:        testingService,
-		projectService:        projectService,
-		tagService:            tagService,
-		flakyDetectionService: flakyDetectionService,
-		jiraConnectionService: jiraConnectionService,
-		loaders:               dataloader.NewLoaders(db),
-		db:                    db,
-		logger:                logger,
+		testingService:          testingService,
+		projectService:          projectService,
+		tagService:              tagService,
+		flakyDetectionService:   flakyDetectionService,
+		jiraConnectionService:   jiraConnectionService,
+		jiraFieldMappingService: jiraFieldMappingService,
+		loaders:                 dataloader.NewLoaders(db),
+		db:                      db,
+		logger:                  logger,
 	}
 }

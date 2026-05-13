@@ -37,6 +37,7 @@ type JiraConnection struct {
 type JiraClient interface {
 	TestConnection(ctx context.Context, url, username, credential string, authType AuthenticationType) error
 	GetProject(ctx context.Context, url, projectKey, username, credential string, authType AuthenticationType) (*JiraProject, error)
+	ListFields(ctx context.Context, baseURL, username, credential string, authType AuthenticationType) ([]JiraField, error)
 }
 
 // NewJiraConnection creates a new JIRA connection

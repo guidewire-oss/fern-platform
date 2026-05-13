@@ -1,0 +1,233 @@
+package graphql
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
+	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
+	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
+)
+
+// requireManageJiraMapping returns the current user when they hold Admin/Manager
+// access, or an error if unauthenticated or unprivileged.
+func requireManageJiraMapping(ctx context.Context) (*authDomain.User, error) {
+	user, err := getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("unauthorized: %w", err)
+	}
+	if user.Role != authDomain.RoleAdmin && user.Role != authDomain.RoleManager {
+		return nil, fmt.Errorf("unauthorized")
+	}
+	return user, nil
+}
+
+// JiraFieldMapping_domain returns the field mapping snapshot for the project.
+func (r *queryResolver) JiraFieldMapping_domain(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
+	if _, err := requireManageJiraMapping(ctx); err != nil {
+		return nil, err
+	}
+
+	snap, err := r.jiraFieldMappingService.Get(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JIRA field mapping: %w", err)
+	}
+
+	return mappingSnapshotToModel(snap), nil
+}
+
+// JiraFields_domain lists all JIRA fields available for a given connection.
+func (r *queryResolver) JiraFields_domain(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error) {
+	if _, err := requireManageJiraMapping(ctx); err != nil {
+		return nil, err
+	}
+
+	fields, err := r.jiraConnectionService.ListJiraFields(ctx, connectionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list JIRA fields: %w", err)
+	}
+
+	result := make([]*model.JiraFieldGql, len(fields))
+	for i, f := range fields {
+		result[i] = &model.JiraFieldGql{
+			ID:         f.ID,
+			Name:       f.Name,
+			Custom:     f.Custom,
+			MultiValue: f.MultiValue,
+		}
+	}
+	return result, nil
+}
+
+// SaveJiraFieldMapping_domain validates and persists a field mapping for the project.
+func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, input model.SaveJiraFieldMappingInput) (*model.JiraFieldMapping, error) {
+	user, err := requireManageJiraMapping(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := modelEntriesToDomain(input.Entries)
+	snap, err := r.jiraFieldMappingService.Save(ctx, input.ProjectID, entries, user.UserID)
+	if err != nil {
+		switch {
+		case errors.Is(err, integrations.ErrNoJiraConnection):
+			return nil, fmt.Errorf("no JIRA connection configured for this project: %w", err)
+		case errors.Is(err, integrations.ErrRequiredFieldUnmapped):
+			return nil, fmt.Errorf("required Fern field is unmapped: %w", err)
+		case errors.Is(err, integrations.ErrDuplicateJiraField):
+			return nil, fmt.Errorf("duplicate JIRA field in mapping: %w", err)
+		case errors.Is(err, integrations.ErrMissingReductionStrategy):
+			return nil, fmt.Errorf("multi-value JIRA field requires a reduction strategy: %w", err)
+		case errors.Is(err, integrations.ErrUnknownFernField):
+			return nil, fmt.Errorf("unknown Fern field in mapping: %w", err)
+		case errors.Is(err, integrations.ErrUnknownReductionStrategy):
+			return nil, fmt.Errorf("unknown reduction strategy in mapping: %w", err)
+		default:
+			return nil, fmt.Errorf("failed to save JIRA field mapping: %w", err)
+		}
+	}
+
+	return mappingSnapshotToModel(snap), nil
+}
+
+// ResetJiraFieldMapping_domain deletes any saved mapping for the project and
+// returns the default mapping snapshot.
+func (r *mutationResolver) ResetJiraFieldMapping_domain(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
+	if _, err := requireManageJiraMapping(ctx); err != nil {
+		return nil, err
+	}
+
+	snap, err := r.jiraFieldMappingService.Reset(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reset JIRA field mapping: %w", err)
+	}
+
+	return mappingSnapshotToModel(snap), nil
+}
+
+// ---------------------------------------------------------------------------
+// Model conversion helpers
+// ---------------------------------------------------------------------------
+
+// mappingSnapshotToModel converts a domain snapshot to the GraphQL model type.
+func mappingSnapshotToModel(snap *integrations.JiraFieldMappingSnapshot) *model.JiraFieldMapping {
+	entries := make([]*model.FieldMappingEntry, len(snap.Entries))
+	for i, e := range snap.Entries {
+		entry := &model.FieldMappingEntry{
+			FernField:             fernFieldToModel(e.FernField),
+			JiraFieldID:           e.JiraFieldID,
+			JiraFieldIsMultiValue: e.JiraFieldIsMultiValue,
+			ReductionStrategy:     reductionStrategyToModel(e.ReductionStrategy),
+		}
+		entries[i] = entry
+	}
+	result := &model.JiraFieldMapping{
+		ProjectID: snap.ProjectID,
+		Entries:   entries,
+	}
+	if snap.UpdatedBy != "" {
+		result.UpdatedBy = &snap.UpdatedBy
+	}
+	if !snap.UpdatedAt.IsZero() {
+		result.UpdatedAt = &snap.UpdatedAt
+	}
+	return result
+}
+
+// fernFieldToModel maps a domain FernField constant to its GraphQL model enum.
+func fernFieldToModel(f integrations.FernField) model.FernField {
+	switch f {
+	case integrations.FernFieldRequirementID:
+		return model.FernFieldRequirementID
+	case integrations.FernFieldRequirementTitle:
+		return model.FernFieldRequirementTitle
+	case integrations.FernFieldDescription:
+		return model.FernFieldDescription
+	case integrations.FernFieldParentRequirement:
+		return model.FernFieldParentRequirement
+	case integrations.FernFieldRequirementType:
+		return model.FernFieldRequirementType
+	case integrations.FernFieldReleaseVersion:
+		return model.FernFieldReleaseVersion
+	case integrations.FernFieldRequirementStatus:
+		return model.FernFieldRequirementStatus
+	case integrations.FernFieldTags:
+		return model.FernFieldTags
+	default:
+		panic(fmt.Sprintf("unhandled FernField %q — update fernFieldToModel when adding new constants", f))
+	}
+}
+
+// reductionStrategyToModel maps a domain ReductionStrategy to the GraphQL model enum pointer.
+// Returns nil when the domain value is the zero value (no strategy set).
+func reductionStrategyToModel(r integrations.ReductionStrategy) *model.ReductionStrategy {
+	var s model.ReductionStrategy
+	switch r {
+	case integrations.ReductionStrategyFirstValue:
+		s = model.ReductionStrategyFirstValue
+	case integrations.ReductionStrategyConcatenate:
+		s = model.ReductionStrategyConcatenate
+	case integrations.ReductionStrategySeparate:
+		s = model.ReductionStrategySeparateEntries
+	default:
+		return nil
+	}
+	return &s
+}
+
+// modelToFernField maps a GraphQL model FernField enum to the domain constant.
+func modelToFernField(f model.FernField) integrations.FernField {
+	switch f {
+	case model.FernFieldRequirementID:
+		return integrations.FernFieldRequirementID
+	case model.FernFieldRequirementTitle:
+		return integrations.FernFieldRequirementTitle
+	case model.FernFieldDescription:
+		return integrations.FernFieldDescription
+	case model.FernFieldParentRequirement:
+		return integrations.FernFieldParentRequirement
+	case model.FernFieldRequirementType:
+		return integrations.FernFieldRequirementType
+	case model.FernFieldReleaseVersion:
+		return integrations.FernFieldReleaseVersion
+	case model.FernFieldRequirementStatus:
+		return integrations.FernFieldRequirementStatus
+	case model.FernFieldTags:
+		return integrations.FernFieldTags
+	default:
+		panic(fmt.Sprintf("unhandled model.FernField %q — update modelToFernField when adding new constants", f))
+	}
+}
+
+// modelToReductionStrategy maps a GraphQL model ReductionStrategy pointer to the domain constant.
+// Returns "" when r is nil (no strategy set).
+func modelToReductionStrategy(r *model.ReductionStrategy) integrations.ReductionStrategy {
+	if r == nil {
+		return ""
+	}
+	switch *r {
+	case model.ReductionStrategyFirstValue:
+		return integrations.ReductionStrategyFirstValue
+	case model.ReductionStrategyConcatenate:
+		return integrations.ReductionStrategyConcatenate
+	case model.ReductionStrategySeparateEntries:
+		return integrations.ReductionStrategySeparate
+	default:
+		panic(fmt.Sprintf("unhandled model.ReductionStrategy %q — update modelToReductionStrategy when adding new constants", *r))
+	}
+}
+
+// modelEntriesToDomain converts a slice of GraphQL input entries to domain entries.
+func modelEntriesToDomain(entries []*model.FieldMappingEntryInput) []integrations.FieldMappingEntry {
+	result := make([]integrations.FieldMappingEntry, len(entries))
+	for i, e := range entries {
+		result[i] = integrations.FieldMappingEntry{
+			FernField:             modelToFernField(e.FernField),
+			JiraFieldID:           e.JiraFieldID,
+			JiraFieldIsMultiValue: e.JiraFieldIsMultiValue,
+			ReductionStrategy:     modelToReductionStrategy(e.ReductionStrategy),
+		}
+	}
+	return result
+}

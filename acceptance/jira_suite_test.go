@@ -14,12 +14,14 @@ import (
 
 var (
 	// Configuration flags
-	baseURL     string
-	headless    bool
-	slowMo      float64
-	username    string
-	password    string
-	recordVideo bool
+	baseURL            string
+	headless           bool
+	slowMo             float64
+	username           string
+	password           string
+	nonManagerUsername string
+	nonManagerPassword string
+	recordVideo        bool
 
 	// Playwright objects
 	pw *playwright.Playwright
@@ -29,8 +31,10 @@ func init() {
 	flag.StringVar(&baseURL, "base-url", getEnvOrDefault("FERN_BASE_URL", "http://fern-platform.local:8080"), "Base URL for Fern Platform")
 	flag.BoolVar(&headless, "headless", getEnvOrDefault("FERN_HEADLESS", "true") == "true", "Run browser in headless mode")
 	flag.Float64Var(&slowMo, "slow-mo", 0, "Slow motion delay in milliseconds")
-	flag.StringVar(&username, "username", getEnvOrDefault("FERN_USERNAME", "fern-manager@fern.com"), "Username for authentication")
-	flag.StringVar(&password, "password", getEnvOrDefault("FERN_PASSWORD", "test123"), "Password for authentication")
+	flag.StringVar(&username, "username", getEnvOrDefault("FERN_USERNAME", "fern-manager@fern.com"), "Manager username for authentication")
+	flag.StringVar(&password, "password", getEnvOrDefault("FERN_PASSWORD", "test123"), "Manager password for authentication")
+	flag.StringVar(&nonManagerUsername, "non-manager-username", getEnvOrDefault("FERN_NON_MANAGER_USERNAME", "fern-user@fern.com"), "Non-manager username for access-denial tests")
+	flag.StringVar(&nonManagerPassword, "non-manager-password", getEnvOrDefault("FERN_NON_MANAGER_PASSWORD", "test123"), "Non-manager password for access-denial tests")
 	flag.BoolVar(&recordVideo, "record-video", getEnvOrDefault("FERN_RECORD_VIDEO", "false") == "true", "Record videos of test runs")
 }
 

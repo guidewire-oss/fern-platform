@@ -9,12 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// GormJiraConnectionRepository implements JiraConnectionRepository using GORM
 type GormJiraConnectionRepository struct {
 	db *gorm.DB
 }
 
-// NewGormJiraConnectionRepository creates a new GORM-based JIRA connection repository
 func NewGormJiraConnectionRepository(db *gorm.DB) integrations.JiraConnectionRepository {
 	return &GormJiraConnectionRepository{db: db}
 }

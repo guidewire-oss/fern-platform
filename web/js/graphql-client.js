@@ -512,6 +512,66 @@ const QUERIES = {
         mutation DeleteJiraConnection($id: ID!) {
             deleteJiraConnection(id: $id)
         }
+    `,
+
+    // JIRA Field Mapping queries
+    GET_JIRA_FIELDS: `
+        query GetJiraFields($connectionId: ID!) {
+            jiraFields(connectionId: $connectionId) {
+                id
+                name
+                custom
+                multiValue
+            }
+        }
+    `,
+
+    GET_JIRA_FIELD_MAPPING: `
+        query GetJiraFieldMapping($projectId: String!) {
+            jiraFieldMapping(projectId: $projectId) {
+                projectId
+                entries {
+                    fernField
+                    jiraFieldId
+                    jiraFieldIsMultiValue
+                    reductionStrategy
+                }
+                updatedBy
+                updatedAt
+            }
+        }
+    `,
+
+    SAVE_JIRA_FIELD_MAPPING: `
+        mutation SaveJiraFieldMapping($input: SaveJiraFieldMappingInput!) {
+            saveJiraFieldMapping(input: $input) {
+                projectId
+                entries {
+                    fernField
+                    jiraFieldId
+                    jiraFieldIsMultiValue
+                    reductionStrategy
+                }
+                updatedBy
+                updatedAt
+            }
+        }
+    `,
+
+    RESET_JIRA_FIELD_MAPPING: `
+        mutation ResetJiraFieldMapping($projectId: String!) {
+            resetJiraFieldMapping(projectId: $projectId) {
+                projectId
+                entries {
+                    fernField
+                    jiraFieldId
+                    jiraFieldIsMultiValue
+                    reductionStrategy
+                }
+                updatedBy
+                updatedAt
+            }
+        }
     `
 };
 

@@ -63,6 +63,13 @@ type ComplexityRoot struct {
 		TotalTestsExecuted  func(childComplexity int) int
 	}
 
+	FieldMappingEntry struct {
+		FernField             func(childComplexity int) int
+		JiraFieldID           func(childComplexity int) int
+		JiraFieldIsMultiValue func(childComplexity int) int
+		ReductionStrategy     func(childComplexity int) int
+	}
+
 	FlakyTest struct {
 		CreatedAt        func(childComplexity int) int
 		FirstSeenAt      func(childComplexity int) int
@@ -120,6 +127,20 @@ type ComplexityRoot struct {
 		Username           func(childComplexity int) int
 	}
 
+	JiraFieldGQL struct {
+		Custom     func(childComplexity int) int
+		ID         func(childComplexity int) int
+		MultiValue func(childComplexity int) int
+		Name       func(childComplexity int) int
+	}
+
+	JiraFieldMapping struct {
+		Entries   func(childComplexity int) int
+		ProjectID func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
+		UpdatedBy func(childComplexity int) int
+	}
+
 	Mutation struct {
 		ActivateProject       func(childComplexity int, projectID string) int
 		AssignTagsToTestRun   func(childComplexity int, testRunID string, tagIds []string) int
@@ -134,6 +155,8 @@ type ComplexityRoot struct {
 		DeleteTestRun         func(childComplexity int, id string) int
 		MarkFlakyTestResolved func(childComplexity int, id string) int
 		MarkSpecAsFlaky       func(childComplexity int, specRunID string) int
+		ResetJiraFieldMapping func(childComplexity int, projectID string) int
+		SaveJiraFieldMapping  func(childComplexity int, input model.SaveJiraFieldMappingInput) int
 		TestJiraConnection    func(childComplexity int, id string) int
 		ToggleProjectFavorite func(childComplexity int, projectID string) int
 		UpdateJiraConnection  func(childComplexity int, id string, input model.UpdateJiraConnectionInput) int
@@ -207,6 +230,8 @@ type ComplexityRoot struct {
 		Health                  func(childComplexity int) int
 		JiraConnection          func(childComplexity int, id string) int
 		JiraConnections         func(childComplexity int, projectID string) int
+		JiraFieldMapping        func(childComplexity int, projectID string) int
+		JiraFields              func(childComplexity int, connectionID string) int
 		PopularTags             func(childComplexity int, limit *int) int
 		Project                 func(childComplexity int, id string) int
 		ProjectByProjectID      func(childComplexity int, projectID string) int
@@ -432,6 +457,8 @@ type MutationResolver interface {
 	UpdateJiraCredentials(ctx context.Context, id string, input model.UpdateJiraCredentialsInput) (*model.JiraConnection, error)
 	TestJiraConnection(ctx context.Context, id string) (bool, error)
 	DeleteJiraConnection(ctx context.Context, id string) (bool, error)
+	SaveJiraFieldMapping(ctx context.Context, input model.SaveJiraFieldMappingInput) (*model.JiraFieldMapping, error)
+	ResetJiraFieldMapping(ctx context.Context, projectID string) (*model.JiraFieldMapping, error)
 }
 type ProjectResolver interface {
 	CanManage(ctx context.Context, obj *model.Project) (bool, error)
@@ -463,6 +490,8 @@ type QueryResolver interface {
 	RecentlyAddedFlakyTests(ctx context.Context, projectID *string, days *int, limit *int) ([]*model.FlakyTest, error)
 	JiraConnection(ctx context.Context, id string) (*model.JiraConnection, error)
 	JiraConnections(ctx context.Context, projectID string) ([]*model.JiraConnection, error)
+	JiraFieldMapping(ctx context.Context, projectID string) (*model.JiraFieldMapping, error)
+	JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error)
 }
 type SubscriptionResolver interface {
 	TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error)
@@ -551,6 +580,34 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DashboardSummary.TotalTestsExecuted(childComplexity), true
+
+	case "FieldMappingEntry.fernField":
+		if e.complexity.FieldMappingEntry.FernField == nil {
+			break
+		}
+
+		return e.complexity.FieldMappingEntry.FernField(childComplexity), true
+
+	case "FieldMappingEntry.jiraFieldId":
+		if e.complexity.FieldMappingEntry.JiraFieldID == nil {
+			break
+		}
+
+		return e.complexity.FieldMappingEntry.JiraFieldID(childComplexity), true
+
+	case "FieldMappingEntry.jiraFieldIsMultiValue":
+		if e.complexity.FieldMappingEntry.JiraFieldIsMultiValue == nil {
+			break
+		}
+
+		return e.complexity.FieldMappingEntry.JiraFieldIsMultiValue(childComplexity), true
+
+	case "FieldMappingEntry.reductionStrategy":
+		if e.complexity.FieldMappingEntry.ReductionStrategy == nil {
+			break
+		}
+
+		return e.complexity.FieldMappingEntry.ReductionStrategy(childComplexity), true
 
 	case "FlakyTest.createdAt":
 		if e.complexity.FlakyTest.CreatedAt == nil {
@@ -825,6 +882,62 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.JiraConnection.Username(childComplexity), true
 
+	case "JiraFieldGQL.custom":
+		if e.complexity.JiraFieldGQL.Custom == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldGQL.Custom(childComplexity), true
+
+	case "JiraFieldGQL.id":
+		if e.complexity.JiraFieldGQL.ID == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldGQL.ID(childComplexity), true
+
+	case "JiraFieldGQL.multiValue":
+		if e.complexity.JiraFieldGQL.MultiValue == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldGQL.MultiValue(childComplexity), true
+
+	case "JiraFieldGQL.name":
+		if e.complexity.JiraFieldGQL.Name == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldGQL.Name(childComplexity), true
+
+	case "JiraFieldMapping.entries":
+		if e.complexity.JiraFieldMapping.Entries == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldMapping.Entries(childComplexity), true
+
+	case "JiraFieldMapping.projectId":
+		if e.complexity.JiraFieldMapping.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldMapping.ProjectID(childComplexity), true
+
+	case "JiraFieldMapping.updatedAt":
+		if e.complexity.JiraFieldMapping.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldMapping.UpdatedAt(childComplexity), true
+
+	case "JiraFieldMapping.updatedBy":
+		if e.complexity.JiraFieldMapping.UpdatedBy == nil {
+			break
+		}
+
+		return e.complexity.JiraFieldMapping.UpdatedBy(childComplexity), true
+
 	case "Mutation.activateProject":
 		if e.complexity.Mutation.ActivateProject == nil {
 			break
@@ -980,6 +1093,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.MarkSpecAsFlaky(childComplexity, args["specRunId"].(string)), true
+
+	case "Mutation.resetJiraFieldMapping":
+		if e.complexity.Mutation.ResetJiraFieldMapping == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_resetJiraFieldMapping_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ResetJiraFieldMapping(childComplexity, args["projectId"].(string)), true
+
+	case "Mutation.saveJiraFieldMapping":
+		if e.complexity.Mutation.SaveJiraFieldMapping == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_saveJiraFieldMapping_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SaveJiraFieldMapping(childComplexity, args["input"].(model.SaveJiraFieldMappingInput)), true
 
 	case "Mutation.testJiraConnection":
 		if e.complexity.Mutation.TestJiraConnection == nil {
@@ -1409,6 +1546,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.JiraConnections(childComplexity, args["projectId"].(string)), true
+
+	case "Query.jiraFieldMapping":
+		if e.complexity.Query.JiraFieldMapping == nil {
+			break
+		}
+
+		args, err := ec.field_Query_jiraFieldMapping_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.JiraFieldMapping(childComplexity, args["projectId"].(string)), true
+
+	case "Query.jiraFields":
+		if e.complexity.Query.JiraFields == nil {
+			break
+		}
+
+		args, err := ec.field_Query_jiraFields_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.JiraFields(childComplexity, args["connectionId"].(string)), true
 
 	case "Query.popularTags":
 		if e.complexity.Query.PopularTags == nil {
@@ -2492,8 +2653,10 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateTagInput,
 		ec.unmarshalInputCreateTestRunInput,
+		ec.unmarshalInputFieldMappingEntryInput,
 		ec.unmarshalInputFlakyTestFilter,
 		ec.unmarshalInputProjectFilter,
+		ec.unmarshalInputSaveJiraFieldMappingInput,
 		ec.unmarshalInputTagFilter,
 		ec.unmarshalInputTestRunFilter,
 		ec.unmarshalInputUpdateJiraConnectionInput,
@@ -2977,6 +3140,58 @@ input UpdateJiraCredentialsInput {
   credential: String!
 }
 
+# JIRA Field Mapping Types
+
+enum FernField {
+  REQUIREMENT_ID
+  REQUIREMENT_TITLE
+  DESCRIPTION
+  PARENT_REQUIREMENT
+  REQUIREMENT_TYPE
+  RELEASE_VERSION
+  REQUIREMENT_STATUS
+  TAGS
+}
+
+enum ReductionStrategy {
+  FIRST_VALUE
+  CONCATENATE
+  SEPARATE_ENTRIES
+}
+
+type JiraFieldGQL {
+  id: String!
+  name: String!
+  custom: Boolean!
+  multiValue: Boolean!
+}
+
+type FieldMappingEntry {
+  fernField: FernField!
+  jiraFieldId: String!
+  jiraFieldIsMultiValue: Boolean!
+  reductionStrategy: ReductionStrategy
+}
+
+type JiraFieldMapping {
+  projectId: String!
+  entries: [FieldMappingEntry!]!
+  updatedBy: String
+  updatedAt: Time
+}
+
+input FieldMappingEntryInput {
+  fernField: FernField!
+  jiraFieldId: String!
+  jiraFieldIsMultiValue: Boolean!
+  reductionStrategy: ReductionStrategy
+}
+
+input SaveJiraFieldMappingInput {
+  projectId: String!
+  entries: [FieldMappingEntryInput!]!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -3094,6 +3309,10 @@ type Query {
   # JIRA Connections
   jiraConnection(id: ID!): JiraConnection
   jiraConnections(projectId: String!): [JiraConnection!]!
+
+  # JIRA Field Mapping
+  jiraFieldMapping(projectId: String!): JiraFieldMapping!
+  jiraFields(connectionId: ID!): [JiraFieldGQL!]!
 }
 
 # Mutation Root
@@ -3130,6 +3349,10 @@ type Mutation {
   updateJiraCredentials(id: ID!, input: UpdateJiraCredentialsInput!): JiraConnection!
   testJiraConnection(id: ID!): Boolean!
   deleteJiraConnection(id: ID!): Boolean!
+
+  # JIRA Field Mapping
+  saveJiraFieldMapping(input: SaveJiraFieldMappingInput!): JiraFieldMapping!
+  resetJiraFieldMapping(projectId: String!): JiraFieldMapping!
 }
 
 # Subscription Root (for future real-time features)
@@ -3299,6 +3522,28 @@ func (ec *executionContext) field_Mutation_markSpecAsFlaky_args(ctx context.Cont
 		return nil, err
 	}
 	args["specRunId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_resetJiraFieldMapping_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_saveJiraFieldMapping_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSaveJiraFieldMappingInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐSaveJiraFieldMappingInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -3503,6 +3748,28 @@ func (ec *executionContext) field_Query_jiraConnections_args(ctx context.Context
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_jiraFieldMapping_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_jiraFields_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "connectionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["connectionId"] = arg0
 	return args, nil
 }
 
@@ -4178,6 +4445,179 @@ func (ec *executionContext) fieldContext_DashboardSummary_averageTestDuration(_ 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FieldMappingEntry_fernField(ctx context.Context, field graphql.CollectedField, obj *model.FieldMappingEntry) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_FieldMappingEntry_fernField(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.FernField, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(model.FernField)
+	fc.Result = res
+	return ec.marshalNFernField2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFernField(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_FieldMappingEntry_fernField(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FieldMappingEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FernField does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FieldMappingEntry_jiraFieldId(ctx context.Context, field graphql.CollectedField, obj *model.FieldMappingEntry) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_FieldMappingEntry_jiraFieldId(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.JiraFieldID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_FieldMappingEntry_jiraFieldId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FieldMappingEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FieldMappingEntry_jiraFieldIsMultiValue(ctx context.Context, field graphql.CollectedField, obj *model.FieldMappingEntry) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_FieldMappingEntry_jiraFieldIsMultiValue(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.JiraFieldIsMultiValue, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_FieldMappingEntry_jiraFieldIsMultiValue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FieldMappingEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FieldMappingEntry_reductionStrategy(ctx context.Context, field graphql.CollectedField, obj *model.FieldMappingEntry) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_FieldMappingEntry_reductionStrategy(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ReductionStrategy, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*model.ReductionStrategy)
+	fc.Result = res
+	return ec.marshalOReductionStrategy2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReductionStrategy(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_FieldMappingEntry_reductionStrategy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FieldMappingEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ReductionStrategy does not have child fields")
 		},
 	}
 	return fc, nil
@@ -5966,6 +6406,362 @@ func (ec *executionContext) fieldContext_JiraConnection_updatedAt(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _JiraFieldGQL_id(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldGql) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldGQL_id(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldGQL_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldGQL",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldGQL_name(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldGql) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldGQL_name(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Name, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldGQL_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldGQL",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldGQL_custom(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldGql) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldGQL_custom(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Custom, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldGQL_custom(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldGQL",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldGQL_multiValue(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldGql) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldGQL_multiValue(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.MultiValue, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldGQL_multiValue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldGQL",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldMapping_projectId(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldMapping) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldMapping_projectId(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ProjectID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldMapping_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldMapping",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldMapping_entries(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldMapping) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldMapping_entries(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Entries, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.FieldMappingEntry)
+	fc.Result = res
+	return ec.marshalNFieldMappingEntry2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldMapping_entries(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldMapping",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fernField":
+				return ec.fieldContext_FieldMappingEntry_fernField(ctx, field)
+			case "jiraFieldId":
+				return ec.fieldContext_FieldMappingEntry_jiraFieldId(ctx, field)
+			case "jiraFieldIsMultiValue":
+				return ec.fieldContext_FieldMappingEntry_jiraFieldIsMultiValue(ctx, field)
+			case "reductionStrategy":
+				return ec.fieldContext_FieldMappingEntry_reductionStrategy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FieldMappingEntry", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldMapping_updatedBy(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldMapping) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldMapping_updatedBy(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.UpdatedBy, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldMapping_updatedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldMapping",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JiraFieldMapping_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.JiraFieldMapping) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraFieldMapping_updatedAt(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.UpdatedAt, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*time.Time)
+	fc.Result = res
+	return ec.marshalOTime2ᚖtimeᚐTime(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraFieldMapping_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraFieldMapping",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createTestRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Mutation_createTestRun(ctx, field)
 	if err != nil {
@@ -7565,6 +8361,136 @@ func (ec *executionContext) fieldContext_Mutation_deleteJiraConnection(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteJiraConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_saveJiraFieldMapping(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_saveJiraFieldMapping(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().SaveJiraFieldMapping(rctx, fc.Args["input"].(model.SaveJiraFieldMappingInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraFieldMapping)
+	fc.Result = res
+	return ec.marshalNJiraFieldMapping2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldMapping(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_saveJiraFieldMapping(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_JiraFieldMapping_projectId(ctx, field)
+			case "entries":
+				return ec.fieldContext_JiraFieldMapping_entries(ctx, field)
+			case "updatedBy":
+				return ec.fieldContext_JiraFieldMapping_updatedBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraFieldMapping_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraFieldMapping", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_saveJiraFieldMapping_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_resetJiraFieldMapping(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_resetJiraFieldMapping(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().ResetJiraFieldMapping(rctx, fc.Args["projectId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraFieldMapping)
+	fc.Result = res
+	return ec.marshalNJiraFieldMapping2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldMapping(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_resetJiraFieldMapping(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_JiraFieldMapping_projectId(ctx, field)
+			case "entries":
+				return ec.fieldContext_JiraFieldMapping_entries(ctx, field)
+			case "updatedBy":
+				return ec.fieldContext_JiraFieldMapping_updatedBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraFieldMapping_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraFieldMapping", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_resetJiraFieldMapping_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10996,6 +11922,136 @@ func (ec *executionContext) fieldContext_Query_jiraConnections(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_jiraConnections_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_jiraFieldMapping(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_jiraFieldMapping(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().JiraFieldMapping(rctx, fc.Args["projectId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraFieldMapping)
+	fc.Result = res
+	return ec.marshalNJiraFieldMapping2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldMapping(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_jiraFieldMapping(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_JiraFieldMapping_projectId(ctx, field)
+			case "entries":
+				return ec.fieldContext_JiraFieldMapping_entries(ctx, field)
+			case "updatedBy":
+				return ec.fieldContext_JiraFieldMapping_updatedBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_JiraFieldMapping_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraFieldMapping", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_jiraFieldMapping_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_jiraFields(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_jiraFields(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().JiraFields(rctx, fc.Args["connectionId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.JiraFieldGql)
+	fc.Result = res
+	return ec.marshalNJiraFieldGQL2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldGqlᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_jiraFields(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraFieldGQL_id(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraFieldGQL_name(ctx, field)
+			case "custom":
+				return ec.fieldContext_JiraFieldGQL_custom(ctx, field)
+			case "multiValue":
+				return ec.fieldContext_JiraFieldGQL_multiValue(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraFieldGQL", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_jiraFields_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -19240,6 +20296,54 @@ func (ec *executionContext) unmarshalInputCreateTestRunInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputFieldMappingEntryInput(ctx context.Context, obj any) (model.FieldMappingEntryInput, error) {
+	var it model.FieldMappingEntryInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"fernField", "jiraFieldId", "jiraFieldIsMultiValue", "reductionStrategy"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "fernField":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fernField"))
+			data, err := ec.unmarshalNFernField2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFernField(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FernField = data
+		case "jiraFieldId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jiraFieldId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JiraFieldID = data
+		case "jiraFieldIsMultiValue":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jiraFieldIsMultiValue"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JiraFieldIsMultiValue = data
+		case "reductionStrategy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reductionStrategy"))
+			data, err := ec.unmarshalOReductionStrategy2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReductionStrategy(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReductionStrategy = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputFlakyTestFilter(ctx context.Context, obj any) (model.FlakyTestFilter, error) {
 	var it model.FlakyTestFilter
 	asMap := map[string]any{}
@@ -19323,6 +20427,40 @@ func (ec *executionContext) unmarshalInputProjectFilter(ctx context.Context, obj
 				return it, err
 			}
 			it.ActiveOnly = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSaveJiraFieldMappingInput(ctx context.Context, obj any) (model.SaveJiraFieldMappingInput, error) {
+	var it model.SaveJiraFieldMappingInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "entries"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "entries":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("entries"))
+			data, err := ec.unmarshalNFieldMappingEntryInput2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Entries = data
 		}
 	}
 
@@ -19747,6 +20885,57 @@ func (ec *executionContext) _DashboardSummary(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var fieldMappingEntryImplementors = []string{"FieldMappingEntry"}
+
+func (ec *executionContext) _FieldMappingEntry(ctx context.Context, sel ast.SelectionSet, obj *model.FieldMappingEntry) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, fieldMappingEntryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FieldMappingEntry")
+		case "fernField":
+			out.Values[i] = ec._FieldMappingEntry_fernField(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jiraFieldId":
+			out.Values[i] = ec._FieldMappingEntry_jiraFieldId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jiraFieldIsMultiValue":
+			out.Values[i] = ec._FieldMappingEntry_jiraFieldIsMultiValue(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reductionStrategy":
+			out.Values[i] = ec._FieldMappingEntry_reductionStrategy(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var flakyTestImplementors = []string{"FlakyTest"}
 
 func (ec *executionContext) _FlakyTest(ctx context.Context, sel ast.SelectionSet, obj *model.FlakyTest) graphql.Marshaler {
@@ -20131,6 +21320,108 @@ func (ec *executionContext) _JiraConnection(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var jiraFieldGQLImplementors = []string{"JiraFieldGQL"}
+
+func (ec *executionContext) _JiraFieldGQL(ctx context.Context, sel ast.SelectionSet, obj *model.JiraFieldGql) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, jiraFieldGQLImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("JiraFieldGQL")
+		case "id":
+			out.Values[i] = ec._JiraFieldGQL_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._JiraFieldGQL_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "custom":
+			out.Values[i] = ec._JiraFieldGQL_custom(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "multiValue":
+			out.Values[i] = ec._JiraFieldGQL_multiValue(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var jiraFieldMappingImplementors = []string{"JiraFieldMapping"}
+
+func (ec *executionContext) _JiraFieldMapping(ctx context.Context, sel ast.SelectionSet, obj *model.JiraFieldMapping) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, jiraFieldMappingImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("JiraFieldMapping")
+		case "projectId":
+			out.Values[i] = ec._JiraFieldMapping_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "entries":
+			out.Values[i] = ec._JiraFieldMapping_entries(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedBy":
+			out.Values[i] = ec._JiraFieldMapping_updatedBy(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._JiraFieldMapping_updatedAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -20293,6 +21584,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteJiraConnection":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteJiraConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "saveJiraFieldMapping":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_saveJiraFieldMapping(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "resetJiraFieldMapping":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_resetJiraFieldMapping(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -21269,6 +22574,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_jiraConnections(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "jiraFieldMapping":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_jiraFieldMapping(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "jiraFields":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_jiraFields(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -22954,6 +24303,90 @@ func (ec *executionContext) marshalNDashboardSummary2ᚖgithubᚗcomᚋguidewire
 	return ec._DashboardSummary(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNFernField2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFernField(ctx context.Context, v any) (model.FernField, error) {
+	var res model.FernField
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFernField2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFernField(ctx context.Context, sel ast.SelectionSet, v model.FernField) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNFieldMappingEntry2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.FieldMappingEntry) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNFieldMappingEntry2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntry(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFieldMappingEntry2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntry(ctx context.Context, sel ast.SelectionSet, v *model.FieldMappingEntry) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FieldMappingEntry(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNFieldMappingEntryInput2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryInputᚄ(ctx context.Context, v any) ([]*model.FieldMappingEntryInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.FieldMappingEntryInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNFieldMappingEntryInput2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNFieldMappingEntryInput2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFieldMappingEntryInput(ctx context.Context, v any) (*model.FieldMappingEntryInput, error) {
+	res, err := ec.unmarshalInputFieldMappingEntryInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNFlakyTest2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFlakyTest(ctx context.Context, sel ast.SelectionSet, v model.FlakyTest) graphql.Marshaler {
 	return ec._FlakyTest(ctx, sel, &v)
 }
@@ -23244,6 +24677,74 @@ func (ec *executionContext) marshalNJiraConnection2ᚖgithubᚗcomᚋguidewire�
 	return ec._JiraConnection(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNJiraFieldGQL2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldGqlᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.JiraFieldGql) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNJiraFieldGQL2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldGql(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNJiraFieldGQL2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldGql(ctx context.Context, sel ast.SelectionSet, v *model.JiraFieldGql) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._JiraFieldGQL(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNJiraFieldMapping2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldMapping(ctx context.Context, sel ast.SelectionSet, v model.JiraFieldMapping) graphql.Marshaler {
+	return ec._JiraFieldMapping(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNJiraFieldMapping2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraFieldMapping(ctx context.Context, sel ast.SelectionSet, v *model.JiraFieldMapping) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._JiraFieldMapping(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -23398,6 +24899,11 @@ func (ec *executionContext) marshalNRoleGroupConfig2ᚖgithubᚗcomᚋguidewire�
 		return graphql.Null
 	}
 	return ec._RoleGroupConfig(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSaveJiraFieldMappingInput2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐSaveJiraFieldMappingInput(ctx context.Context, v any) (model.SaveJiraFieldMappingInput, error) {
+	res, err := ec.unmarshalInputSaveJiraFieldMappingInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSeverityCount2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐSeverityCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SeverityCount) graphql.Marshaler {
@@ -24571,6 +26077,22 @@ func (ec *executionContext) marshalOProjectStats2ᚖgithubᚗcomᚋguidewireᚑo
 		return graphql.Null
 	}
 	return ec._ProjectStats(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOReductionStrategy2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReductionStrategy(ctx context.Context, v any) (*model.ReductionStrategy, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.ReductionStrategy)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOReductionStrategy2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReductionStrategy(ctx context.Context, sel ast.SelectionSet, v *model.ReductionStrategy) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

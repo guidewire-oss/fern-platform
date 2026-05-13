@@ -166,6 +166,20 @@ type UserScope struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
+// JiraFieldMapping represents the JIRA-to-Fern field mapping for a project in the database
+type JiraFieldMapping struct {
+	ID        uint           `gorm:"primarykey"`
+	ProjectID string         `gorm:"column:project_id;not null"`
+	Entries   json.RawMessage `gorm:"column:entries;not null;default:'[]'"`
+	UpdatedBy string         `gorm:"column:updated_by;not null;default:''"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+// TableName returns the table name for JiraFieldMapping
+func (JiraFieldMapping) TableName() string { return "jira_field_mappings" }
+
 // JiraConnection represents a JIRA integration connection in the database
 type JiraConnection struct {
 	BaseModel

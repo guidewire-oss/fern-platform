@@ -1186,7 +1186,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetTestRun_domain(adminCtx, "123")
@@ -1203,7 +1203,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetTestRun_domain(context.Background(), "123")
@@ -1217,7 +1217,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetTestRun_domain(adminCtx, "not-a-number")
@@ -1235,7 +1235,7 @@ func TestGetTestRun_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetTestRun_domain(adminCtx, "999")
@@ -1286,7 +1286,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
 		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
 
-		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.RecentTestRuns_domain(nonAdminCtx, nil, nil)
@@ -1300,7 +1300,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 	})
 
 	t.Run("RecentTestRuns_domain: unauthenticated request returns empty (admin-required check)", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.RecentTestRuns_domain(context.Background(), nil, nil)
@@ -1311,7 +1311,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 	})
 
 	t.Run("ListProjects_domain: unauthenticated request is rejected", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ListProjects_domain(context.Background(), nil, nil, nil)
@@ -1322,7 +1322,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 	})
 
 	t.Run("Project_domain: unauthenticated request is rejected", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.Project_domain(context.Background(), "1")
@@ -1333,7 +1333,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 	})
 
 	t.Run("DashboardSummary_domain: unauthenticated request is rejected", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.DashboardSummary_domain(context.Background())
@@ -1344,7 +1344,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 	})
 
 	t.Run("TreemapData_domain: unauthenticated request is rejected", func(t *testing.T) {
-		resolver := NewResolver(nil, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.TreemapData_domain(context.Background(), nil, nil)
@@ -1376,7 +1376,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
 		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
 
-		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetTestRun_domain(nonAdminCtx, "42")
@@ -1422,7 +1422,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
@@ -1464,7 +1464,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		// Admin context: bypasses the per-project team check (no project service mock needed).
@@ -1495,7 +1495,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
@@ -1521,7 +1521,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
@@ -1565,7 +1565,7 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
@@ -1614,7 +1614,7 @@ func TestGetProject_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetProject_domain(adminCtx, projectID)
@@ -1638,7 +1638,7 @@ func TestGetProject_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.GetProject_domain(adminCtx, projectID)
@@ -1671,7 +1671,7 @@ func TestListProjects_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ListProjects_domain(adminCtx, nil, nil, nil)
@@ -1700,7 +1700,7 @@ func TestListProjects_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ListProjects_domain(adminCtx, &limit, &offset, nil)
@@ -1728,7 +1728,7 @@ func TestListTags_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, nil, tagService, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, tagService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ListTags_domain(context.Background())
@@ -1751,7 +1751,7 @@ func TestListTags_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, nil, tagService, nil, nil, db, logger)
+		resolver := NewResolver(nil, nil, tagService, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ListTags_domain(context.Background())
@@ -1810,7 +1810,7 @@ func TestProject_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		// ID 999 won't match proj1, so we expect a not-found error
@@ -1842,7 +1842,7 @@ func TestProjectByProjectID_domain(t *testing.T) {
 		logger, _ := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json", Output: "stdout", Structured: true})
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
-		resolver := NewResolver(nil, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.ProjectByProjectID_domain(context.Background(), projectID)
@@ -1918,7 +1918,7 @@ func TestTestRuns_domain(t *testing.T) {
 		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
 		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
 
-		resolver := NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+		resolver := NewResolver(testingService, projectService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
 		result, err := queryResolver.TestRuns_domain(nonAdminCtx, nil, nil, nil, nil, nil)

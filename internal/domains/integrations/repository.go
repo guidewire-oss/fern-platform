@@ -24,3 +24,15 @@ type JiraConnectionRepository interface {
 	// FindActiveByProjectID retrieves all active connections for a project
 	FindActiveByProjectID(ctx context.Context, projectID string) ([]*JiraConnection, error)
 }
+
+// JiraFieldMappingRepository defines the interface for field mapping persistence
+type JiraFieldMappingRepository interface {
+	// Get retrieves the active mapping for a project; returns nil, nil when none exists
+	Get(ctx context.Context, projectID string) (*JiraFieldMapping, error)
+
+	// Upsert creates or replaces the mapping for the project
+	Upsert(ctx context.Context, mapping *JiraFieldMapping) error
+
+	// Delete soft-deletes the mapping for the project
+	Delete(ctx context.Context, projectID string) error
+}

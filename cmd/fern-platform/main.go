@@ -64,6 +64,7 @@ func main() {
 	tagService := domainFactory.GetTagDomainService()
 	flakyDetectionService := domainFactory.GetFlakyDetectionService()
 	jiraConnectionService := domainFactory.GetJiraConnectionService()
+	jiraFieldMappingService := domainFactory.GetJiraFieldMappingService()
 	summaryHandler := domainFactory.GetSummaryHandler()
 	authMiddleware := domainFactory.GetAuthMiddleware()
 
@@ -107,7 +108,7 @@ func main() {
 
 	// GraphQL routes with role group names from config
 	// Initialize GraphQL resolver with domain services
-	resolver := graphql.NewResolver(testingService, projectService, tagService, flakyDetectionService, jiraConnectionService, db.DB, logger)
+	resolver := graphql.NewResolver(testingService, projectService, tagService, flakyDetectionService, jiraConnectionService, jiraFieldMappingService, db.DB, logger)
 
 	roleGroupNames := &graphql.RoleGroupNames{
 		AdminGroup:   cfg.Auth.OAuth.AdminGroupName,

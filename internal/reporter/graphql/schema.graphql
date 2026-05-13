@@ -360,6 +360,58 @@ input UpdateJiraCredentialsInput {
   credential: String!
 }
 
+# JIRA Field Mapping Types
+
+enum FernField {
+  REQUIREMENT_ID
+  REQUIREMENT_TITLE
+  DESCRIPTION
+  PARENT_REQUIREMENT
+  REQUIREMENT_TYPE
+  RELEASE_VERSION
+  REQUIREMENT_STATUS
+  TAGS
+}
+
+enum ReductionStrategy {
+  FIRST_VALUE
+  CONCATENATE
+  SEPARATE_ENTRIES
+}
+
+type JiraFieldGQL {
+  id: String!
+  name: String!
+  custom: Boolean!
+  multiValue: Boolean!
+}
+
+type FieldMappingEntry {
+  fernField: FernField!
+  jiraFieldId: String!
+  jiraFieldIsMultiValue: Boolean!
+  reductionStrategy: ReductionStrategy
+}
+
+type JiraFieldMapping {
+  projectId: String!
+  entries: [FieldMappingEntry!]!
+  updatedBy: String
+  updatedAt: Time
+}
+
+input FieldMappingEntryInput {
+  fernField: FernField!
+  jiraFieldId: String!
+  jiraFieldIsMultiValue: Boolean!
+  reductionStrategy: ReductionStrategy
+}
+
+input SaveJiraFieldMappingInput {
+  projectId: String!
+  entries: [FieldMappingEntryInput!]!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -477,6 +529,10 @@ type Query {
   # JIRA Connections
   jiraConnection(id: ID!): JiraConnection
   jiraConnections(projectId: String!): [JiraConnection!]!
+
+  # JIRA Field Mapping
+  jiraFieldMapping(projectId: String!): JiraFieldMapping!
+  jiraFields(connectionId: ID!): [JiraFieldGQL!]!
 }
 
 # Mutation Root
@@ -513,6 +569,10 @@ type Mutation {
   updateJiraCredentials(id: ID!, input: UpdateJiraCredentialsInput!): JiraConnection!
   testJiraConnection(id: ID!): Boolean!
   deleteJiraConnection(id: ID!): Boolean!
+
+  # JIRA Field Mapping
+  saveJiraFieldMapping(input: SaveJiraFieldMappingInput!): JiraFieldMapping!
+  resetJiraFieldMapping(projectId: String!): JiraFieldMapping!
 }
 
 # Subscription Root (for future real-time features)

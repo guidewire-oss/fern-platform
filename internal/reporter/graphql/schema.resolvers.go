@@ -482,6 +482,16 @@ func (r *mutationResolver) DeleteJiraConnection(ctx context.Context, id string) 
 	return true, nil
 }
 
+// SaveJiraFieldMapping is the resolver for the saveJiraFieldMapping field.
+func (r *mutationResolver) SaveJiraFieldMapping(ctx context.Context, input model.SaveJiraFieldMappingInput) (*model.JiraFieldMapping, error) {
+	return r.SaveJiraFieldMapping_domain(ctx, input)
+}
+
+// ResetJiraFieldMapping is the resolver for the resetJiraFieldMapping field.
+func (r *mutationResolver) ResetJiraFieldMapping(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
+	return r.ResetJiraFieldMapping_domain(ctx, projectID)
+}
+
 // CanManage is the resolver for the canManage field.
 func (r *projectResolver) CanManage(ctx context.Context, obj *model.Project) (bool, error) {
 	// Get current user from context
@@ -857,6 +867,16 @@ func (r *queryResolver) JiraConnections(ctx context.Context, projectID string) (
 	}
 
 	return models, nil
+}
+
+// JiraFieldMapping is the resolver for the jiraFieldMapping field.
+func (r *queryResolver) JiraFieldMapping(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
+	return r.JiraFieldMapping_domain(ctx, projectID)
+}
+
+// JiraFields is the resolver for the jiraFields field.
+func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error) {
+	return r.JiraFields_domain(ctx, connectionID)
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.

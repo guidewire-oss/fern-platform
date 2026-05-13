@@ -62,7 +62,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTestRunRepository)
 			testingService = testingApp.NewTestRunService(mockRepo, nil, nil)
-			resolver = NewResolver(testingService, nil, nil, nil, nil, db, logger)
+			resolver = NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with valid ID", func() {
@@ -122,7 +122,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTestRunRepository)
 			testingService = testingApp.NewTestRunService(mockRepo, nil, nil)
-			resolver = NewResolver(testingService, nil, nil, nil, nil, db, logger)
+			resolver = NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("without project filter", func() {
@@ -223,7 +223,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with existing project", func() {
@@ -272,7 +272,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with default pagination", func() {
@@ -320,7 +320,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTagRepository)
 			tagService = tagsApp.NewTagService(mockRepo)
-			resolver = NewResolver(nil, nil, tagService, nil, nil, db, logger)
+			resolver = NewResolver(nil, nil, tagService, nil, nil, nil, db, logger)
 		})
 
 		Context("when tags exist", func() {
@@ -363,7 +363,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with valid project ID", func() {
@@ -398,7 +398,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("finding by database ID", func() {
@@ -438,7 +438,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTagRepository)
 			tagService = tagsApp.NewTagService(mockRepo)
-			resolver = NewResolver(nil, nil, tagService, nil, nil, db, logger)
+			resolver = NewResolver(nil, nil, tagService, nil, nil, nil, db, logger)
 		})
 
 		Context("with valid input", func() {
@@ -504,7 +504,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 
 			// Create authenticated context with admin user
 			user := &authDomain.User{
@@ -614,7 +614,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
 				UserID: "admin-user",
@@ -680,7 +680,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
 				UserID: "admin-user",
@@ -768,7 +768,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockRepo = new(testhelpers.MockProjectRepository)
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			projectService = projectsApp.NewProjectService(mockRepo, mockPermRepo)
-			resolver = NewResolver(nil, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(nil, projectService, nil, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
 				UserID: "test-user",
@@ -823,7 +823,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			testingService = testingApp.NewTestRunService(mockTestRunRepo, nil, nil)
 			projectService = projectsApp.NewProjectService(mockProjectRepo, mockPermRepo)
-			resolver = NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(testingService, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with projects and test runs", func() {
@@ -856,7 +856,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTestRunRepository)
 			testingService = testingApp.NewTestRunService(mockRepo, nil, nil)
-			resolver = NewResolver(testingService, nil, nil, nil, nil, db, logger)
+			resolver = NewResolver(testingService, nil, nil, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
 				UserID: "admin",
@@ -923,7 +923,7 @@ var _ = Describe("DomainResolvers", func() {
 		BeforeEach(func() {
 			mockRepo = new(testhelpers.MockTagRepository)
 			tagService = tagsApp.NewTagService(mockRepo)
-			resolver = NewResolver(nil, nil, tagService, nil, nil, db, logger)
+			resolver = NewResolver(nil, nil, tagService, nil, nil, nil, db, logger)
 
 			user := &authDomain.User{
 				UserID: "test-user",
@@ -986,7 +986,7 @@ var _ = Describe("DomainResolvers", func() {
 			mockPermRepo = new(testhelpers.MockProjectPermissionRepository)
 			testingService = testingApp.NewTestRunService(mockRepo, nil, nil)
 			projectService = projectsApp.NewProjectService(mockProjectRepo, mockPermRepo)
-			resolver = NewResolver(testingService, projectService, nil, nil, nil, db, logger)
+			resolver = NewResolver(testingService, projectService, nil, nil, nil, nil, db, logger)
 		})
 
 		Context("with valid project ID", func() {

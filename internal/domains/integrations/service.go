@@ -149,7 +149,8 @@ func (s *JiraConnectionService) TestConnection(ctx context.Context, connectionID
 		return err
 	}
 	
-	log.Printf("[JiraConnectionService] Test successful for %s, updating connection", conn.jiraURL)
+	log.Printf("[JiraConnectionService] Test successful for %s, activating and updating connection", conn.jiraURL)
+	conn.Activate()
 	return s.repo.Update(ctx, conn)
 }
 

@@ -74,7 +74,8 @@ type DomainFactory struct {
 	summaryHandler *summaryInterfaces.SummaryHandler
 
 	// Integrations domain
-	jiraConnectionService *integrations.JiraConnectionService
+	jiraConnectionService    *integrations.JiraConnectionService
+	jiraFieldMappingService  *integrations.JiraFieldMappingService
 }
 
 // NewDomainFactory creates a new domain factory
@@ -274,15 +275,24 @@ func (f *DomainFactory) initIntegrationsDomain() {
 		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
 	}
 
-	// Create service
+	// Create JIRA connection service
 	f.jiraConnectionService = integrations.NewJiraConnectionService(
 		jiraConnRepo,
 		jiraClient,
 		encryptionKey,
 	)
+
+	// Create JIRA field mapping repo and service
+	jiraFieldMappingRepo := integrationsInfra.NewGormJiraFieldMappingRepository(f.db)
+	f.jiraFieldMappingService = integrations.NewJiraFieldMappingService(jiraFieldMappingRepo, jiraConnRepo)
 }
 
 // GetJiraConnectionService returns the JIRA connection service
 func (f *DomainFactory) GetJiraConnectionService() *integrations.JiraConnectionService {
 	return f.jiraConnectionService
+}
+
+// GetJiraFieldMappingService returns the JIRA field mapping service
+func (f *DomainFactory) GetJiraFieldMappingService() *integrations.JiraFieldMappingService {
+	return f.jiraFieldMappingService
 }

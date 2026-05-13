@@ -57,6 +57,20 @@ type DashboardSummary struct {
 	AverageTestDuration int           `json:"averageTestDuration"`
 }
 
+type FieldMappingEntry struct {
+	FernField             FernField          `json:"fernField"`
+	JiraFieldID           string             `json:"jiraFieldId"`
+	JiraFieldIsMultiValue bool               `json:"jiraFieldIsMultiValue"`
+	ReductionStrategy     *ReductionStrategy `json:"reductionStrategy,omitempty"`
+}
+
+type FieldMappingEntryInput struct {
+	FernField             FernField          `json:"fernField"`
+	JiraFieldID           string             `json:"jiraFieldId"`
+	JiraFieldIsMultiValue bool               `json:"jiraFieldIsMultiValue"`
+	ReductionStrategy     *ReductionStrategy `json:"reductionStrategy,omitempty"`
+}
+
 type FlakyTest struct {
 	ID               string    `json:"id"`
 	ProjectID        string    `json:"projectId"`
@@ -120,6 +134,20 @@ type JiraConnection struct {
 	LastTestedAt       *time.Time `json:"lastTestedAt,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
+}
+
+type JiraFieldGql struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Custom     bool   `json:"custom"`
+	MultiValue bool   `json:"multiValue"`
+}
+
+type JiraFieldMapping struct {
+	ProjectID string               `json:"projectId"`
+	Entries   []*FieldMappingEntry `json:"entries"`
+	UpdatedBy *string              `json:"updatedBy,omitempty"`
+	UpdatedAt *time.Time           `json:"updatedAt,omitempty"`
 }
 
 type Mutation struct {
@@ -191,6 +219,11 @@ type RoleGroupConfig struct {
 	AdminGroup   string `json:"adminGroup"`
 	ManagerGroup string `json:"managerGroup"`
 	UserGroup    string `json:"userGroup"`
+}
+
+type SaveJiraFieldMappingInput struct {
+	ProjectID string                    `json:"projectId"`
+	Entries   []*FieldMappingEntryInput `json:"entries"`
 }
 
 type SeverityCount struct {
@@ -415,6 +448,73 @@ type UserPreferences struct {
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
+type FernField string
+
+const (
+	FernFieldRequirementID     FernField = "REQUIREMENT_ID"
+	FernFieldRequirementTitle  FernField = "REQUIREMENT_TITLE"
+	FernFieldDescription       FernField = "DESCRIPTION"
+	FernFieldParentRequirement FernField = "PARENT_REQUIREMENT"
+	FernFieldRequirementType   FernField = "REQUIREMENT_TYPE"
+	FernFieldReleaseVersion    FernField = "RELEASE_VERSION"
+	FernFieldRequirementStatus FernField = "REQUIREMENT_STATUS"
+	FernFieldTags              FernField = "TAGS"
+)
+
+var AllFernField = []FernField{
+	FernFieldRequirementID,
+	FernFieldRequirementTitle,
+	FernFieldDescription,
+	FernFieldParentRequirement,
+	FernFieldRequirementType,
+	FernFieldReleaseVersion,
+	FernFieldRequirementStatus,
+	FernFieldTags,
+}
+
+func (e FernField) IsValid() bool {
+	switch e {
+	case FernFieldRequirementID, FernFieldRequirementTitle, FernFieldDescription, FernFieldParentRequirement, FernFieldRequirementType, FernFieldReleaseVersion, FernFieldRequirementStatus, FernFieldTags:
+		return true
+	}
+	return false
+}
+
+func (e FernField) String() string {
+	return string(e)
+}
+
+func (e *FernField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = FernField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid FernField", str)
+	}
+	return nil
+}
+
+func (e FernField) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *FernField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e FernField) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type OrderDirection string
 
 const (
@@ -465,6 +565,63 @@ func (e *OrderDirection) UnmarshalJSON(b []byte) error {
 }
 
 func (e OrderDirection) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ReductionStrategy string
+
+const (
+	ReductionStrategyFirstValue      ReductionStrategy = "FIRST_VALUE"
+	ReductionStrategyConcatenate     ReductionStrategy = "CONCATENATE"
+	ReductionStrategySeparateEntries ReductionStrategy = "SEPARATE_ENTRIES"
+)
+
+var AllReductionStrategy = []ReductionStrategy{
+	ReductionStrategyFirstValue,
+	ReductionStrategyConcatenate,
+	ReductionStrategySeparateEntries,
+}
+
+func (e ReductionStrategy) IsValid() bool {
+	switch e {
+	case ReductionStrategyFirstValue, ReductionStrategyConcatenate, ReductionStrategySeparateEntries:
+		return true
+	}
+	return false
+}
+
+func (e ReductionStrategy) String() string {
+	return string(e)
+}
+
+func (e *ReductionStrategy) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ReductionStrategy(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ReductionStrategy", str)
+	}
+	return nil
+}
+
+func (e ReductionStrategy) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ReductionStrategy) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ReductionStrategy) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
