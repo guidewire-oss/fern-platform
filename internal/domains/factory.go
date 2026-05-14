@@ -1,6 +1,10 @@
 package domains
 
 import (
+	"encoding/hex"
+	"fmt"
+	"os"
+
 	"gorm.io/gorm"
 
 	// Auth domain
@@ -258,9 +262,17 @@ func (f *DomainFactory) initIntegrationsDomain() {
 	// Create JIRA client
 	jiraClient := integrations.NewDefaultJiraClient()
 
-	// Get encryption key from config (or generate one)
-	// For now, use a placeholder - in production this should come from secure config
-	encryptionKey := []byte("your-32-byte-encryption-key-here") // TODO: Load from secure config
+	keyHex := os.Getenv("JIRA_ENCRYPTION_KEY")
+	if keyHex == "" {
+		panic("JIRA_ENCRYPTION_KEY environment variable is not set; generate with: openssl rand -hex 32")
+	}
+	encryptionKey, err := hex.DecodeString(keyHex)
+	if err != nil {
+		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY is not valid hex: %v", err))
+	}
+	if len(encryptionKey) != 32 {
+		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
+	}
 
 	// Create service
 	f.jiraConnectionService = integrations.NewJiraConnectionService(
