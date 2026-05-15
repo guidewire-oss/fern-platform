@@ -148,6 +148,10 @@ func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*domain.
 	return args.Get(0).(*domain.DashboardStatsResult), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*domain.TestRun, int64, error) {
+	return nil, 0, nil
+}
+
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
 type MockSuiteRunRepository struct {
 	mock.Mock

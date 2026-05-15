@@ -53,6 +53,11 @@ type TestRunRepository interface {
 	// GetRecent retrieves recent test runs across all projects
 	GetRecent(ctx context.Context, limit int) ([]*TestRun, error)
 
+	// GetRecentByProjectIDs fetches recent test runs across a set of projects in one batched
+	// query, sorted globally by start_time DESC. Tags only — no SuiteRuns/SpecRuns preloaded.
+	// Returns the page of runs and the total count across all supplied projects.
+	GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*TestRun, int64, error)
+
 	// GetDashboardStats returns platform-wide aggregate stats in a single query.
 	GetDashboardStats(ctx context.Context) (*DashboardStatsResult, error)
 }

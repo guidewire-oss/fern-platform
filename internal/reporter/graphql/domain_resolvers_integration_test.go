@@ -236,7 +236,7 @@ Expect(err).To(BeNil())
 }
 
 projectID := "project-a"
-result, err := qr.RecentTestRuns_domain(ctx, &projectID, nil)
+result, err := qr.RecentTestRuns_domain(adminCtx, &projectID, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 Expect(len(result)).To(Equal(2))

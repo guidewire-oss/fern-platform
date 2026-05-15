@@ -50,6 +50,9 @@ func (m *mockTestRunRepo) GetByRunID(ctx context.Context, runID string) (*domain
 func (m *mockTestRunRepo) FindByDateRangeForProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.TestRun, error) {
 	return nil, nil
 }
+func (m *mockTestRunRepo) GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*domain.TestRun, int64, error) {
+	return nil, 0, nil
+}
 func (m *mockTestRunRepo) Update(ctx context.Context, tr *domain.TestRun) error {
 	args := m.Called(ctx, tr)
 	return args.Error(0)

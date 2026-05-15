@@ -332,6 +332,10 @@ func (s *TestRunService) GetRecentTestRuns(ctx context.Context, limit int) ([]*d
 	return s.testRunRepo.GetRecent(ctx, limit)
 }
 
+func (s *TestRunService) GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*domain.TestRun, int64, error) {
+	return s.testRunRepo.GetRecentByProjectIDs(ctx, projectIDs, limit, offset)
+}
+
 // GetDashboardStats returns platform-wide aggregate stats.
 func (s *TestRunService) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
 	return s.testRunRepo.GetDashboardStats(ctx)

@@ -251,6 +251,37 @@ func (r *GormTestRunRepository) FindByDateRangeForProjects(ctx context.Context, 
 	return testRuns, nil
 }
 
+// GetRecentByProjectIDs fetches recent test runs across a set of projects in one batched
+// query sorted globally by start_time DESC. Tags only — no SuiteRuns/SpecRuns preloaded.
+func (r *GormTestRunRepository) GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*domain.TestRun, int64, error) {
+	if len(projectIDs) == 0 {
+		return nil, 0, nil
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&database.TestRun{}).
+		Where("project_id IN ?", projectIDs).
+		Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count test runs by project IDs: %w", err)
+	}
+	var dbTestRuns []database.TestRun
+	if err := r.db.WithContext(ctx).
+		Where("project_id IN ?", projectIDs).
+		Preload("Tags").
+		Order("start_time DESC").
+		Limit(limit).Offset(offset).
+		Find(&dbTestRuns).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to find recent test runs by project IDs: %w", err)
+	}
+	runs := make([]*domain.TestRun, len(dbTestRuns))
+	for i, dbRun := range dbTestRuns {
+		runs[i] = r.converter.ConvertTestRunToDomain(&dbRun)
+	}
+	return runs, total, nil
+}
+
 // GetTestRunSummary retrieves summary statistics for a project
 func (r *GormTestRunRepository) GetTestRunSummary(ctx context.Context, projectID string) (*domain.TestRunSummary, error) {
 	var summary domain.TestRunSummary

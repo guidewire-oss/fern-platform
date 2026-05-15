@@ -184,7 +184,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, projectID, 10).Return(testRuns, nil)
 
-				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(ctx, &projectID, nil)
+				result, err := resolver.Query().(*queryResolver).RecentTestRuns_domain(adminCtx, &projectID, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(HaveLen(1))

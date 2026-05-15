@@ -32,10 +32,15 @@ func userCanAccessProject(snapshot projectsDomain.ProjectSnapshot, teamMap map[s
 }
 
 // getAccessibleProjectSnapshots returns snapshots for all projects the calling user's teams can access.
+// TODO(P1-4): replace with projects/application.ListAccessibleProjects + projects/repository.FindByTeams
+// to push filtering into the DB and remove the silent 1000-project access-loss bug.
 func (r *Resolver) getAccessibleProjectSnapshots(ctx context.Context) ([]projectsDomain.ProjectSnapshot, error) {
 	projects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+	if len(projects) == 1000 {
+		r.logger.Warn("getAccessibleProjectSnapshots: reached 1000-project cap; some projects may be excluded from non-admin views")
 	}
 	teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
 	snapshots := make([]projectsDomain.ProjectSnapshot, 0, len(projects))
@@ -46,6 +51,15 @@ func (r *Resolver) getAccessibleProjectSnapshots(ctx context.Context) ([]project
 		}
 	}
 	return snapshots, nil
+}
+
+// snapshotsToProjectIDs extracts project ID strings from a snapshot slice.
+func snapshotsToProjectIDs(snapshots []projectsDomain.ProjectSnapshot) []string {
+	ids := make([]string, len(snapshots))
+	for i, snap := range snapshots {
+		ids[i] = string(snap.ProjectID)
+	}
+	return ids
 }
 
 // buildTestRunConnection assembles a paginated TestRunConnection from a pre-sliced run list.
@@ -253,13 +267,16 @@ func (r *queryResolver) RecentTestRuns_domain(ctx context.Context, projectID *st
 		limitVal = *limit
 	}
 
+	user, userErr := getCurrentUser(ctx)
+	if userErr != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	var testRuns []*testingDomain.TestRun
 	var err error
 
-	user, userErr := getCurrentUser(ctx)
 	if projectID != nil {
-		// For non-admins, verify the user belongs to the project's team before returning runs.
-		if userErr == nil && user.Role != authDomain.RoleAdmin {
+		if user.Role != authDomain.RoleAdmin {
 			project, projErr := r.projectService.GetProject(ctx, projectsDomain.ProjectID(*projectID))
 			if projErr != nil || project == nil {
 				return nil, fmt.Errorf("project not found")
@@ -271,27 +288,14 @@ func (r *queryResolver) RecentTestRuns_domain(ctx context.Context, projectID *st
 			}
 		}
 		testRuns, err = r.testingService.GetProjectTestRuns(ctx, *projectID, limitVal)
+	} else if user.Role != authDomain.RoleAdmin {
+		snapshots, projErr := r.getAccessibleProjectSnapshots(ctx)
+		if projErr != nil {
+			return nil, projErr
+		}
+		testRuns, _, err = r.testingService.GetRecentByProjectIDs(ctx, snapshotsToProjectIDs(snapshots), limitVal, 0)
 	} else {
-		// Cross-project query — admins see all runs; non-admins see runs scoped to their teams.
-		if userErr != nil {
-			return nil, fmt.Errorf("user not authenticated")
-		}
-		if user.Role != authDomain.RoleAdmin {
-			snapshots, projErr := r.getAccessibleProjectSnapshots(ctx)
-			if projErr != nil {
-				return nil, projErr
-			}
-			// TODO: replace per-project loop with GetRecentTestRunsByProjectIDs(ctx, projectIDs, limitVal)
-			// to eliminate the N+1 query pattern.
-			for _, snap := range snapshots {
-				runs, runErr := r.testingService.GetProjectTestRuns(ctx, string(snap.ProjectID), limitVal)
-				if runErr == nil {
-					testRuns = append(testRuns, runs...)
-				}
-			}
-		} else {
-			testRuns, err = r.testingService.GetRecentTestRuns(ctx, limitVal)
-		}
+		testRuns, err = r.testingService.GetRecentTestRuns(ctx, limitVal)
 	}
 
 	if err != nil {
@@ -1244,6 +1248,9 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 			offset = idx + 1
 		}
 	}
+	if offset > 10000 {
+		offset = 10000
+	}
 
 	// Get project ID from filter if provided
 	projectID := ""
@@ -1254,31 +1261,16 @@ func (r *queryResolver) TestRuns_domain(ctx context.Context, filter *model.TestR
 	// Enforce team-based authorization for non-admin users.
 	if user.Role != authDomain.RoleAdmin {
 		if projectID == "" {
-			// No projectId — collect all accessible runs then paginate globally.
+			// No projectId — fetch globally sorted runs across all accessible projects in one query.
 			snapshots, projErr := r.getAccessibleProjectSnapshots(ctx)
 			if projErr != nil {
 				return nil, projErr
 			}
-			var allRuns []*testingDomain.TestRun
-			var totalCount int64
-			// TODO: replace per-project loop with a single GetRecentTestRunsByProjectIDs(ctx, projectIDs, pageSize, offset)
-			// call to eliminate the N+1 query pattern and give correct cross-project pagination.
-			perProjectLimit := pageSize + offset
-			for _, snap := range snapshots {
-				runs, count, runErr := r.testingService.ListTestRuns(ctx, string(snap.ProjectID), perProjectLimit, 0)
-				if runErr == nil {
-					allRuns = append(allRuns, runs...)
-					totalCount += count
-				}
+			runs, totalCount, runErr := r.testingService.GetRecentByProjectIDs(ctx, snapshotsToProjectIDs(snapshots), pageSize, offset)
+			if runErr != nil {
+				return nil, fmt.Errorf("failed to list test runs: %w", runErr)
 			}
-			start, end := offset, offset+pageSize
-			if start > len(allRuns) {
-				start = len(allRuns)
-			}
-			if end > len(allRuns) {
-				end = len(allRuns)
-			}
-			return r.buildTestRunConnection(allRuns[start:end], offset, totalCount), nil
+			return r.buildTestRunConnection(runs, offset, totalCount), nil
 		}
 		project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
 		if err != nil || project == nil {

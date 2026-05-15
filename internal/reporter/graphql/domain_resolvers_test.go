@@ -1281,7 +1281,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 		teamARuns := []*testingDomain.TestRun{
 			{ID: 1, RunID: "run-1", ProjectID: "proj-team-a", Status: "completed", Tags: []testingDomain.Tag{}, SuiteRuns: []testingDomain.SuiteRun{}},
 		}
-		mockRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "proj-team-a", 10).Return(teamARuns, nil)
+		mockRunRepo.On("GetRecentByProjectIDs", mock.Anything, []string{"proj-team-a"}, 10, 0).Return(teamARuns, int64(1), nil)
 
 		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
 		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)
@@ -1467,7 +1467,13 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.RecentTestRuns_domain(context.Background(), &projectID, nil)
+		// Admin context: bypasses the per-project team check (no project service mock needed).
+		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID:  "admin-1",
+			Role:    authDomain.RoleAdmin,
+			Groups:  []authDomain.UserGroup{},
+		})
+		result, err := queryResolver.RecentTestRuns_domain(adminCtx, &projectID, nil)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1562,7 +1568,12 @@ func TestRecentTestRuns_domain(t *testing.T) {
 		resolver := NewResolver(testingService, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.RecentTestRuns_domain(context.Background(), &projectID, &limit)
+		adminCtx := context.WithValue(context.Background(), "user", &authDomain.User{
+			UserID:  "admin",
+			Role:    authDomain.RoleAdmin,
+			Groups:  []authDomain.UserGroup{},
+		})
+		result, err := queryResolver.RecentTestRuns_domain(adminCtx, &projectID, &limit)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -1902,8 +1913,7 @@ func TestTestRuns_domain(t *testing.T) {
 		teamARuns := []*testingDomain.TestRun{
 			{ID: 1, RunID: "run-1", ProjectID: "proj-team-a", Status: "completed", Tags: []testingDomain.Tag{}, SuiteRuns: []testingDomain.SuiteRun{}},
 		}
-		mockRunRepo.On("GetLatestByProjectID", mock.Anything, "proj-team-a", mock.AnythingOfType("int")).Return(teamARuns, nil)
-		mockRunRepo.On("CountByProjectID", mock.Anything, "proj-team-a").Return(int64(1), nil)
+		mockRunRepo.On("GetRecentByProjectIDs", mock.Anything, []string{"proj-team-a"}, 20, 0).Return(teamARuns, int64(1), nil)
 
 		testingService := testingApp.NewTestRunService(mockRunRepo, nil, nil)
 		projectService := projectsApp.NewProjectService(mockProjRepo, mockPermRepo)

@@ -312,6 +312,14 @@ func (m *MockTestRunRepository) GetDashboardStats(ctx context.Context) (*testing
 	return args.Get(0).(*testingDomain.DashboardStatsResult), args.Error(1)
 }
 
+func (m *MockTestRunRepository) GetRecentByProjectIDs(ctx context.Context, projectIDs []string, limit, offset int) ([]*testingDomain.TestRun, int64, error) {
+	args := m.Called(ctx, projectIDs, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*testingDomain.TestRun), args.Get(1).(int64), args.Error(2)
+}
+
 func (m *MockTestRunRepository) Create(ctx context.Context, testRun *testingDomain.TestRun) error {
 	args := m.Called(ctx, testRun)
 	return args.Error(0)
