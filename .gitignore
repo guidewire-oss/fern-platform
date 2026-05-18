@@ -1,6 +1,7 @@
 # Claude Code settings
 .claude/
 CLAUDE.md
+claude-progress.md
 
 # Intent app settings
 .intent/

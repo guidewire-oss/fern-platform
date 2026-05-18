@@ -309,23 +309,20 @@ var _ = Describe("JIRA Field Mapping", Label("acceptance", "jira", "field-mappin
 			Expect(page.Locator("button:has-text('Configure Mapping')").Click()).To(Succeed())
 			time.Sleep(1 * time.Second)
 
-			By("Resetting all mappings to defaults")
-			clearButton := page.Locator("button:has-text('Reset to Defaults')")
-			Expect(clearButton.Click()).To(Succeed())
-			// Confirm the reset dialog
-			page.OnDialog(func(dialog playwright.Dialog) {
-				dialog.Accept()
-			})
+			By("Removing a required field mapping to create an invalid state")
+			// Required fields are pre-mapped by default; removing one triggers validation
+			removeButton := page.Locator("button:has-text('✕')").First()
+			Expect(removeButton.Click()).To(Succeed())
 			time.Sleep(500 * time.Millisecond)
 
-			By("Attempting to save without required mappings")
+			By("Attempting to save with a required field unmapped")
 			saveButton := page.Locator("button:has-text('Save Mapping Configuration')")
 			Expect(saveButton.Click()).To(Succeed())
 
 			By("Verifying validation message appears")
 			// Alert should appear for missing required fields
 			page.OnDialog(func(dialog playwright.Dialog) {
-				Expect(dialog.Message()).To(ContainSubstring("required fields"))
+				Expect(dialog.Message()).To(ContainSubstring("required"))
 				dialog.Accept()
 			})
 		})

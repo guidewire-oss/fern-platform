@@ -63,10 +63,12 @@ func (f *fakeConnRepo) FindByID(ctx context.Context, id string) (*integrations.J
 	if f.err != nil {
 		return nil, f.err
 	}
-	if len(f.connections) > 0 {
-		return f.connections[0], nil
+	for _, c := range f.connections {
+		if c.ID() == id {
+			return c, nil
+		}
 	}
-	return nil, errors.New("not found")
+	return nil, nil
 }
 
 func (f *fakeConnRepo) FindByProjectID(ctx context.Context, projectID string) ([]*integrations.JiraConnection, error) {
@@ -557,7 +559,8 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 func TestFernFieldModelConverters(t *testing.T) {
 	t.Run("every FernField survives domain→model→domain round-trip", func(t *testing.T) {
 		for _, domainField := range integrations.AllFernFields() {
-			modelField := fernFieldToModel(domainField)
+			modelField, err := fernFieldToModel(domainField)
+			require.NoError(t, err, "fernFieldToModel(%q) should not error", domainField)
 			roundTripped := modelToFernField(modelField)
 			assert.Equal(t, domainField, roundTripped,
 				"domain field %q lost in round-trip via model %q", domainField, modelField)
@@ -577,7 +580,8 @@ func TestFernFieldModelConverters(t *testing.T) {
 		}
 		for _, mf := range modelFields {
 			domainField := modelToFernField(mf)
-			roundTripped := fernFieldToModel(domainField)
+			roundTripped, err := fernFieldToModel(domainField)
+			require.NoError(t, err, "fernFieldToModel(%q) should not error", domainField)
 			assert.Equal(t, mf, roundTripped,
 				"model field %q lost in round-trip via domain %q", mf, domainField)
 		}

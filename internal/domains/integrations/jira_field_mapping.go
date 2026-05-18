@@ -102,6 +102,9 @@ func validateEntries(entries []FieldMappingEntry) error {
 		if e.ReductionStrategy != "" && !e.ReductionStrategy.IsValid() {
 			return ErrUnknownReductionStrategy
 		}
+		if seenFernFields[e.FernField] {
+			return ErrDuplicateFernField
+		}
 		seenFernFields[e.FernField] = true
 		if e.JiraFieldID == "" {
 			if e.FernField.IsRequired() {

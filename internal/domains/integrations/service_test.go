@@ -14,8 +14,9 @@ import (
 // --- Minimal mock implementations ---
 
 type mockConnectionRepo struct {
-	stored   map[string]*integrations.JiraConnection
-	updateFn func(*integrations.JiraConnection)
+	stored      map[string]*integrations.JiraConnection
+	updateFn    func(*integrations.JiraConnection)
+	updateCount int
 }
 
 func newMockConnectionRepo() *mockConnectionRepo {
@@ -29,6 +30,7 @@ func (r *mockConnectionRepo) Create(_ context.Context, c *integrations.JiraConne
 
 func (r *mockConnectionRepo) Update(_ context.Context, c *integrations.JiraConnection) error {
 	r.stored[c.ID()] = c
+	r.updateCount++
 	if r.updateFn != nil {
 		r.updateFn(c)
 	}
@@ -122,6 +124,7 @@ func TestJiraConnectionService_TestConnection_ActivatesOnSuccess(t *testing.T) {
 	err := svc.TestConnection(context.Background(), stored.ID())
 	require.NoError(t, err)
 
+	assert.Equal(t, 1, repo.updateCount, "service must persist the updated connection")
 	saved := repo.stored[stored.ID()]
 	assert.True(t, saved.IsActive(), "connection must be activated after a successful test")
 	assert.Equal(t, integrations.ConnectionStatusConnected, saved.Status())
@@ -140,6 +143,7 @@ func TestJiraConnectionService_TestConnection_NotActivatedOnFailure(t *testing.T
 	err := svc.TestConnection(context.Background(), stored.ID())
 	assert.Error(t, err)
 
+	assert.Equal(t, 1, repo.updateCount, "service must persist the updated connection")
 	saved := repo.stored[stored.ID()]
 	assert.False(t, saved.IsActive(), "connection must not be activated after a failed test")
 	assert.Equal(t, integrations.ConnectionStatusFailed, saved.Status())

@@ -124,6 +124,7 @@ func (r ReductionStrategy) IsValid() bool {
 var (
 	ErrRequiredFieldUnmapped     = errors.New("required Fern field is unmapped")
 	ErrDuplicateJiraField        = errors.New("JIRA field is already mapped to another Fern field")
+	ErrDuplicateFernField        = errors.New("Fern field appears more than once in the mapping")
 	ErrMissingReductionStrategy  = errors.New("reduction strategy required for single-value Fern field mapped to multi-value JIRA field")
 	ErrNoJiraConnection          = errors.New("project has no JIRA connection configured")
 	ErrNoFieldMapping            = errors.New("project has no saved field mapping")

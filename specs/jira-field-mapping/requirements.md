@@ -172,7 +172,7 @@ so that it does not introduce operational surprises.
 
 1. THE SYSTEM SHALL provide unit-test coverage for the field-mapping service
    (validation, persistence, conflict detection) and integration-test coverage
-   for the GraphQL/REST endpoints that read and write mappings.
+   for the GraphQL endpoints that read and write mappings.
 2. THE SYSTEM SHALL implement persistence using the project's GORM + golang-
    migrate conventions (new migration under `migrations/`, repository pattern
    in `internal/domains/integrations/`).

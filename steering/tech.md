@@ -11,9 +11,9 @@
 |---------|---------|
 | `gin-gonic/gin` | HTTP web framework |
 | `99designs/gqlgen` + `vektah/gqlparser` | GraphQL server (schema-first, generated resolvers) |
-| `graph-gophers/dataloader` | N+1 query batching for GraphQL |
+| `graph-gophers/dataloader/v7` | N+1 query batching for GraphQL |
 | `gorm.io/gorm` + `gorm.io/driver/postgres` | ORM and Postgres driver |
-| `golang-migrate/migrate` | Schema migrations (files in `migrations/`) |
+| `golang-migrate/migrate/v4` | Schema migrations (files in `migrations/`) |
 | `spf13/viper` | Config loading (`config/config.yaml`) |
 | `golang-jwt/jwt/v5` | JWT handling for OAuth/SSO |
 | `onsi/ginkgo/v2` + `onsi/gomega` | BDD test framework (unit + acceptance) |

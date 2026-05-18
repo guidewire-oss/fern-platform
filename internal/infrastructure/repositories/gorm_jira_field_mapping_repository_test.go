@@ -68,7 +68,7 @@ func TestGormJiraFieldMappingRepository_Upsert(t *testing.T) {
 
 		// The upsert (INSERT … ON CONFLICT DO UPDATE) is a single exec statement.
 		mock.ExpectBegin()
-		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "jira_field_mappings"`)).
+		mock.ExpectExec(`INSERT INTO "jira_field_mappings".*ON CONFLICT`).
 			WithArgs(
 				sqlmock.AnyArg(), // project_id
 				sqlmock.AnyArg(), // entries (JSONB)
@@ -95,7 +95,7 @@ func TestGormJiraFieldMappingRepository_Upsert(t *testing.T) {
 
 		// First upsert
 		mock.ExpectBegin()
-		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "jira_field_mappings"`)).
+		mock.ExpectExec(`INSERT INTO "jira_field_mappings".*ON CONFLICT`).
 			WithArgs(
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),
@@ -110,10 +110,10 @@ func TestGormJiraFieldMappingRepository_Upsert(t *testing.T) {
 		err := repo.Upsert(ctx, mapping)
 		require.NoError(t, err)
 
-		// Second upsert for the same project — must hit ON CONFLICT path (still an
-		// INSERT … ON CONFLICT DO UPDATE statement, not a bare INSERT).
+		// Second upsert for the same project — must use the INSERT … ON CONFLICT DO UPDATE
+		// path, not a bare INSERT (which would fail on conflict).
 		mock.ExpectBegin()
-		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "jira_field_mappings"`)).
+		mock.ExpectExec(`INSERT INTO "jira_field_mappings".*ON CONFLICT`).
 			WithArgs(
 				sqlmock.AnyArg(),
 				sqlmock.AnyArg(),

@@ -19,6 +19,6 @@ Fern Platform aggregates test results from any CI/CD pipeline and framework (Jes
 
 ## Constraints
 - Apache 2.0 licensed, open source — designs and specs are public
-- Go 1.23+ backend, PostgreSQL 14+, Redis 6+
-- Deployable via Kubernetes (KubeVela) or Docker
+- Go 1.24+ backend, PostgreSQL 14+, Redis 6+
+- Deployable via Kubernetes (KubeVela); Docker deployment planned
 - OAuth/SSO required for non-trivial deployments

@@ -79,7 +79,9 @@ func TestDefaultJiraClient_ListFields(t *testing.T) {
 		if !byName["Labels"].MultiValue {
 			t.Error("expected Labels.MultiValue = true")
 		}
-		if byName["Summary"].MultiValue {
+		if summaryField, ok := byName["Summary"]; !ok {
+			t.Error("expected Summary to be present in result")
+		} else if summaryField.MultiValue {
 			t.Error("expected Summary.MultiValue = false")
 		}
 	})

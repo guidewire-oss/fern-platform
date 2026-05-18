@@ -36,10 +36,6 @@ standalone-route approach described in Task 6.1–6.3 — there is no separate
 `/projects/{id}/jira-mapping` route; the JS is loaded as part of the project
 detail page and the section is toggled into view.
 
-> **Note for Task 6.2**: the `web/js/jira-field-mapping.js` module should
-> export a `renderFieldMappingSection(container, projectId)` function that
-> `index.html`'s Integrations tab mounts after the connection panel, rather
-> than a standalone page loader.
 
 ## System Architecture
 
@@ -478,7 +474,7 @@ already used in adjacent tables.
   access-denied error and the service is not invoked
   (follows the post-PR #156 pattern in `domain_resolvers.go`).
 
-### Acceptance (Ginkgo, under `acceptance/pmconnectors/`)
+### Acceptance (Ginkgo, under `acceptance/`)
 
 - Builds on the existing `acceptance/helpers/mock_jira_server.go` to
   expose a `/rest/api/2/field` endpoint returning a fixture of standard
@@ -486,7 +482,7 @@ already used in adjacent tables.
 - End-to-end: configure a JIRA connection for a project; load the Field
   Mapping screen; save with defaults; reload and verify persistence;
   attempt to save with a conflict and verify the failure.
-- Acceptance under `acceptance/pmconnectors/jira_field_mapping_test.go`
+- Acceptance under `acceptance/jira_field_mapping_test.go`
   hits the deployed stack via GraphQL.
 
 ### Performance / smoke

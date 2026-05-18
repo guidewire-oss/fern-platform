@@ -34,7 +34,7 @@ func (r *queryResolver) JiraFieldMapping_domain(ctx context.Context, projectID s
 		return nil, fmt.Errorf("failed to get JIRA field mapping: %w", err)
 	}
 
-	return mappingSnapshotToModel(snap), nil
+	return mappingSnapshotToModel(snap)
 }
 
 // JiraFields_domain lists all JIRA fields available for a given connection.
@@ -77,6 +77,8 @@ func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, inpu
 			return nil, fmt.Errorf("required Fern field is unmapped: %w", err)
 		case errors.Is(err, integrations.ErrDuplicateJiraField):
 			return nil, fmt.Errorf("duplicate JIRA field in mapping: %w", err)
+		case errors.Is(err, integrations.ErrDuplicateFernField):
+			return nil, fmt.Errorf("Fern field appears more than once in the mapping: %w", err)
 		case errors.Is(err, integrations.ErrMissingReductionStrategy):
 			return nil, fmt.Errorf("multi-value JIRA field requires a reduction strategy: %w", err)
 		case errors.Is(err, integrations.ErrUnknownFernField):
@@ -88,7 +90,7 @@ func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, inpu
 		}
 	}
 
-	return mappingSnapshotToModel(snap), nil
+	return mappingSnapshotToModel(snap)
 }
 
 // ResetJiraFieldMapping_domain deletes any saved mapping for the project and
@@ -103,7 +105,7 @@ func (r *mutationResolver) ResetJiraFieldMapping_domain(ctx context.Context, pro
 		return nil, fmt.Errorf("failed to reset JIRA field mapping: %w", err)
 	}
 
-	return mappingSnapshotToModel(snap), nil
+	return mappingSnapshotToModel(snap)
 }
 
 // ---------------------------------------------------------------------------
@@ -111,16 +113,19 @@ func (r *mutationResolver) ResetJiraFieldMapping_domain(ctx context.Context, pro
 // ---------------------------------------------------------------------------
 
 // mappingSnapshotToModel converts a domain snapshot to the GraphQL model type.
-func mappingSnapshotToModel(snap *integrations.JiraFieldMappingSnapshot) *model.JiraFieldMapping {
+func mappingSnapshotToModel(snap *integrations.JiraFieldMappingSnapshot) (*model.JiraFieldMapping, error) {
 	entries := make([]*model.FieldMappingEntry, len(snap.Entries))
 	for i, e := range snap.Entries {
-		entry := &model.FieldMappingEntry{
-			FernField:             fernFieldToModel(e.FernField),
+		mf, err := fernFieldToModel(e.FernField)
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = &model.FieldMappingEntry{
+			FernField:             mf,
 			JiraFieldID:           e.JiraFieldID,
 			JiraFieldIsMultiValue: e.JiraFieldIsMultiValue,
 			ReductionStrategy:     reductionStrategyToModel(e.ReductionStrategy),
 		}
-		entries[i] = entry
 	}
 	result := &model.JiraFieldMapping{
 		ProjectID: snap.ProjectID,
@@ -132,30 +137,30 @@ func mappingSnapshotToModel(snap *integrations.JiraFieldMappingSnapshot) *model.
 	if !snap.UpdatedAt.IsZero() {
 		result.UpdatedAt = &snap.UpdatedAt
 	}
-	return result
+	return result, nil
 }
 
 // fernFieldToModel maps a domain FernField constant to its GraphQL model enum.
-func fernFieldToModel(f integrations.FernField) model.FernField {
+func fernFieldToModel(f integrations.FernField) (model.FernField, error) {
 	switch f {
 	case integrations.FernFieldRequirementID:
-		return model.FernFieldRequirementID
+		return model.FernFieldRequirementID, nil
 	case integrations.FernFieldRequirementTitle:
-		return model.FernFieldRequirementTitle
+		return model.FernFieldRequirementTitle, nil
 	case integrations.FernFieldDescription:
-		return model.FernFieldDescription
+		return model.FernFieldDescription, nil
 	case integrations.FernFieldParentRequirement:
-		return model.FernFieldParentRequirement
+		return model.FernFieldParentRequirement, nil
 	case integrations.FernFieldRequirementType:
-		return model.FernFieldRequirementType
+		return model.FernFieldRequirementType, nil
 	case integrations.FernFieldReleaseVersion:
-		return model.FernFieldReleaseVersion
+		return model.FernFieldReleaseVersion, nil
 	case integrations.FernFieldRequirementStatus:
-		return model.FernFieldRequirementStatus
+		return model.FernFieldRequirementStatus, nil
 	case integrations.FernFieldTags:
-		return model.FernFieldTags
+		return model.FernFieldTags, nil
 	default:
-		panic(fmt.Sprintf("unhandled FernField %q — update fernFieldToModel when adding new constants", f))
+		return "", fmt.Errorf("unhandled FernField %q — update fernFieldToModel when adding new constants", f)
 	}
 }
 

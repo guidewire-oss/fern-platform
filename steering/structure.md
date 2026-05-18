@@ -52,9 +52,9 @@ fern-platform/
 
 ## Naming Conventions
 - **Go files:** `snake_case.go`, tests as `<name>_test.go`, Ginkgo suite wiring as `<pkg>_suite_test.go`
-- **GraphQL resolvers:** `<Type>_domain` suffix in `domain_resolvers.go`
+- **GraphQL resolvers:** `<Type>_domain` suffix in `domain_resolvers*.go` files
 - **Migrations:** `NNNNNN_<verb>_<subject>.up.sql` / `.down.sql` (sequential numeric prefix)
-- **Domain packages:** lowercase singular noun (`projects`, not `project_management`)
+- **Domain packages:** lowercase singular noun (`project`, not `project_management`)
 
 ## Architecture Notes
 Each domain package owns its entities, repository interfaces, and service logic. GORM implementations go in `infrastructure/`. The GraphQL layer (`internal/reporter/graphql/`) is what the web UI talks to; the REST layer (`internal/api/`) is for client libraries submitting test results. Auth is OAuth/OIDC with role/group checks enforced at the resolver level.
