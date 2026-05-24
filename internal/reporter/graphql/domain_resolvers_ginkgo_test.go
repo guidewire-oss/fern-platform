@@ -996,19 +996,23 @@ var _ = Describe("DomainResolvers", func() {
 
 				project, _ := projectsDomain.NewProject(projectsDomain.ProjectID(projectID), "Project 1", projectsDomain.Team("team1"))
 
-				testRuns := []*testingDomain.TestRun{
+				projectAggs := []*testingDomain.ProjectAggregate{
 					{
-						ID:        1,
-						RunID:     "run-1",
-						ProjectID: projectID,
-						Status:    "completed",
-						StartTime: time.Now(),
-						SuiteRuns: []testingDomain.SuiteRun{
-							{
-								ID:   1,
-								Name: "Suite 1",
-							},
-						},
+						ProjectID:   projectID,
+						TotalRuns:   1,
+						TotalTests:  10,
+						PassedTests: 9,
+						FailedTests: 1,
+						DurationMs:  1000,
+					},
+				}
+				suiteAggs := []*testingDomain.SuiteAggregate{
+					{
+						SuiteName:   "Suite 1",
+						TotalTests:  10,
+						PassedTests: 9,
+						FailedTests: 1,
+						DurationMs:  1000,
 					},
 				}
 
@@ -1016,9 +1020,10 @@ var _ = Describe("DomainResolvers", func() {
 				adminCtx := context.WithValue(ctx, "user", adminUser)
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{project}, int64(1), nil)
-				mockRepo.On("FindByDateRangeForProjects", mock.Anything, []string{projectID}, mock.Anything, mock.Anything).Return(testRuns, nil)
+				mockRepo.On("AggregateProjectsInRange", mock.Anything, []string{projectID}, mock.Anything, mock.Anything).Return(projectAggs, nil)
+				mockRepo.On("AggregateSuitesInRange", mock.Anything, projectID, mock.Anything, mock.Anything).Return(suiteAggs, nil)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, &projectID, &days)
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, &projectID, nil, &days)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -1032,7 +1037,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, nil, nil)
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, nil, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())

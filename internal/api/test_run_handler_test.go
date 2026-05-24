@@ -152,6 +152,38 @@ func (m *MockTestRunRepository) GetRecentByProjectIDs(ctx context.Context, proje
 	return nil, 0, nil
 }
 
+func (m *MockTestRunRepository) AggregateProjectsInRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.ProjectAggregate, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.ProjectAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateDailyByProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.DailyProjectAggregate, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.DailyProjectAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateSuitesInRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*domain.SuiteAggregate, error) {
+	args := m.Called(ctx, projectID, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.SuiteAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateSpecsForSuiteInRange(ctx context.Context, projectID, suiteName string, startDate, endDate time.Time) ([]*domain.SpecAggregate, error) {
+	args := m.Called(ctx, projectID, suiteName, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.SpecAggregate), args.Error(1)
+}
+
 // MockSuiteRunRepository provides a mock implementation of SuiteRunRepository
 type MockSuiteRunRepository struct {
 	mock.Mock

@@ -140,7 +140,7 @@ var _ = Describe("ProjectHandler", func() {
 		projectRepo = new(MockProjectRepository)
 		permRepo = new(MockProjectPermissionRepository)
 		service = projectsApp.NewProjectService(projectRepo, permRepo)
-		handler = NewProjectHandler(service, logger)
+		handler = NewProjectHandler(service, nil, logger)
 
 		router = gin.New()
 		router.Use(authContextMiddleware("user-1", "Alice", "alice@example.com", "manager", "team-1", "Team A"))
@@ -489,20 +489,25 @@ var _ = Describe("ProjectHandler", func() {
 	})
 
 	Describe("admin endpoints", func() {
-		It("grantProjectAccess should return 501", func() {
+		It("grantProjectAccess returns 500 without DB configured", func() {
+			// Handler is constructed with nil db in this test suite —
+			// the implementation now requires a DB and 500s without it.
+			// Prior behavior was 501 "not implemented". A future
+			// integration test should exercise the happy path against
+			// a real DB.
 			req := httptest.NewRequest("POST", "/api/v1/admin/projects/proj-1/users/user-1/access", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
 		})
 
-		It("revokeProjectAccess should return 501", func() {
+		It("revokeProjectAccess returns 500 without DB configured", func() {
 			req := httptest.NewRequest("DELETE", "/api/v1/admin/projects/proj-1/users/user-1/access", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			Expect(w.Code).To(Equal(http.StatusNotImplemented))
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
 		})
 
 		It("getProjectUsers should return empty list", func() {

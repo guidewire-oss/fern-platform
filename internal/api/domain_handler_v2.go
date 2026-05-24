@@ -4,13 +4,16 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
+	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
+	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
+	"gorm.io/gorm"
 )
 
 // DomainHandlerV2 provides REST API handlers using domain services with split handlers
@@ -40,16 +43,18 @@ func NewDomainHandlerV2(
 	jiraConnectionService *integrations.JiraConnectionService,
 	summaryHandler *summaryInterfaces.SummaryHandler,
 	authMiddleware *interfaces.AuthMiddlewareAdapter,
+	userRepo authDomain.UserRepository,
+	db *gorm.DB,
 	logger *logging.Logger,
 ) *DomainHandlerV2 {
 	baseHandler := NewBaseHandler(logger)
 	testRunHandler := NewTestRunHandler(testingService, projectService, logger)
 	testRunHandler.SetTagService(tagService)
 	return &DomainHandlerV2{
-		authHandler:           NewAuthHandler(authMiddleware, logger),
+		authHandler:           NewAuthHandler(authMiddleware, userRepo, logger),
 		healthHandler:         NewHealthHandler(logger),
 		testRunHandler:        testRunHandler,
-		projectHandler:        NewProjectHandler(projectService, logger),
+		projectHandler:        NewProjectHandler(projectService, db, logger),
 		tagHandler:            NewTagHandler(tagService, logger),
 		systemHandler:         NewSystemHandler(logger),
 		jiraConnectionHandler: NewJiraConnectionHandler(baseHandler, jiraConnectionService, projectService),
@@ -66,15 +71,16 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	router.Static("/web", "./web")
 	router.Static("/docs", "./docs")
 
-	// Root route - redirect to login if not authenticated, otherwise serve app
+	// Root route — serve the SPA. When auth is config-disabled (local
+	// docker-compose smoke, single-user dev), skip the login redirect
+	// entirely so users land on a working UI. Production deployments
+	// keep the redirect by leaving auth.enabled=true.
 	router.GET("/", func(c *gin.Context) {
-		// Check if user is authenticated
-		if !h.isUserAuthenticated(c) {
-			// Redirect to login
+		authOn := config.GetConfig().Auth.Enabled
+		if authOn && !h.isUserAuthenticated(c) {
 			c.Redirect(302, "/auth/login")
 			return
 		}
-		// Serve the main application
 		c.File("./web/index.html")
 	})
 

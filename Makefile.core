@@ -35,11 +35,23 @@ clean: ## Clean build artifacts
 
 dev: ## Run in development mode with live reload
 	@echo "🔧 Starting development mode..."
-	air -c .air.toml || go run $(CMD_DIR)/main.go -config config/config.yaml
+	air -c .air.toml || go run $(CMD_DIR)/main.go -config $(CONFIG_FILE)
 
 run: build ## Build and run the platform
 	@echo "🚀 Starting Fern Platform..."
-	./$(BUILD_DIR)/$(BINARY_NAME) -config config/config.yaml
+	./$(BUILD_DIR)/$(BINARY_NAME) -config $(CONFIG_FILE)
+
+run-local: build ## Build and run with config/config.local.yaml (gitignored personal overrides)
+	@if [ ! -f config/config.local.yaml ]; then \
+		echo "❌ config/config.local.yaml not found — copy config/config.yaml.example to start"; \
+		exit 1; \
+	fi
+	@echo "🚀 Starting Fern Platform (local config)..."
+	./$(BUILD_DIR)/$(BINARY_NAME) -config config/config.local.yaml
+
+# CONFIG_FILE — override on the command line for a one-off run, e.g.
+#   make run CONFIG_FILE=config/config.local.yaml
+CONFIG_FILE ?= config/config.yaml
 
 # Project information
 info: ## Show project information

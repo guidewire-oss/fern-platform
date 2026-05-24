@@ -5,6 +5,15 @@ claude-progress.md
 .reviews
 REVIEW.md
 
+# internal/web/dist/ must be tracked — it's embedded into the Go
+# binary via //go:embed all:dist. Override any global "dist/" rule.
+!internal/web/dist/
+!internal/web/dist/**
+
+# Local binaries built by `go build ./cmd/...` at repo root.
+/fern-platform
+/seed
+
 # Intent app settings
 .intent/
 
@@ -37,12 +46,30 @@ bin/
 # Environment-specific deployment files
 fern-platform-atmos-dev.yaml
 
+# Per-developer config overrides — not for the team. Viper will pick
+# this up via --config or by replacing the canonical config.yaml at
+# runtime. Keep it local so secrets / personal OAuth client IDs never
+# get committed.
+config/config.local.yaml
+
+# Opt-in compose overlay (bind-mounts config/config.local.yaml into the
+# fern container; see docker-compose.local.yaml.example for the template).
+docker-compose.local.yaml
+
 # Test and debug files
 test-jira-ui.html
 acceptance/test_config.json
 
 # Local developer scripts (not for the team)
 scripts/local/
+
+# Per-developer environment + Claude harness state. Tracked by accident
+# in earlier history; excluded going forward so per-developer shell
+# config and session pointers don't pollute the team's repo.
+.envrc
+.claude-session-head
+.claude
+claude-progress.md
 EOF < /dev/null
 bin/fern-platform
 

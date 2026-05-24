@@ -1,7 +1,50 @@
 # Fern Platform - Docker Makefile
-# Handles container building and operations using Dagger
+# Handles container building/operations via Dagger, plus a lightweight
+# docker-compose stack for local end-to-end smoke testing.
 
-.PHONY: docker-build docker-run docker-scan docker-push
+.PHONY: docker-build docker-run docker-scan docker-push \
+        docker-test-up docker-test-up-local docker-test-down \
+        docker-test-rebuild docker-test-rebuild-local \
+        docker-test-logs docker-test-curl docker-test-status \
+        docker-test-seed docker-test-seed-perf docker-test-seed-dry \
+        docker-test-seed-gradient docker-test-seed-extras \
+        docker-test-perf docker-test-perf-spike docker-test-perf-counts \
+        web-v2-build web-v2-stage web-v2-deps web-v2-fix \
+        jira-key
+
+# Detect compose CLI: prefer the v2 plugin (`docker compose`) and fall
+# back to the v1 standalone (`docker-compose`).
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
+# ----------------------------------------------------------------------
+# Per-developer Jira encryption key
+# ----------------------------------------------------------------------
+# `JIRA_ENCRYPTION_KEY` is required at runtime to encrypt/decrypt the
+# `encrypted_credential` column in `jira_connections`. We never check a
+# value into the repo (any shared default would defeat the encryption).
+# This target generates one on first run and persists it to
+# `~/.fern/jira-key`, then prints an `export …` line you can source.
+#
+# Usage:
+#   make jira-key                # show export line; auto-generates if missing
+#   eval "$(make jira-key)"      # generate + load into current shell
+#   make docker-test-up          # compose reads JIRA_ENCRYPTION_KEY from env
+#
+# The key MUST be stable for a workspace — losing it makes existing
+# encrypted_credential rows undecryptable. Stored under the user's home
+# (gitignored, per-machine) so re-clones / fresh containers reuse it.
+
+JIRA_KEY_FILE := $(HOME)/.fern/jira-key
+
+jira-key: ## Print `export JIRA_ENCRYPTION_KEY=…`; generates on first call
+	@mkdir -p $(dir $(JIRA_KEY_FILE))
+	@if [ ! -s "$(JIRA_KEY_FILE)" ]; then \
+		echo "🔑 generating new JIRA encryption key at $(JIRA_KEY_FILE)" >&2; \
+		openssl rand -base64 32 > "$(JIRA_KEY_FILE)" 2>/dev/null \
+			|| (echo "❌ openssl not available; install it or generate manually" >&2; exit 1); \
+		chmod 600 "$(JIRA_KEY_FILE)"; \
+	fi
+	@printf 'export JIRA_ENCRYPTION_KEY=%s\n' "$$(cat $(JIRA_KEY_FILE))"
 
 # Docker operations
 docker-build: ## Build Docker image via Dagger 
@@ -32,3 +75,266 @@ docker-push: ## Build and push container images via Dagger
 		--username=$(DOCKER_USERNAME) \
 		--password=env:DOCKER_PASSWORD
 	@echo "✅ Images pushed to $(REGISTRY)"
+
+# ----------------------------------------------------------------------
+# Local docker-compose stack (Postgres + Redis + fern-platform)
+# Use for quick smoke testing of v1/v2 endpoints. For full OAuth/k8s
+# flows, use `make deploy-all` (k3d) instead.
+# ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# Web v2 SPA build → staged into internal/web/dist so //go:embed
+# captures it at compile time. Called automatically by docker-test-up
+# and docker-test-rebuild; can also be invoked directly.
+#
+# Skipped silently when pnpm isn't on the PATH — the Dockerfile has
+# a Node stage fallback that builds inside the container, so contributors
+# without local Node can still run the stack.
+# ----------------------------------------------------------------------
+
+WEB_V2_DIR        := web-v2
+WEB_V2_DIST_DIR   := $(WEB_V2_DIR)/dist
+WEB_V2_EMBED_DIR  := internal/web/dist
+
+# Detect a usable pnpm. corepack ships with Node 16+, so this works on
+# any modern toolchain even when pnpm isn't pre-installed.
+PNPM := $(shell command -v pnpm 2>/dev/null || (command -v corepack >/dev/null 2>&1 && echo "corepack pnpm"))
+
+web-v2-deps: ## Install web-v2 dependencies (idempotent; self-heals on platform mismatch)
+	@if [ -z "$(PNPM)" ]; then \
+		echo "ℹ️  pnpm/corepack not found on host; skipping local web-v2 build."; \
+		echo "   The Dockerfile builds the SPA inside the container, so the stack still works."; \
+		exit 0; \
+	fi
+	@# We don't use --frozen-lockfile here: when contributors run this
+	@# on a platform that doesn't match the one that committed the lockfile,
+	@# pnpm needs to be allowed to resolve missing native binaries (e.g.
+	@# @rollup/rollup-darwin-arm64 on a Linux-resolved lockfile).
+	@# pnpm's supportedArchitectures config in package.json keeps the
+	@# resolution stable in CI; this clause is the host-side fallback.
+	@if [ ! -d "$(WEB_V2_DIR)/node_modules" ]; then \
+		echo "📦 Installing web-v2 dependencies..."; \
+		cd $(WEB_V2_DIR) && $(PNPM) install; \
+	fi
+
+web-v2-fix: ## Last-resort recovery — wipe node_modules and reinstall (e.g. after a Node version bump)
+	@echo "🧹 Wiping web-v2/node_modules and reinstalling..."
+	@rm -rf $(WEB_V2_DIR)/node_modules
+	@cd $(WEB_V2_DIR) && $(PNPM) install
+	@echo "✅ web-v2 deps reinstalled."
+
+web-v2-build: web-v2-deps ## Build the web-v2 SPA and stage it into internal/web/dist
+	@if [ -z "$(PNPM)" ]; then \
+		exit 0; \
+	fi
+	@echo "🛠️  Building web-v2 SPA..."
+	@cd $(WEB_V2_DIR) && $(PNPM) build
+	@$(MAKE) web-v2-stage
+
+web-v2-stage: ## Copy web-v2/dist into internal/web/dist for //go:embed
+	@echo "📂 Staging $(WEB_V2_DIST_DIR) → $(WEB_V2_EMBED_DIR)"
+	@rm -rf $(WEB_V2_EMBED_DIR)
+	@mkdir -p $(WEB_V2_EMBED_DIR)
+	@cp -R $(WEB_V2_DIST_DIR)/. $(WEB_V2_EMBED_DIR)/
+
+# Compose file list. The base file ships with the repo; the overlay
+# (docker-compose.local.yaml) is gitignored and opt-in via the *-local
+# targets below. We resolve the list lazily so adding the overlay
+# doesn't break the default-config flow.
+COMPOSE_FILES       := -f docker-compose.yml
+COMPOSE_FILES_LOCAL := -f docker-compose.yml -f docker-compose.local.yaml
+
+docker-test-up: web-v2-build ## Build SPA + image, start postgres+redis+fern, follow logs
+	@echo "🐳 Building and starting local Docker test stack..."
+	$(COMPOSE) $(COMPOSE_FILES) up --build -d
+	@echo ""
+	@echo "✅ Stack started. Tailing logs (Ctrl-C to detach; stack keeps running)."
+	@echo "   Smoke test:  make docker-test-curl"
+	@echo "   Stop stack:  make docker-test-down"
+	@echo ""
+	$(COMPOSE) $(COMPOSE_FILES) logs -f --tail=50 fern
+
+docker-test-up-local: web-v2-build ## Same as docker-test-up, but mounts config/config.local.yaml into fern (overlay: docker-compose.local.yaml)
+	@if [ ! -f docker-compose.local.yaml ]; then \
+		echo "❌ docker-compose.local.yaml not found."; \
+		echo "   Run: cp docker-compose.local.yaml.example docker-compose.local.yaml"; \
+		echo "   Then edit it (and config/config.local.yaml) to taste."; \
+		exit 1; \
+	fi
+	@if [ ! -f config/config.local.yaml ]; then \
+		echo "❌ config/config.local.yaml not found."; \
+		echo "   Run: cp config/config.yaml config/config.local.yaml"; \
+		echo "   Then edit it for your local overrides."; \
+		exit 1; \
+	fi
+	@echo "🐳 Building and starting local Docker test stack (with config.local.yaml overlay)..."
+	$(COMPOSE) $(COMPOSE_FILES_LOCAL) up --build -d
+	@echo ""
+	@echo "✅ Stack started with config.local.yaml mounted. Tailing logs..."
+	$(COMPOSE) $(COMPOSE_FILES_LOCAL) logs -f --tail=50 fern
+
+docker-test-down: ## Stop the test stack and remove volumes (fresh DB next time)
+	@echo "🐳 Stopping and removing local Docker test stack..."
+	$(COMPOSE) $(COMPOSE_FILES) down -v --remove-orphans
+	@echo "✅ Stack stopped, volumes purged."
+
+docker-test-rebuild: web-v2-build ## Rebuild SPA + fern image, restart fern (deps stay up)
+	@echo "🐳 Rebuilding fern container..."
+	$(COMPOSE) $(COMPOSE_FILES) build fern
+	$(COMPOSE) $(COMPOSE_FILES) up -d fern
+	@echo "✅ fern restarted with fresh build."
+
+docker-test-rebuild-local: web-v2-build ## Rebuild fern only, with local overlay active
+	@if [ ! -f docker-compose.local.yaml ]; then \
+		echo "❌ docker-compose.local.yaml not found — run make docker-test-up-local first."; \
+		exit 1; \
+	fi
+	@echo "🐳 Rebuilding fern container (with config.local.yaml overlay)..."
+	$(COMPOSE) $(COMPOSE_FILES_LOCAL) build fern
+	$(COMPOSE) $(COMPOSE_FILES_LOCAL) up -d fern
+	@echo "✅ fern restarted with fresh build (local overlay)."
+
+docker-test-logs: ## Tail logs for the fern service
+	$(COMPOSE) logs -f --tail=100 fern
+
+docker-test-status: ## Show service health + ports
+	@$(COMPOSE) ps
+
+docker-test-curl: ## Run a sequence of smoke probes against the running stack
+	@# Run inside a curl container on the compose network so this
+	@# works on bare Docker, in dev containers, and in CI without
+	@# depending on host port forwarding. Script is piped via stdin
+	@# to avoid bind-mount path issues in nested-Docker setups.
+	@docker run --rm -i --network fern-platform_default \
+		-e FERN_URL=http://fern:8080 \
+		alpine:3.20 sh -c 'apk add --no-cache bash curl >/dev/null && bash -s' \
+		< scripts/docker-test-smoke.sh
+
+# ----------------------------------------------------------------------
+# Load test data + perf scenarios
+# ----------------------------------------------------------------------
+# Tunables (override via env or `make VAR=value`):
+#   docker-test-seed         small dev seed (defaults below)
+#   docker-test-seed-perf    full perf-test seed (1000 projects, 180 days,
+#                            100 runs/day = 18M test_runs)
+SEED_PROJECTS                   ?= 5
+SEED_DAYS                       ?= 60
+SEED_RUNS_PER_DAY               ?= 5
+SEED_SUITES_PER_RUN             ?= 3
+SEED_SPECS_PER_FAILED_SUITE     ?= 5
+SEED_BATCH_SIZE                 ?= 50000
+SEED_TRUNCATE                   ?= false
+SEED_DRY_RUN                    ?= false
+SEED_HEALTH_BANDS               ?= false
+SEED_SKIP_RUNS                  ?= false
+PERF_VUS                        ?= 20
+PERF_DURATION                   ?= 2m
+
+# Common env vars passed to the seeder container.
+SEED_ENVS = -e DB_HOST=postgres -e DB_PORT=5432 \
+	-e DB_USER=postgres -e DB_PASSWORD=postgres -e DB_NAME=fern_platform \
+	-e DB_SSLMODE=disable -e DB_HOST_SUFFIX="" \
+	-e AUTH_ENABLED=false \
+	-e SEED_PROJECTS=$(SEED_PROJECTS) \
+	-e SEED_DAYS=$(SEED_DAYS) \
+	-e SEED_RUNS_PER_DAY=$(SEED_RUNS_PER_DAY) \
+	-e SEED_SUITES_PER_RUN=$(SEED_SUITES_PER_RUN) \
+	-e SEED_SPECS_PER_FAILED_SUITE=$(SEED_SPECS_PER_FAILED_SUITE) \
+	-e SEED_BATCH_SIZE=$(SEED_BATCH_SIZE) \
+	-e SEED_TRUNCATE=$(SEED_TRUNCATE) \
+	-e SEED_DRY_RUN=$(SEED_DRY_RUN) \
+	-e SEED_HEALTH_BANDS=$(SEED_HEALTH_BANDS) \
+	-e SEED_SKIP_RUNS=$(SEED_SKIP_RUNS)
+# AUTH_ENABLED=false above: the seeder loads pkg/config to resolve DB
+# connection details. That triggers the auth validator, which rejects
+# `auth.enabled: true` without a JWT secret / JWKS URL. The seeder has
+# no business validating auth — it's a DB-only tool — so we force the
+# auth check off for the seeder container regardless of what the live
+# stack uses. The DB_* env vars also override anything in the YAML.
+
+# SEED_LOCAL_MOUNT bind-mounts the gitignored config/config.local.yaml
+# over the image's baked-in config/config.yaml when the local file
+# exists. Mirrors what docker-compose.local.yaml does for the fern
+# container — same single source of truth for both.
+# When the file is missing, evaluates to empty so `docker run` falls
+# back to the image's canonical config.yaml.
+SEED_LOCAL_MOUNT = $(shell [ -f config/config.local.yaml ] && \
+	echo "-v $(PWD)/config/config.local.yaml:/app/config/config.yaml:ro")
+
+docker-test-seed: ## Populate Postgres with seeded data (small default; override SEED_* vars, incl. SEED_HEALTH_BANDS=true)
+	@echo "🌱 Seeding: SEED_PROJECTS=$(SEED_PROJECTS) DAYS=$(SEED_DAYS) RUNS/DAY=$(SEED_RUNS_PER_DAY) HEALTH_BANDS=$(SEED_HEALTH_BANDS)"
+	@docker run --rm --network fern-platform_default $(SEED_LOCAL_MOUNT) $(SEED_ENVS) fern-platform-fern /app/seed
+	@echo "✅ Seeded. Check totals:"
+	@$(MAKE) docker-test-perf-counts
+
+docker-test-seed-extras: ## Re-seed only the extras (users/scopes/flaky/jira/saved_views) — keeps existing test_runs/suite_runs/spec_runs
+	@echo "🌱 Extras-only seed (preserving test_runs/suite_runs/spec_runs)..."
+	@docker run --rm --network fern-platform_default $(SEED_LOCAL_MOUNT) \
+		$(SEED_ENVS) \
+		-e SEED_SKIP_RUNS=true \
+		-e SEED_TRUNCATE=true \
+		fern-platform-fern /app/seed
+	@echo "✅ Extras re-seeded. Heavy tables untouched."
+
+docker-test-seed-gradient: ## Seed 20 projects spread across 5 pass-rate bands (10/30/60/85/98%) — exercises the treemap red→green gradient
+	@echo "🌱 Gradient seed: 20 projects × 7 days × 5 runs/day, distributed across 5 health bands"
+	@docker run --rm --network fern-platform_default \
+		$(SEED_LOCAL_MOUNT) \
+		-e DB_HOST=postgres -e DB_PORT=5432 \
+		-e DB_USER=postgres -e DB_PASSWORD=postgres -e DB_NAME=fern_platform \
+		-e DB_SSLMODE=disable -e DB_HOST_SUFFIX="" \
+		-e AUTH_ENABLED=false \
+		-e SEED_PROJECTS=20 -e SEED_DAYS=7 -e SEED_RUNS_PER_DAY=5 \
+		-e SEED_SUITES_PER_RUN=3 -e SEED_SPECS_PER_FAILED_SUITE=5 \
+		-e SEED_BATCH_SIZE=10000 -e SEED_TRUNCATE=true \
+		-e SEED_HEALTH_BANDS=true \
+		fern-platform-fern /app/seed
+	@echo "✅ Gradient seed done. Visit /v2/treemap or /v2/summaries (Tree view) to see the gradient."
+	@$(MAKE) docker-test-perf-counts
+
+docker-test-seed-perf: ## Full perf-test seed: 1000 projects × 180 days × 100 runs/day = ~18M test_runs
+	@echo "🌱 PERF seed: 1000 projects × 180 days × 100 runs/day = 18M test_runs"
+	@echo "   This will take several minutes and use ~10-20 GB of disk. Press Ctrl-C to abort."
+	@sleep 3
+	@docker run --rm --network fern-platform_default \
+		$(SEED_LOCAL_MOUNT) \
+		-e DB_HOST=postgres -e DB_PORT=5432 \
+		-e DB_USER=postgres -e DB_PASSWORD=postgres -e DB_NAME=fern_platform \
+		-e DB_SSLMODE=disable -e DB_HOST_SUFFIX="" \
+		-e AUTH_ENABLED=false \
+		-e SEED_PROJECTS=1000 -e SEED_DAYS=180 -e SEED_RUNS_PER_DAY=100 \
+		-e SEED_SUITES_PER_RUN=3 -e SEED_SPECS_PER_FAILED_SUITE=5 \
+		-e SEED_BATCH_SIZE=50000 -e SEED_TRUNCATE=true \
+		fern-platform-fern /app/seed
+	@echo "✅ Perf seed done. Check totals:"
+	@$(MAKE) docker-test-perf-counts
+
+docker-test-seed-dry: ## Show the estimated row counts without inserting anything
+	@docker run --rm --network fern-platform_default $(SEED_LOCAL_MOUNT) $(SEED_ENVS) \
+		-e SEED_DRY_RUN=true fern-platform-fern /app/seed
+
+docker-test-perf-counts: ## Print row counts for the seeded tables
+	@docker run --rm --network fern-platform_default \
+		-e PGPASSWORD=postgres \
+		postgres:14-alpine psql -h postgres -U postgres -d fern_platform -c \
+		"SELECT 'projects' AS table, COUNT(*) FROM project_details \
+		 UNION ALL SELECT 'test_runs', COUNT(*) FROM test_runs \
+		 UNION ALL SELECT 'suite_runs', COUNT(*) FROM suite_runs \
+		 UNION ALL SELECT 'spec_runs', COUNT(*) FROM spec_runs \
+		 UNION ALL SELECT 'tags', COUNT(*) FROM tags;"
+
+docker-test-perf: ## Run the k6 list-endpoint load scenario (set PERF_VUS / PERF_DURATION)
+	@# k6 runs in its own container on the compose network so it
+	@# reaches the fern service by name. Script is piped via stdin
+	@# (same nested-Docker workaround as docker-test-curl).
+	@echo "🏎️  k6 load: VUS=$(PERF_VUS) DURATION=$(PERF_DURATION) against http://fern:8080"
+	@docker run --rm -i --network fern-platform_default \
+		-e FERN_URL=http://fern:8080 \
+		-e VUS=$(PERF_VUS) -e DURATION=$(PERF_DURATION) \
+		grafana/k6:latest run --quiet - < tests/perf/test-runs-list.js
+
+docker-test-perf-spike: ## Run the k6 ingest-spike scenario (500 RPS for 30s)
+	@echo "💥 k6 spike: ingest burst against http://fern:8080"
+	@docker run --rm -i --network fern-platform_default \
+		-e FERN_URL=http://fern:8080 \
+		grafana/k6:latest run --quiet - < tests/perf/ingest-spike.js

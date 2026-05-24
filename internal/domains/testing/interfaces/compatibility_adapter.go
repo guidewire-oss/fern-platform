@@ -31,8 +31,12 @@ func NewCompatibilityAdapter(
 	}
 }
 
-// CreateTestRun adapts the existing service method to use the new domain
-func (a *CompatibilityAdapter) CreateTestRun(input service.CreateTestRunInput) (*database.TestRun, error) {
+// CreateTestRun adapts the existing service method to use the new
+// domain. Takes a context so cancellation, deadlines, and tracing
+// propagate end-to-end. Previously used context.Background(), which
+// silently dropped all of those — kept as a default in the older
+// CreateTestRunSync below for legacy callers.
+func (a *CompatibilityAdapter) CreateTestRun(ctx context.Context, input service.CreateTestRunInput) (*database.TestRun, error) {
 	// Convert to domain command
 	cmd := application.RecordTestRunCommand{
 		RunID:       input.RunID,
@@ -44,7 +48,7 @@ func (a *CompatibilityAdapter) CreateTestRun(input service.CreateTestRunInput) (
 	}
 
 	// Execute use case
-	snapshot, err := a.recordTestRunHandler.Handle(context.Background(), cmd)
+	snapshot, err := a.recordTestRunHandler.Handle(ctx, cmd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create test run: %w", err)
 	}
@@ -68,18 +72,18 @@ func (a *CompatibilityAdapter) CreateTestRun(input service.CreateTestRunInput) (
 	}, nil
 }
 
-// CompleteTestRun adapts the existing service method
-func (a *CompatibilityAdapter) CompleteTestRun(runID string) error {
+// CompleteTestRun adapts the existing service method.
+func (a *CompatibilityAdapter) CompleteTestRun(ctx context.Context, runID string) error {
 	cmd := application.CompleteTestRunCommand{
 		RunID: runID,
 	}
 
-	return a.completeTestRunHandler.Handle(context.Background(), cmd)
+	return a.completeTestRunHandler.Handle(ctx, cmd)
 }
 
-// GetTestRun retrieves a test run by ID
-func (a *CompatibilityAdapter) GetTestRun(runID string) (*database.TestRun, error) {
-	testRun, err := a.testRunRepo.GetByRunID(context.Background(), runID)
+// GetTestRun retrieves a test run by ID.
+func (a *CompatibilityAdapter) GetTestRun(ctx context.Context, runID string) (*database.TestRun, error) {
+	testRun, err := a.testRunRepo.GetByRunID(ctx, runID)
 	if err != nil {
 		return nil, err
 	}

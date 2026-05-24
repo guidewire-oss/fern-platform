@@ -28,9 +28,15 @@ const (
 )
 
 // ProjectStatsData holds batch-loaded aggregate stats for a project.
+// TotalTests / PassedTests are the canonical inputs for the project success
+// rate displayed in the UI — they match the treemap's pass-rate definition
+// (passed_tests / total_tests). PassedRuns is retained for callers that want
+// a green-run count.
 type ProjectStatsData struct {
 	TotalRuns      int64
 	PassedRuns     int64
+	TotalTests     int64
+	PassedTests    int64
 	UniqueBranches int64
 	AvgDurationMs  float64
 	LastRunTime    *time.Time
@@ -498,6 +504,11 @@ func createProjectStatsByProjectIDLoader(db *gorm.DB) *dataloader.Loader[string,
 		return batchProjectStats(ctx, db, projectIDs)
 	}
 
+	// Loaders are constructed per request (see graphqlHandler), so the
+	// dataloader's internal cache only ever sees one request's keys.
+	// Within a single request we still want it active — the same project
+	// id may appear on multiple resolver paths and the cache lets the
+	// second lookup skip the round trip.
 	return dataloader.NewBatchedLoader(batchFn,
 		dataloader.WithCache(dataloader.NewCache[string, *ProjectStatsData]()),
 		dataloader.WithBatchCapacity[string, *ProjectStatsData](100),
@@ -511,6 +522,8 @@ func batchProjectStats(ctx context.Context, db *gorm.DB, projectIDs []string) []
 		TotalRuns      int64
 		AvgDurationMs  float64
 		PassedRuns     int64
+		TotalTests     int64
+		PassedTests    int64
 		UniqueBranches int64
 	}
 	var rows []aggRow
@@ -521,6 +534,8 @@ func batchProjectStats(ctx context.Context, db *gorm.DB, projectIDs []string) []
 			COUNT(*) as total_runs,
 			COALESCE(AVG(duration_ms), 0) as avg_duration_ms,
 			`+testingSQL.PassedRunSumSQL+` as passed_runs,
+			COALESCE(SUM(total_tests),  0) as total_tests,
+			COALESCE(SUM(passed_tests), 0) as passed_tests,
 			COUNT(DISTINCT NULLIF(branch, '')) as unique_branches`).
 		Group("project_id").
 		Scan(&rows).Error; err != nil {
@@ -565,6 +580,8 @@ func batchProjectStats(ctx context.Context, db *gorm.DB, projectIDs []string) []
 		statsMap[row.ProjectID] = &ProjectStatsData{
 			TotalRuns:      row.TotalRuns,
 			PassedRuns:     row.PassedRuns,
+			TotalTests:     row.TotalTests,
+			PassedTests:    row.PassedTests,
 			UniqueBranches: row.UniqueBranches,
 			AvgDurationMs:  row.AvgDurationMs,
 			LastRunTime:    lastRunByProject[row.ProjectID],

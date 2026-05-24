@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -41,6 +42,12 @@ type TLSConfig struct {
 type DatabaseConfig struct {
 	Uri             string        `mapstructure:"uri"` // Deprecated, use individual fields instead
 	Host            string        `mapstructure:"host"`
+	// HostSuffix is appended to Host when Host is a bare name (no dot,
+	// not a literal "localhost"/"127.0.0.1"). This preserves the k3d
+	// behavior where Host="cloudnative-pg-cluster" resolves to
+	// "cloudnative-pg-cluster.fern-platform". For docker-compose and
+	// any other non-k3d deployment, set DB_HOST_SUFFIX="" (empty).
+	HostSuffix      string        `mapstructure:"hostSuffix"`
 	Port            int           `mapstructure:"port"`
 	User            string        `mapstructure:"user"`
 	Password        string        `mapstructure:"password"`
@@ -247,6 +254,11 @@ func (m *Manager) setDefaults() {
 
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")
+	// Preserve historical k3d behavior: bare hostnames get appended
+	// with ".fern-platform". Set DB_HOST_SUFFIX="" to disable
+	// (docker-compose, plain VMs, anything that doesn't run in the
+	// k3d namespace).
+	viper.SetDefault("database.hostSuffix", "fern-platform")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
 	viper.SetDefault("database.dbname", "fern_platform")
@@ -316,6 +328,9 @@ func (m *Manager) bindEnvVars() error {
 
 	// Database
 	if err := viper.BindEnv("database.host", "DB_HOST", "POSTGRES_HOST"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.hostSuffix", "DB_HOST_SUFFIX"); err != nil {
 		return err
 	}
 	if err := viper.BindEnv("database.port", "DB_PORT", "POSTGRES_PORT"); err != nil {
@@ -544,19 +559,48 @@ func GetLLMConfig() *LLMConfig {
 	return &GetConfig().LLM
 }
 
+// resolvedHost returns Host with HostSuffix appended only when Host
+// is a bare name (no dot, not a literal localhost/IP). This keeps
+// k3d's "cloudnative-pg-cluster" → "cloudnative-pg-cluster.fern-platform"
+// behavior while letting docker-compose and other deployments use
+// fully-qualified names without surprise rewriting.
+//
+// DB_HOST_SUFFIX is consulted via os.LookupEnv rather than the struct
+// field so an *explicit empty string* in the environment disables the
+// suffix. Viper collapses empty env values into "unset" and falls back
+// to the default — useless for opt-out.
+func (d *DatabaseConfig) resolvedHost() string {
+	host := d.Host
+	suffix := d.HostSuffix
+	if v, ok := os.LookupEnv("DB_HOST_SUFFIX"); ok {
+		suffix = v
+	}
+	if suffix == "" {
+		return host
+	}
+	// Treat FQDNs, localhost, and IPs as opaque.
+	if strings.Contains(host, ".") ||
+		host == "localhost" ||
+		host == "127.0.0.1" ||
+		host == "0.0.0.0" {
+		return host
+	}
+	return host + "." + suffix
+}
+
 // DatabaseConnectionString returns the PostgreSQL connection string
 func (d *DatabaseConfig) ConnectionString() string {
 	return fmt.Sprintf(
-		"postgres://%s:%s@%s.fern-platform:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode,
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		d.User, d.Password, d.resolvedHost(), d.Port, d.DBName, d.SSLMode,
 	)
 }
 
 // MigrationURL returns the PostgreSQL URL for migrations
 func (d *DatabaseConfig) MigrationURL() string {
 	return fmt.Sprintf(
-		"postgres://%s:%s@%s.fern-platform:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode,
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		d.User, d.Password, d.resolvedHost(), d.Port, d.DBName, d.SSLMode,
 	)
 }
 

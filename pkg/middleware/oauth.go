@@ -281,13 +281,8 @@ func (m *OAuthMiddleware) StartOAuthFlow() gin.HandlerFunc {
 		c.SetSameSite(http.SameSiteLaxMode)
 		c.SetCookie("oauth_state", "", -1, "/", cookieDomain, isSecure, true)
 
-		// Set SameSite to None for cross-site requests when using HTTPS
-		// Use Lax for HTTP to maintain CSRF protection
-		if isSecure {
-			c.SetSameSite(http.SameSiteNoneMode)
-		} else {
-			c.SetSameSite(http.SameSiteLaxMode)
-		}
+		// Set SameSite per environment (see pickSameSiteMode).
+		c.SetSameSite(m.pickSameSiteMode(c))
 
 		// Set the new state cookie with explicit path
 		c.SetCookie("oauth_state", state, 600, "/", cookieDomain, isSecure, true) // 10 minutes
@@ -482,12 +477,8 @@ func (m *OAuthMiddleware) Logout() gin.HandlerFunc {
 		isSecure := m.shouldUseSecureCookie(c)
 		cookieDomain := m.getCookieDomain()
 
-		// Match the SameSite setting used during login
-		if isSecure {
-			c.SetSameSite(http.SameSiteNoneMode)
-		} else {
-			c.SetSameSite(http.SameSiteLaxMode)
-		}
+		// Match the SameSite setting used during login.
+		c.SetSameSite(m.pickSameSiteMode(c))
 
 		c.SetCookie("session_id", "", -1, "/", cookieDomain, isSecure, true)
 		c.SetCookie("oauth_state", "", -1, "/", cookieDomain, isSecure, true) // Clear any residual state
@@ -1009,6 +1000,26 @@ func (m *OAuthMiddleware) updateUserLastLogin(userID string) {
 
 func (m *OAuthMiddleware) invalidateSession(sessionID string) {
 	m.db.Model(&database.UserSession{}).Where("session_id = ?", sessionID).Update("is_active", false)
+}
+
+// pickSameSiteMode returns the SameSite mode to use for a cookie set
+// in the current request context. Centralizes the policy that was
+// duplicated as `if isSecure { None } else { Lax }` across ~10 call
+// sites:
+//
+//	HTTPS / secure cookie  → SameSiteNone (needed for OAuth pop-up
+//	                          redirects that come back via cross-site)
+//	HTTP  / insecure       → SameSiteLax  (CSRF protection by default)
+//
+// Don't change the call-site dual-clear pattern (clear under None then
+// Lax) — that's intentional defense against the mode flipping during
+// a session (HTTP→HTTPS migration, etc.). This helper picks the mode
+// for the *new* cookie being set.
+func (m *OAuthMiddleware) pickSameSiteMode(c *gin.Context) http.SameSite {
+	if m.shouldUseSecureCookie(c) {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
 }
 
 // shouldUseSecureCookie determines if secure cookies should be used

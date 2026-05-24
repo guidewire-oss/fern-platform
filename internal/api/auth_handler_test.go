@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +39,8 @@ var _ = Describe("AuthHandler", func() {
 		logger, err = logging.NewLogger(loggingConfig)
 		Expect(err).NotTo(HaveOccurred())
 		// authMiddleware is nil — handler methods don't call it; only RegisterRoutes does
-		handler = NewAuthHandler(nil, logger)
+		// userRepo is nil — admin user endpoints fall back to stub responses
+		handler = NewAuthHandler(nil, nil, logger)
 		router = gin.New()
 	})
 
@@ -130,63 +130,9 @@ var _ = Describe("AuthHandler", func() {
 		})
 	})
 
-	Describe("getUserPreferences", func() {
-		BeforeEach(func() {
-			router.Use(authContextMiddleware("user-1", "Alice", "alice@example.com", "user", "team-1", "Team A"))
-			router.GET("/api/v1/user/preferences", handler.getUserPreferences)
-		})
-
-		It("should return default preferences", func() {
-			req := httptest.NewRequest("GET", "/api/v1/user/preferences", nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var body map[string]interface{}
-			Expect(json.Unmarshal(w.Body.Bytes(), &body)).To(Succeed())
-			Expect(body["user_id"]).To(Equal("user-1"))
-			Expect(body["theme"]).To(Equal("light"))
-
-			notifications := body["notifications"].(map[string]interface{})
-			Expect(notifications["email"]).To(BeTrue())
-
-			dashboard := body["dashboard"].(map[string]interface{})
-			Expect(dashboard["default_view"]).To(Equal("grid"))
-		})
-	})
-
-	Describe("updateUserPreferences", func() {
-		BeforeEach(func() {
-			router.Use(authContextMiddleware("user-1", "Alice", "alice@example.com", "user", "team-1", "Team A"))
-			router.PUT("/api/v1/user/preferences", handler.updateUserPreferences)
-		})
-
-		It("should echo back updated preferences", func() {
-			prefs := map[string]interface{}{"theme": "dark", "notifications": false}
-			body, _ := json.Marshal(prefs)
-
-			req := httptest.NewRequest("PUT", "/api/v1/user/preferences", bytes.NewBuffer(body))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var resp map[string]interface{}
-			Expect(json.Unmarshal(w.Body.Bytes(), &resp)).To(Succeed())
-			Expect(resp["theme"]).To(Equal("dark"))
-		})
-
-		It("should return bad request for invalid JSON", func() {
-			req := httptest.NewRequest("PUT", "/api/v1/user/preferences", bytes.NewBufferString("{invalid"))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			Expect(w.Code).To(Equal(http.StatusBadRequest))
-		})
-	})
+	// getUserPreferences / updateUserPreferences REST handlers were
+	// removed — v2 reads and writes preferences via GraphQL. Test
+	// blocks deleted along with the handlers.
 
 	Describe("getUserProjects", func() {
 		BeforeEach(func() {

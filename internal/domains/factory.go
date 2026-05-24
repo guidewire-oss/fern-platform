@@ -1,7 +1,7 @@
 package domains
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -9,6 +9,7 @@ import (
 
 	// Auth domain
 	authApp "github.com/guidewire-oss/fern-platform/internal/domains/auth/application"
+	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	authInfra "github.com/guidewire-oss/fern-platform/internal/domains/auth/infrastructure"
 	authInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 
@@ -54,6 +55,7 @@ type DomainFactory struct {
 	authService    *authApp.AuthenticationService
 	authzService   *authApp.AuthorizationService
 	authMiddleware *authInterfaces.AuthMiddlewareAdapter
+	userRepo       authDomain.UserRepository
 
 	// Analytics domain
 	flakyDetectionService *analyticsApp.FlakyDetectionService
@@ -195,11 +197,18 @@ func (f *DomainFactory) GetSummaryHandler() *summaryInterfaces.SummaryHandler {
 	return f.summaryHandler
 }
 
+// GetUserRepository exposes the auth user repository for handlers that
+// need to list / update users without going through the auth service.
+func (f *DomainFactory) GetUserRepository() authDomain.UserRepository {
+	return f.userRepo
+}
+
 // initAuthDomain initializes the auth domain components
 func (f *DomainFactory) initAuthDomain() {
 	// Create repositories
 	userRepo := authInfra.NewGormUserRepository(f.db)
 	sessionRepo := authInfra.NewGormSessionRepository(f.db)
+	f.userRepo = userRepo
 
 	// Create application services
 	f.authService = authApp.NewAuthenticationService(userRepo, sessionRepo)
@@ -264,16 +273,17 @@ func (f *DomainFactory) initIntegrationsDomain() {
 	// Create JIRA client
 	jiraClient := integrations.NewDefaultJiraClient()
 
-	keyHex := os.Getenv("JIRA_ENCRYPTION_KEY")
-	if keyHex == "" {
-		panic("JIRA_ENCRYPTION_KEY environment variable is not set; generate with: openssl rand -hex 32")
-	}
-	encryptionKey, err := hex.DecodeString(keyHex)
+	// Load the credential-encryption key from env. Required: 32 bytes,
+	// base64-encoded. The previous implementation used a placeholder
+	// string in source which left every Jira token effectively
+	// unencrypted to anyone with the binary. We fail fast at startup if
+	// the env var is missing or malformed so a misconfigured deploy
+	// can't silently fall back to insecure behavior.
+	encryptionKey, err := loadJiraEncryptionKey()
 	if err != nil {
-		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY is not valid hex: %v", err))
-	}
-	if len(encryptionKey) != 32 {
-		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
+		// Panic at startup so the deploy fails loudly. This runs from
+		// main.go's domain wiring before the HTTP server starts.
+		panic(fmt.Errorf("jira: %w", err))
 	}
 
 	// Create JIRA connection service
@@ -290,6 +300,37 @@ func (f *DomainFactory) initIntegrationsDomain() {
 	// Create coverage service (reuses the same connection repo, JIRA client, and encryption key)
 	tagRepo := tagsInfra.NewGormTagRepository(f.db)
 	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, f.jiraFieldMappingService, encryptionKey)
+}
+
+// loadJiraEncryptionKey reads JIRA_ENCRYPTION_KEY (base64 → 32 bytes).
+// Two failure modes are surfaced explicitly so deploys can debug:
+//   - env var unset or empty
+//   - decoded value isn't exactly 32 bytes (AES-256 requirement)
+//
+// In dev/test contexts with no Jira usage, set the env var to the
+// base64 of any 32-byte string — it's only consulted when a Jira
+// credential is encrypted/decrypted, but it's loaded eagerly so
+// problems surface at boot rather than first-use.
+func loadJiraEncryptionKey() ([]byte, error) {
+	raw := os.Getenv("JIRA_ENCRYPTION_KEY")
+	if raw == "" {
+		return nil, fmt.Errorf(
+			"JIRA_ENCRYPTION_KEY env var is required; " +
+				"set it to a base64-encoded 32-byte key " +
+				"(e.g. `openssl rand -base64 32`)",
+		)
+	}
+	key, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("JIRA_ENCRYPTION_KEY is not valid base64: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf(
+			"JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d",
+			len(key),
+		)
+	}
+	return key, nil
 }
 
 // GetJiraConnectionService returns the JIRA connection service

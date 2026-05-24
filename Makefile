@@ -3,10 +3,11 @@
 
 # Import all modular Makefiles
 include Makefile.core
-include Makefile.test  
+include Makefile.test
 include Makefile.docker
 include Makefile.k8s
 include Makefile.ci
+include Makefile.web
 
 # Default target
 .DEFAULT_GOAL := help
@@ -19,8 +20,9 @@ help: ## Display this help message
 	@echo ""
 	@echo "🚀 Quick Start:"
 	@echo "  make setup-local     - Setup development environment"
-	@echo "  make deploy-all      - Complete deployment (k3d + app)"
-	@echo "  make dev            - Start development mode" 
+	@echo "  make deploy-all      - Complete deployment (k3d + app) [v1 web]"
+	@echo "  make deploy-all-v2   - Complete deployment with v2 SPA frontend"
+	@echo "  make dev            - Start development mode"
 	@echo "  make test           - Run unit tests"
 	@echo ""
 	@echo "📋 Available targets:"
@@ -46,7 +48,8 @@ help: ## Display this help message
 	@echo ""
 	@echo "💡 Examples:"
 	@echo "  make setup-local && make dev                    # Local development"
-	@echo "  make deploy-all                                 # Full k3d deployment"
+	@echo "  make deploy-all-v2                              # Full k3d deployment (v2 SPA)"
+	@echo "  make deploy-quick-v2                            # Redeploy v2 (cluster already up)"
 	@echo "  make test && make docker-build                  # Test and build"
 	@echo "  make ci-all                                     # Full CI pipeline"
 	@echo "  REGISTRY=myregistry.com make docker-push        # Push to registry"

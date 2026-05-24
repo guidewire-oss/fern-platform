@@ -114,7 +114,7 @@ func TestGetProject_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		user := router.Group("")
@@ -133,7 +133,7 @@ func TestGetProject_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		user := router.Group("")
@@ -156,7 +156,7 @@ func TestGetProjectByProjectID_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		user := router.Group("")
@@ -175,7 +175,7 @@ func TestGetProjectByProjectID_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		user := router.Group("")
@@ -198,7 +198,7 @@ func TestUpdateProject_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -220,7 +220,7 @@ func TestUpdateProject_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -246,7 +246,7 @@ func TestDeleteProject_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -265,7 +265,7 @@ func TestDeleteProject_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -288,7 +288,7 @@ func TestActivateProject_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -307,7 +307,7 @@ func TestActivateProject_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -330,7 +330,7 @@ func TestDeactivateProject_ErrorCases(t *testing.T) {
 	t.Run("project not found", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")
@@ -349,7 +349,7 @@ func TestDeactivateProject_ErrorCases(t *testing.T) {
 	t.Run("db internal error", func(t *testing.T) {
 		repo := new(testHelpers.MockProjectRepository)
 		service := projectsApp.NewProjectService(repo, nil)
-		handler := api.NewProjectHandler(service, nil)
+		handler := api.NewProjectHandler(service, nil, nil)
 
 		router := gin.New()
 		manager := router.Group("")

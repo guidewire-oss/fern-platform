@@ -13,6 +13,7 @@ Welcome to the Fern Platform documentation! This guide will help you navigate ou
 
 #### **Use Fern Platform**
 - 📊 [**UI Features Guide**](./user-guide/ui-features.md) - Explore the modern UI and visualizations
+- 🔐 [**Roles and Permissions**](./user-guide/permissions.md) - Who can do what, how roles are assigned, project-level scopes
 - 🔍 [**Use Cases**](./use-cases/) - Step-by-step guides for common scenarios:
   - [Debugging Test Failures](./use-cases/debugging-test-failures.md)
   - [Finding Flaky Tests](./use-cases/finding-flaky-tests.md)

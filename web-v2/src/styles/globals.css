@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens. CSS variables so the surface can flip light/dark
+ * without a Tailwind config change. Tokens are also re-exported via
+ * tailwind.config.ts so `bg-background`, `text-foreground` etc work.
+ */
+:root {
+  /* Surface */
+  --color-background: #f8fafc;       /* page */
+  --color-surface:    #ffffff;       /* card */
+  --color-surface-2:  #f1f5f9;       /* nested card / striped row */
+  --color-foreground: #0f172a;       /* primary text */
+  --color-muted:      #64748b;       /* secondary text */
+  --color-border:     #e2e8f0;       /* hairline */
+
+  /* Brand */
+  --color-primary:        #0ea5e9;
+  --color-primary-hover:  #0284c7;
+  --color-primary-soft:   #e0f2fe;
+
+  /* Sidebar — always dark for contrast */
+  --sidebar-bg-from: #0f172a;
+  --sidebar-bg-to:   #1e293b;
+  --sidebar-fg:      #cbd5e1;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-accent:  #0ea5e9;
+
+  /* Status palette */
+  --status-passed-bg:  #d1fae5;
+  --status-passed-fg:  #065f46;
+  --status-failed-bg:  #fee2e2;
+  --status-failed-fg:  #991b1b;
+  --status-flaky-bg:   #fef3c7;
+  --status-flaky-fg:   #92400e;
+  --status-skipped-bg: #e5e7eb;
+  --status-skipped-fg: #374151;
+  --status-running-bg: #dbeafe;
+  --status-running-fg: #1e40af;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+  /* Motion */
+  --transition-fast:   120ms ease-out;
+  --transition-normal: 200ms ease-out;
+}
+
+/* Dark surface is opt-in via .dark class on <html> — see src/lib/theme.ts. */
+html.dark {
+  --color-background: #0b1220;
+  --color-surface:    #111827;
+  --color-surface-2:  #1f2937;
+  --color-foreground: #f1f5f9;
+  --color-muted:      #94a3b8;
+  --color-border:     #1f2937;
+  --color-primary:        #38bdf8;
+  --color-primary-hover:  #7dd3fc;
+  --color-primary-soft:   rgb(56 189 248 / 0.12);
+}
+
+html, body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Form controls inherit color from the page — without this rule, typed
+   text becomes invisible against light input backgrounds in dark mode
+   (and vice versa) because browsers default <input> color to the OS
+   foreground, not the surrounding element. */
+input, textarea, select, button { color: inherit; }
+
+/* Reusable patterns */
+.fern-card {
+  @apply rounded-xl border border-border bg-surface shadow-[var(--shadow-sm)] transition-shadow;
+}
+.fern-card:hover {
+  box-shadow: var(--shadow-md);
+}
+.fern-pop {
+  @apply transition-all duration-150 ease-out;
+}
+.fern-pop:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Sidebar gradient surface */
+.fern-sidebar {
+  background-image: linear-gradient(180deg, var(--sidebar-bg-from), var(--sidebar-bg-to));
+  color: var(--sidebar-fg);
+}
+
+/* Animated row separator */
+.fern-divider {
+  background-image: linear-gradient(90deg, transparent, var(--color-border), transparent);
+  height: 1px;
+}
+
+/* Subtle scrollbar polish */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(148 163 184 / 0.4); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(148 163 184 / 0.6); }
+::-webkit-scrollbar-track { background: transparent; }

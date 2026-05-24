@@ -21,4 +21,11 @@ type TagRepository interface {
 
 	// AssignToTestRun assigns tags to a test run
 	AssignToTestRun(ctx context.Context, testRunID string, tagIDs []TagID) error
+
+	// UsageCounts returns the count of test_run_tags rows for every tag
+	// in the system. Result is keyed by string tag ID. Tags that have
+	// never been used are omitted from the map (callers default missing
+	// keys to 0). Single SQL aggregate — used by both the popular-tags
+	// endpoint and the usage-stats endpoint.
+	UsageCounts(ctx context.Context) (map[string]int, error)
 }

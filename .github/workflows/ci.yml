@@ -102,6 +102,62 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
+  web-v2:
+    # v2 SPA (Vite + React + TypeScript) lives at web-v2/. Its built
+    # output is embedded into the Go binary via //go:embed all:dist,
+    # so the Go test/build jobs above don't catch a broken TypeScript
+    # source — the pre-checked-in dist/ keeps embedding cleanly. This
+    # job is the source-side safety net: typecheck, lint, unit tests,
+    # production build, and a schema-drift check between the GraphQL
+    # SDL the Go backend exposes and the copy web-v2 codegen consumes.
+    #
+    # No untrusted user input flows into run: blocks. The only ${{ }}
+    # expression is github.workspace, which is GitHub-controlled.
+    name: Web v2 (typecheck · lint · test · build · schema check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: GraphQL schema drift check
+        # Backend SDL is the source of truth; web-v2 keeps a synced
+        # copy so its codegen produces typed clients. Fail loudly if
+        # they ever diverge.
+        run: |
+          diff -q internal/reporter/graphql/schema.graphql \
+                  web-v2/src/gql/schema.graphql \
+            || { echo "::error::GraphQL schema drift between backend and web-v2 copy. Sync the two files."; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web-v2/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web-v2
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web-v2
+        run: pnpm typecheck
+
+      - name: Lint
+        working-directory: web-v2
+        run: pnpm lint
+
+      - name: Unit tests
+        working-directory: web-v2
+        run: pnpm test:run
+
+      - name: Build production bundle
+        working-directory: web-v2
+        run: pnpm build
+
   security-scan:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest

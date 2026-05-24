@@ -777,7 +777,7 @@ PassedTests: 10,
 err = db.Create(dbTestRun).Error
 Expect(err).To(BeNil())
 
-result, err := qr.TreemapData_domain(adminCtx, nil, nil)
+result, err := qr.TreemapData_domain(adminCtx, nil, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 })
@@ -789,7 +789,7 @@ _, err := projectService.CreateProject(ctx, "tree-filtered-proj", "Filtered Proj
 Expect(err).To(BeNil())
 
 projectID := "tree-filtered-proj"
-result, err := qr.TreemapData_domain(adminCtx, &projectID, nil)
+result, err := qr.TreemapData_domain(adminCtx, &projectID, nil, nil)
 Expect(err).To(BeNil())
 Expect(result).NotTo(BeNil())
 })
