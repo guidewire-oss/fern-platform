@@ -1,23 +1,41 @@
 # Fern Platform - Kubernetes Makefile
 # Handles k3d cluster and Kubernetes deployments
 
-.PHONY: k3d-create k3d-delete k3d-status k8s-deploy k8s-delete k8s-status deploy-all deploy-quick
+# Host port mapped to the k3d loadbalancer (port 80 inside cluster).
+# Override if 8080 is already in use: make deploy-all K3D_HOST_PORT=9080
+K3D_HOST_PORT ?= 8080
+
+.PHONY: k3d-create k3d-delete k3d-status k8s-deploy k8s-delete k8s-status deploy-all deploy-quick check-install-k3d
 
 # K3D cluster management
 k3d-create: ## Create k3d cluster for fern-platform
 	@echo "🎯 Creating k3d cluster..."
-	k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2
+	k3d cluster create fern-platform --port "$(K3D_HOST_PORT):80@loadbalancer" --agents 2
 	@echo "✅ k3d cluster 'fern-platform' created"
 
 k3d-delete: ## Delete k3d cluster
 	@echo "🧹 Deleting k3d cluster..."
-	k3d cluster delete fern-platform
-	@echo "✅ k3d cluster deleted"
+	@if k3d cluster list | grep -q "fern-platform"; then \
+		k3d cluster delete fern-platform || { echo "❌ Failed to delete cluster"; exit 1; }; \
+		echo "✅ k3d cluster deleted"; \
+	else \
+		echo "ℹ️  No k3d cluster 'fern-platform' to delete"; \
+	fi
 
 k3d-status: ## Check k3d cluster status
 	@echo "📊 Checking k3d cluster status..."
 	kubectl cluster-info
 	kubectl get nodes
+
+check-install-k3d: ## Check if k3d CLI is installed, install if not
+	@echo "📦 Checking k3d CLI installation..."
+	@if command -v k3d &> /dev/null; then \
+		echo "✅ k3d already installed: $$(k3d version | head -1)"; \
+	else \
+		echo "📥 Installing k3d..."; \
+		curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash; \
+		echo "✅ k3d installed successfully"; \
+	fi
 
 # Kubernetes operations
 k8s-deploy: ## Deploy to Kubernetes using KubeVela
@@ -48,7 +66,7 @@ k8s-status: ## Check Kubernetes deployment status
 	@kubectl get ingress -n fern-platform
 	@echo ""
 	@echo "🌐 Application is accessible at:"
-	@echo "   http://fern-platform.local:8080 (via Traefik ingress)"
+	@echo "   http://fern-platform.local:$(K3D_HOST_PORT) (via Traefik ingress)"
 
 # Deployment automation
 deploy-all: ## Complete automated deployment (k3d + prerequisites + build + deploy)
@@ -72,7 +90,7 @@ deploy-all: ## Complete automated deployment (k3d + prerequisites + build + depl
 	@echo "   127.0.0.1 fern-platform.local"
 	@echo "   127.0.0.1 keycloak"
 	@echo ""
-	@echo "🌐 Application is now accessible at: http://fern-platform.local:8080"
+	@echo "🌐 Application is now accessible at: http://fern-platform.local:$(K3D_HOST_PORT)"
 
 deploy-quick: ## Quick deployment (assumes cluster and prerequisites exist)
 	@echo "🚀 Quick deployment (assumes cluster exists)..."
@@ -83,17 +101,36 @@ deploy-quick: ## Quick deployment (assumes cluster and prerequisites exist)
 # Internal helpers for deploy-all
 check-or-create-cluster: ## Check if k3d cluster exists, create if not
 	@echo "🔍 Checking k3d cluster status..."
+	@$(MAKE) -f Makefile.k8s check-install-k3d
 	@$(MAKE) -f Makefile.k8s check-hosts-file
-	@if k3d cluster list | grep -q "fern-platform.*running"; then \
-		echo "✅ k3d cluster 'fern-platform' already exists and is running"; \
-		kubectl cluster-info --context k3d-fern-platform > /dev/null 2>&1 || (echo "❌ Cluster not accessible, recreating..." && k3d cluster delete fern-platform && k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2); \
+	@if k3d cluster list | grep -q "fern-platform"; then \
+		echo "✅ k3d cluster 'fern-platform' already exists, ensuring it is started..."; \
+		k3d cluster start fern-platform 2>/dev/null || true; \
 	else \
 		echo "📦 Creating new k3d cluster 'fern-platform'..."; \
-		k3d cluster create fern-platform --port "8080:80@loadbalancer" --agents 2; \
+		k3d cluster create fern-platform --port "$(K3D_HOST_PORT):80@loadbalancer" --agents 2 || { echo "❌ Failed to create k3d cluster"; exit 1; }; \
 		echo "✅ k3d cluster created successfully"; \
 	fi
+	@k3d kubeconfig merge fern-platform --kubeconfig-merge-default > /dev/null
 	@kubectl config use-context k3d-fern-platform
-	@sleep 10
+	@echo "⏳ Waiting for cluster API server to become reachable..."
+	@for i in $$(seq 1 30); do \
+		if kubectl get nodes > /dev/null 2>&1; then \
+			echo "✅ Cluster is reachable"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "❌ Cluster is unreachable after 60s — it appears corrupt. Deleting and recreating..."; \
+			k3d cluster delete fern-platform; \
+			k3d cluster create fern-platform --port "$(K3D_HOST_PORT):80@loadbalancer" --agents 2 || { echo "❌ Failed to recreate cluster"; exit 1; }; \
+			k3d kubeconfig merge fern-platform --kubeconfig-merge-default > /dev/null; \
+			kubectl config use-context k3d-fern-platform; \
+			sleep 10; \
+			kubectl get nodes > /dev/null 2>&1 || { echo "❌ Recreated cluster is still unreachable"; exit 1; }; \
+			echo "✅ Cluster recreated and reachable"; \
+		fi; \
+		sleep 2; \
+	done
 
 check-hosts-file: ## Check and setup /etc/hosts entries
 	@echo "🔍 Checking /etc/hosts configuration..."
@@ -129,7 +166,7 @@ check-install-kubevela: ## Check if KubeVela is installed, install if not
 		echo "📦 Installing KubeVela operator..."; \
 		helm repo add kubevela https://kubevela.github.io/charts > /dev/null 2>&1 || true; \
 		helm repo update > /dev/null 2>&1; \
-		helm install --create-namespace -n vela-system kubevela kubevela/vela-core --wait --timeout=10m; \
+		helm upgrade --install --create-namespace -n vela-system kubevela kubevela/vela-core --wait --timeout=10m || { echo "❌ KubeVela installation failed"; exit 1; }; \
 		echo "✅ KubeVela installed successfully"; \
 	fi
 
@@ -141,7 +178,7 @@ check-install-cnpg: ## Check if CloudNativePG is installed, install if not
 		echo "🔧 Installing CloudNativePG..."; \
 		helm repo add cnpg https://cloudnative-pg.github.io/charts > /dev/null 2>&1 || true; \
 		helm repo update > /dev/null 2>&1; \
-		helm upgrade --install cnpg --namespace cnpg-system --create-namespace cnpg/cloudnative-pg --wait --timeout=10m; \
+		helm upgrade --install cnpg --namespace cnpg-system --create-namespace cnpg/cloudnative-pg --wait --timeout=10m || { echo "❌ CloudNativePG installation failed"; exit 1; }; \
 		echo "✅ CloudNativePG installed successfully"; \
 	fi
 
@@ -210,8 +247,9 @@ deploy-and-verify: ## Deploy application and verify it's running
 	@echo "⏳ Waiting for deployment to be ready..."
 	@timeout=300; \
 	while [ $$timeout -gt 0 ]; do \
-		if kubectl get pods -n fern-platform | grep fern-platform | grep -q "Running"; then \
-			echo "✅ Application is running!"; \
+		if kubectl get pods -n fern-platform | grep fern-platform | grep -qE "^[^ ]+[[:space:]]+[0-9]+/[0-9]+[[:space:]]+Running" && \
+			kubectl get pods -n fern-platform | grep fern-platform | awk '{split($$2,a,"/"); if(a[1]==a[2] && a[1]!="0") exit 0; else exit 1}'; then \
+			echo "✅ Application is running and ready!"; \
 			break; \
 		fi; \
 		echo "⏳ Still waiting for pods to be ready... ($$timeout seconds remaining)"; \
@@ -221,4 +259,4 @@ deploy-and-verify: ## Deploy application and verify it's running
 	@echo "📊 Final status check..."
 	@kubectl get pods -n fern-platform
 	@echo ""
-	@echo "🌐 Application is accessible at: http://fern-platform.local:8080"
+	@echo "🌐 Application is accessible at: http://fern-platform.local:$(K3D_HOST_PORT)"
