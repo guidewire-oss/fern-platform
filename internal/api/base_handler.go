@@ -30,20 +30,32 @@ func (h *BaseHandler) respondWithJSON(c *gin.Context, code int, payload interfac
 
 // getUserID extracts the user ID from the context
 func (h *BaseHandler) getUserID(c *gin.Context) string {
-	userID, _ := c.Get("user_id")
-	return userID.(string)
+	userID, ok := c.Get("user_id")
+	if !ok || userID == nil {
+		return ""
+	}
+	s, _ := userID.(string)
+	return s
 }
 
 // getTeamID extracts the team ID from the context
 func (h *BaseHandler) getTeamID(c *gin.Context) string {
-	teamID, _ := c.Get("team_id")
-	return teamID.(string)
+	teamID, ok := c.Get("team_id")
+	if !ok || teamID == nil {
+		return ""
+	}
+	s, _ := teamID.(string)
+	return s
 }
 
 // getUserRole extracts the user role from the context
 func (h *BaseHandler) getUserRole(c *gin.Context) string {
-	role, _ := c.Get("role")
-	return role.(string)
+	role, ok := c.Get("role")
+	if !ok || role == nil {
+		return ""
+	}
+	s, _ := role.(string)
+	return s
 }
 
 // isAdmin checks if the user has admin role
@@ -59,8 +71,12 @@ func (h *BaseHandler) isManager(c *gin.Context) bool {
 
 // getUserEmail extracts the user email from the context
 func (h *BaseHandler) getUserEmail(c *gin.Context) string {
-	email, _ := c.Get("user_email")
-	return email.(string)
+	email, ok := c.Get("user_email")
+	if !ok || email == nil {
+		return ""
+	}
+	s, _ := email.(string)
+	return s
 }
 
 // ErrorResponse sends an error response with the given status code and message

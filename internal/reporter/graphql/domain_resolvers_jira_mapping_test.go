@@ -170,7 +170,7 @@ func (a *anyProjectRepo) ExistsByProjectID(ctx context.Context, id projectsDomai
 	return id != "", nil
 }
 
-// seededPermissionRepo grants every listed user a Read permission on any
+// seededPermissionRepo grants every listed user a Write permission on any
 // project they're queried for. Users not in the list get no permissions.
 type seededPermissionRepo struct {
 	allowedUsers map[string]struct{}
@@ -191,7 +191,7 @@ func (s *seededPermissionRepo) FindByProjectAndUser(ctx context.Context, project
 	if _, ok := s.allowedUsers[userID]; !ok {
 		return nil, nil
 	}
-	perm, err := projectsDomain.NewProjectPermission(projectID, userID, projectsDomain.PermissionRead, "test-seed")
+	perm, err := projectsDomain.NewProjectPermission(projectID, userID, projectsDomain.PermissionWrite, "test-seed")
 	if err != nil {
 		return nil, err
 	}
