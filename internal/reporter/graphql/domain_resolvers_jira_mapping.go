@@ -7,25 +7,40 @@ import (
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
+	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 )
 
-// requireManageJiraMapping returns the current user when they hold Admin/Manager
-// access, or an error if unauthenticated or unprivileged.
-func requireManageJiraMapping(ctx context.Context) (*authDomain.User, error) {
+// authorizeProjectManagement enforces the canonical per-project authorization
+// used by every JIRA-related resolver. The caller must be authenticated AND
+// hold at least one project-level permission row for `projectID` — global
+// roles alone are not sufficient. Mirrors the pattern in
+// CreateJiraConnection / UpdateJiraConnection (schema.resolvers.go).
+func (r *Resolver) authorizeProjectManagement(ctx context.Context, projectID string) (*authDomain.User, error) {
 	user, err := getCurrentUser(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("unauthorized: %w", err)
-	}
-	if user.Role != authDomain.RoleAdmin && user.Role != authDomain.RoleManager {
+	if err != nil || user == nil {
 		return nil, fmt.Errorf("unauthorized")
 	}
+
+	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
+	if err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
+	if err != nil || len(permissions) == 0 {
+		return nil, fmt.Errorf("forbidden")
+	}
+
 	return user, nil
 }
 
 // JiraFieldMapping_domain returns the field mapping snapshot for the project.
 func (r *queryResolver) JiraFieldMapping_domain(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
-	if _, err := requireManageJiraMapping(ctx); err != nil {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
 		return nil, err
 	}
 
@@ -38,8 +53,14 @@ func (r *queryResolver) JiraFieldMapping_domain(ctx context.Context, projectID s
 }
 
 // JiraFields_domain lists all JIRA fields available for a given connection.
+// Authorization is scoped to the project that owns the connection.
 func (r *queryResolver) JiraFields_domain(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error) {
-	if _, err := requireManageJiraMapping(ctx); err != nil {
+	connection, err := r.jiraConnectionService.GetConnection(ctx, connectionID)
+	if err != nil || connection == nil {
+		return nil, fmt.Errorf("connection not found")
+	}
+
+	if _, err := r.authorizeProjectManagement(ctx, connection.ProjectID()); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +83,7 @@ func (r *queryResolver) JiraFields_domain(ctx context.Context, connectionID stri
 
 // SaveJiraFieldMapping_domain validates and persists a field mapping for the project.
 func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, input model.SaveJiraFieldMappingInput) (*model.JiraFieldMapping, error) {
-	user, err := requireManageJiraMapping(ctx)
+	user, err := r.authorizeProjectManagement(ctx, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +117,7 @@ func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, inpu
 // ResetJiraFieldMapping_domain deletes any saved mapping for the project and
 // returns the default mapping snapshot.
 func (r *mutationResolver) ResetJiraFieldMapping_domain(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
-	if _, err := requireManageJiraMapping(ctx); err != nil {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
 		return nil, err
 	}
 

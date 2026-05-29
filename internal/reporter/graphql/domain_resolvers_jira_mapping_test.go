@@ -11,6 +11,8 @@ import (
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
+	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
+	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
@@ -122,10 +124,89 @@ func newTestResolverWithJiraMapping(t *testing.T, mappingSvc *integrations.JiraF
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	r := NewResolver(nil, nil, nil, nil, connSvc, nil, db, logger)
+	// Default permissive project service: any projectID resolves to a project,
+	// and the standard test users "admin-1" and "manager-1" have project-scoped
+	// permissions on every project. Regular users (e.g. "user-1") have none and
+	// are rejected by the new project-scoped auth helper.
+	projSvc := projectsApp.NewProjectService(
+		newAnyProjectRepo(),
+		newSeededPermissionRepo("admin-1", "manager-1"),
+	)
+
+	r := NewResolver(nil, projSvc, nil, nil, connSvc, nil, db, logger)
 	r.jiraFieldMappingService = mappingSvc
 	return r
 }
+
+// anyProjectRepo answers FindByProjectID for any non-empty ProjectID with a
+// synthetic project. Used by tests that don't care which project exists.
+type anyProjectRepo struct{}
+
+func newAnyProjectRepo() *anyProjectRepo { return &anyProjectRepo{} }
+
+func (a *anyProjectRepo) Save(ctx context.Context, p *projectsDomain.Project) error { return nil }
+func (a *anyProjectRepo) FindByID(ctx context.Context, id uint) (*projectsDomain.Project, error) {
+	return nil, projectsDomain.ErrProjectNotFound
+}
+func (a *anyProjectRepo) FindByProjectID(ctx context.Context, id projectsDomain.ProjectID) (*projectsDomain.Project, error) {
+	if id == "" {
+		return nil, projectsDomain.ErrProjectNotFound
+	}
+	p, err := projectsDomain.NewProject(id, "Synthetic "+string(id), projectsDomain.Team("test-team"))
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+func (a *anyProjectRepo) FindByTeam(ctx context.Context, team projectsDomain.Team) ([]*projectsDomain.Project, error) {
+	return nil, nil
+}
+func (a *anyProjectRepo) FindAll(ctx context.Context, limit, offset int) ([]*projectsDomain.Project, int64, error) {
+	return nil, 0, nil
+}
+func (a *anyProjectRepo) Update(ctx context.Context, p *projectsDomain.Project) error { return nil }
+func (a *anyProjectRepo) Delete(ctx context.Context, id uint) error                   { return nil }
+func (a *anyProjectRepo) ExistsByProjectID(ctx context.Context, id projectsDomain.ProjectID) (bool, error) {
+	return id != "", nil
+}
+
+// seededPermissionRepo grants every listed user a Read permission on any
+// project they're queried for. Users not in the list get no permissions.
+type seededPermissionRepo struct {
+	allowedUsers map[string]struct{}
+}
+
+func newSeededPermissionRepo(userIDs ...string) *seededPermissionRepo {
+	s := &seededPermissionRepo{allowedUsers: make(map[string]struct{}, len(userIDs))}
+	for _, u := range userIDs {
+		s.allowedUsers[u] = struct{}{}
+	}
+	return s
+}
+
+func (s *seededPermissionRepo) Save(ctx context.Context, p *projectsDomain.ProjectPermission) error {
+	return nil
+}
+func (s *seededPermissionRepo) FindByProjectAndUser(ctx context.Context, projectID projectsDomain.ProjectID, userID string) ([]*projectsDomain.ProjectPermission, error) {
+	if _, ok := s.allowedUsers[userID]; !ok {
+		return nil, nil
+	}
+	perm, err := projectsDomain.NewProjectPermission(projectID, userID, projectsDomain.PermissionRead, "test-seed")
+	if err != nil {
+		return nil, err
+	}
+	return []*projectsDomain.ProjectPermission{perm}, nil
+}
+func (s *seededPermissionRepo) FindByUser(ctx context.Context, userID string) ([]*projectsDomain.ProjectPermission, error) {
+	return nil, nil
+}
+func (s *seededPermissionRepo) FindByProject(ctx context.Context, projectID projectsDomain.ProjectID) ([]*projectsDomain.ProjectPermission, error) {
+	return nil, nil
+}
+func (s *seededPermissionRepo) Delete(ctx context.Context, projectID projectsDomain.ProjectID, userID string, p projectsDomain.PermissionType) error {
+	return nil
+}
+func (s *seededPermissionRepo) DeleteExpired(ctx context.Context) error { return nil }
 
 func adminCtxForMapping() context.Context {
 	return context.WithValue(context.Background(), "user", &authDomain.User{
@@ -207,7 +288,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "unauthorized")
+		assert.Contains(t, err.Error(), "forbidden")
 	})
 
 	t.Run("manager user gets the mapping from service", func(t *testing.T) {
@@ -288,7 +369,9 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 func TestJiraFieldsResolver(t *testing.T) {
 	t.Run("non-manager user is denied", func(t *testing.T) {
 		jiraClient := &fakeJiraClient{}
-		connRepo := &fakeConnRepo{}
+		// Seed an active connection so the resolver gets past the
+		// connection-lookup and reaches the per-project auth check.
+		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{buildActiveConnection("proj-1")}}
 		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
@@ -299,7 +382,7 @@ func TestJiraFieldsResolver(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "unauthorized")
+		assert.Contains(t, err.Error(), "forbidden")
 	})
 
 	t.Run("manager user gets list of JIRA fields from service", func(t *testing.T) {
@@ -395,7 +478,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "unauthorized")
+		assert.Contains(t, err.Error(), "forbidden")
 	})
 
 	t.Run("valid input saves and returns the mapping", func(t *testing.T) {
@@ -492,7 +575,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "unauthorized")
+		assert.Contains(t, err.Error(), "forbidden")
 	})
 
 	t.Run("manager resets and gets default mapping back", func(t *testing.T) {
