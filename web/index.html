@@ -2573,15 +2573,10 @@
         }
 
         // Modern Header component
-        function Header({ health, projects, testRuns, onOpenSettings }) {
+        function Header({ health, projects, totalRuns = 0, recentRuns = 0, onOpenSettings }) {
             const { theme, toggleTheme } = useUserPreferences();
             const { user, loading, login, logout } = useAuth();
             const activeProjects = projects.filter(p => p.isActive).length;
-            const recentRuns = testRuns.filter(tr => {
-                const runDate = new Date(tr.startTime);
-                const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                return runDate > dayAgo;
-            }).length;
 
             const getThemeIcon = () => {
                 switch (theme) {
@@ -2632,12 +2627,12 @@
                                     <span className="stat-label">Active Projects</span>
                                 </div>
                                 <div className="stat-item">
-                                    <span className="stat-value">{testRuns.length}</span>
+                                    <span className="stat-value">{totalRuns}</span>
                                     <span className="stat-label">Total Runs</span>
                                 </div>
                                 <div className="stat-item">
                                     <span className="stat-value">{recentRuns}</span>
-                                    <span className="stat-label">Recent Runs</span>
+                                    <span className="stat-label">Recent Runs (24h)</span>
                                 </div>
                             </div>
                             
@@ -8844,7 +8839,7 @@
         // Main App component
         function FernPlatform() {
             const { route, navigate } = useRouter();
-            const [appData, setAppData] = useState({ health: null, projects: [], testRuns: [] });
+            const [appData, setAppData] = useState({ health: null, projects: [], totalRuns: 0, recentRuns: 0 });
             const [showSettings, setShowSettings] = useState(false);
 
             useEffect(() => {
@@ -8863,10 +8858,15 @@
                     // Convert projects from edges format
                     const projectList = projectsData.projects.edges.map(edge => edge.node);
                     
+                    // Total Runs (all-time) and Recent Runs (last 24h) come from the
+                    // dashboard summary counts that are already fetched above, so the
+                    // header stats need no extra network call. Pages still load their
+                    // own detailed test run lists as needed.
                     setAppData({
                         health: summaryData.dashboardSummary.health,
                         projects: projectList,
-                        testRuns: [] // Pages will load their own test runs as needed
+                        totalRuns: summaryData.dashboardSummary.totalTestRuns ?? 0,
+                        recentRuns: summaryData.dashboardSummary.recentTestRuns ?? 0
                     });
                 } catch (err) {
                     console.error('Failed to fetch app data:', err);
