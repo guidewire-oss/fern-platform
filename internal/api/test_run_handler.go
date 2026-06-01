@@ -580,6 +580,16 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	}
 
 	if testRun == nil {
+		if _, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(req.TestProjectID)); err != nil {
+			if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.TestProjectID)})
+				return
+			}
+			h.logger.WithError(err).Error("Failed to validate project")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate project"})
+			return
+		}
+
 		// brand new run
 		newTestRun := &domain.TestRun{
 			RunID:        runID,
@@ -705,6 +715,16 @@ func (h *TestRunHandler) startTestRun(c *gin.Context) {
 		Status:      "running",
 		StartTime:   time.Now(),
 		Metadata:    req.Metadata,
+	}
+
+	if _, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(req.ProjectID)); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.ProjectID)})
+			return
+		}
+		h.logger.WithError(err).Error("Failed to validate project")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate project"})
+		return
 	}
 
 	_, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun)

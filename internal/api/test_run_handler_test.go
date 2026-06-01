@@ -1515,6 +1515,10 @@ var _ = Describe("TestRunHandler", func() {
 				}
 				jsonBody, _ := json.Marshal(req)
 
+				project, err := projectsDomain.NewProject(projectsDomain.ProjectID("project-123"), "Test Project", projectsDomain.Team("team-1"))
+				Expect(err).NotTo(HaveOccurred())
+				projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-123")).Return(project, nil).Once()
+
 				testRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 				testRunRepo.On("GetByRunID", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 				suiteRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
@@ -1555,6 +1559,10 @@ var _ = Describe("TestRunHandler", func() {
 
 				jsonBody, _ := json.Marshal(req)
 
+				project, err := projectsDomain.NewProject(projectsDomain.ProjectID("project-123"), "Test Project", projectsDomain.Team("team-1"))
+				Expect(err).NotTo(HaveOccurred())
+				projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-123")).Return(project, nil).Once()
+
 				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs", bytes.NewBuffer(jsonBody))
 				httpReq.Header.Set("Content-Type", "application/json")
 				w := httptest.NewRecorder()
@@ -1563,7 +1571,7 @@ var _ = Describe("TestRunHandler", func() {
 				Expect(w.Code).To(Equal(http.StatusBadRequest))
 
 				var response map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &response)
+				err = json.Unmarshal(w.Body.Bytes(), &response)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(response["error"]).To(ContainSubstring("invalid test run"))
@@ -1579,6 +1587,10 @@ var _ = Describe("TestRunHandler", func() {
 				}
 				jsonBody, _ := json.Marshal(req)
 
+				project, err := projectsDomain.NewProject(projectsDomain.ProjectID("project-123"), "Test Project", projectsDomain.Team("team-1"))
+				Expect(err).NotTo(HaveOccurred())
+				projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-123")).Return(project, nil).Once()
+
 				testRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil).Once()
 
 				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs/start", bytes.NewBuffer(jsonBody))
@@ -1589,7 +1601,7 @@ var _ = Describe("TestRunHandler", func() {
 				Expect(w.Code).To(Equal(http.StatusCreated))
 
 				var response map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &response)
+				err = json.Unmarshal(w.Body.Bytes(), &response)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(response).To(HaveKey("id"))
 				Expect(response).To(HaveKey("runId"))
@@ -1614,6 +1626,10 @@ var _ = Describe("TestRunHandler", func() {
 					"projectId": "project-123",
 				}
 				jsonBody, _ := json.Marshal(req)
+
+				project, err := projectsDomain.NewProject(projectsDomain.ProjectID("project-123"), "Test Project", projectsDomain.Team("team-1"))
+				Expect(err).NotTo(HaveOccurred())
+				projectRepo.On("FindByProjectID", mock.Anything, projectsDomain.ProjectID("project-123")).Return(project, nil).Once()
 
 				testRunRepo.On("Create", mock.Anything, mock.MatchedBy(func(tr *domain.TestRun) bool {
 					return tr.RunID != ""
