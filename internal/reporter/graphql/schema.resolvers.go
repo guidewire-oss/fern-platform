@@ -879,6 +879,16 @@ func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]
 	return r.JiraFields_domain(ctx, connectionID)
 }
 
+// JiraFixVersions is the resolver for the jiraFixVersions field.
+func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error) {
+	panic(fmt.Errorf("not implemented: JiraFixVersions - jiraFixVersions"))
+}
+
+// RequirementCoverage is the resolver for the requirementCoverage field.
+func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error) {
+	panic(fmt.Errorf("not implemented: RequirementCoverage - requirementCoverage"))
+}
+
 // TestRunCreated is the resolver for the testRunCreated field.
 func (r *subscriptionResolver) TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error) {
 	ch := make(chan *model.TestRun)

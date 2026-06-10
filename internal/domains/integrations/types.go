@@ -1,6 +1,11 @@
 package integrations
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	tagsdomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
+)
 
 // AuthenticationType represents the type of authentication used for JIRA
 type AuthenticationType string
@@ -118,6 +123,40 @@ func (r ReductionStrategy) IsValid() bool {
 		return true
 	}
 	return false
+}
+
+// JiraVersion represents a JIRA release (fix version).
+type JiraVersion struct {
+	ID          string
+	Name        string
+	Released    bool
+	ReleaseDate string // ISO date string; empty if not yet released
+}
+
+// JiraParent is the parent reference on a JIRA issue (populated when requesting the "parent" field).
+type JiraParent struct {
+	Key       string
+	IssueType string
+}
+
+// JiraIssue is the subset of JIRA issue fields needed for coverage hierarchy.
+type JiraIssue struct {
+	Key        string
+	Summary    string
+	StatusName string
+	IssueType  string
+	Parent     *JiraParent // nil when the issue has no parent
+}
+
+// CoverageJiraClient is the narrow JIRA client interface required by the coverage service.
+type CoverageJiraClient interface {
+	GetVersions(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType) ([]JiraVersion, error)
+	SearchIssues(ctx context.Context, baseURL, username, credential string, authType AuthenticationType, jql string, fields []string) ([]JiraIssue, error)
+}
+
+// CoverageTagRepository is the narrow tag-repository interface required by the coverage service.
+type CoverageTagRepository interface {
+	GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]tagsdomain.CoverageCount, error)
 }
 
 // Sentinel errors for field mapping validation
