@@ -412,6 +412,47 @@ input SaveJiraFieldMappingInput {
   entries: [FieldMappingEntryInput!]!
 }
 
+# JIRA Requirements Coverage Types
+
+type JiraRelease {
+  id:          String!
+  name:        String!
+  released:    Boolean!
+  releaseDate: String
+}
+
+type JiraIssueSummary {
+  key:        String!
+  summary:    String!
+  statusName: String!
+  issueType:  String!
+}
+
+type TestRunCoverage {
+  total:  Int!
+  passed: Int!
+  failed: Int!
+}
+
+type StoryCoverageNode {
+  issue:           JiraIssueSummary!
+  covered:         Boolean!
+  testRunCoverage: TestRunCoverage
+}
+
+type EpicCoverageNode {
+  issue:        JiraIssueSummary!
+  stories:      [StoryCoverageNode!]!
+  coveredCount: Int!
+  totalCount:   Int!
+}
+
+type RequirementCoverageTree {
+  fixVersion: JiraRelease!
+  epics:      [EpicCoverageNode!]!
+  unassigned: [StoryCoverageNode!]!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -533,6 +574,10 @@ type Query {
   # JIRA Field Mapping
   jiraFieldMapping(projectId: String!): JiraFieldMapping!
   jiraFields(connectionId: ID!): [JiraFieldGQL!]!
+
+  # JIRA Requirements Coverage
+  jiraFixVersions(projectId: ID!): [JiraRelease!]!
+  requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
 }
 
 # Mutation Root

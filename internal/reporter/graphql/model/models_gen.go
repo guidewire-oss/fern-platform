@@ -57,6 +57,13 @@ type DashboardSummary struct {
 	AverageTestDuration int           `json:"averageTestDuration"`
 }
 
+type EpicCoverageNode struct {
+	Issue        *JiraIssueSummary    `json:"issue"`
+	Stories      []*StoryCoverageNode `json:"stories"`
+	CoveredCount int                  `json:"coveredCount"`
+	TotalCount   int                  `json:"totalCount"`
+}
+
 type FieldMappingEntry struct {
 	FernField             FernField          `json:"fernField"`
 	JiraFieldID           string             `json:"jiraFieldId"`
@@ -150,6 +157,20 @@ type JiraFieldMapping struct {
 	UpdatedAt *time.Time           `json:"updatedAt,omitempty"`
 }
 
+type JiraIssueSummary struct {
+	Key        string `json:"key"`
+	Summary    string `json:"summary"`
+	StatusName string `json:"statusName"`
+	IssueType  string `json:"issueType"`
+}
+
+type JiraRelease struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Released    bool    `json:"released"`
+	ReleaseDate *string `json:"releaseDate,omitempty"`
+}
+
 type Mutation struct {
 }
 
@@ -215,6 +236,12 @@ type ProjectTreemapNode struct {
 type Query struct {
 }
 
+type RequirementCoverageTree struct {
+	FixVersion *JiraRelease         `json:"fixVersion"`
+	Epics      []*EpicCoverageNode  `json:"epics"`
+	Unassigned []*StoryCoverageNode `json:"unassigned"`
+}
+
 type RoleGroupConfig struct {
 	AdminGroup   string `json:"adminGroup"`
 	ManagerGroup string `json:"managerGroup"`
@@ -258,6 +285,12 @@ type SpecTreemapNode struct {
 type StatusCount struct {
 	Status string `json:"status"`
 	Count  int    `json:"count"`
+}
+
+type StoryCoverageNode struct {
+	Issue           *JiraIssueSummary `json:"issue"`
+	Covered         bool              `json:"covered"`
+	TestRunCoverage *TestRunCoverage  `json:"testRunCoverage,omitempty"`
 }
 
 type Subscription struct {
@@ -356,6 +389,12 @@ type TestRunConnection struct {
 	Edges      []*TestRunEdge `json:"edges"`
 	PageInfo   *PageInfo      `json:"pageInfo"`
 	TotalCount int            `json:"totalCount"`
+}
+
+type TestRunCoverage struct {
+	Total  int `json:"total"`
+	Passed int `json:"passed"`
+	Failed int `json:"failed"`
 }
 
 type TestRunEdge struct {

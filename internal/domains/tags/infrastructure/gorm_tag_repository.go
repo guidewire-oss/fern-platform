@@ -11,6 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
+type coverageRow struct {
+	Value  string
+	Total  int
+	Passed int
+	Failed int
+}
+
 // GormTagRepository is a GORM implementation of TagRepository
 type GormTagRepository struct {
 	db *gorm.DB
@@ -169,6 +176,32 @@ func (r *GormTagRepository) toDomainModel(dbTag *database.Tag) (*domain.Tag, err
 		dbTag.Value,
 		dbTag.CreatedAt,
 	), nil
+}
+
+// GetJiraTagCoverageByProject returns per-JIRA-issue-key coverage counts for all test runs in a project.
+func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]domain.CoverageCount, error) {
+	var rows []coverageRow
+	err := r.db.WithContext(ctx).
+		Table("tags t").
+		Select("t.value, COUNT(*) AS total, SUM(CASE WHEN tr.status = 'passed' THEN 1 ELSE 0 END) AS passed, SUM(CASE WHEN tr.status = 'failed' THEN 1 ELSE 0 END) AS failed").
+		Joins("JOIN test_run_tags trt ON trt.tag_id = t.id").
+		Joins("JOIN test_runs tr ON tr.id = trt.test_run_id").
+		Where("t.category = ? AND tr.project_id = ?", "jira", projectID).
+		Group("t.value").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to query jira tag coverage: %w", err)
+	}
+
+	result := make(map[string]domain.CoverageCount, len(rows))
+	for _, row := range rows {
+		result[row.Value] = domain.CoverageCount{
+			Total:  row.Total,
+			Passed: row.Passed,
+			Failed: row.Failed,
+		}
+	}
+	return result, nil
 }
 
 // GetOrCreateTag gets an existing tag by name or creates a new one

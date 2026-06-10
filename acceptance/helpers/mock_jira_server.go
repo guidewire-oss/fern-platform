@@ -11,8 +11,35 @@ import (
 // MockJiraServer provides a mock JIRA API for testing
 type MockJiraServer struct {
 	*httptest.Server
-	validTokens map[string]bool
-	projects    map[string]JiraProject
+	validTokens       map[string]bool
+	projects          map[string]JiraProject
+	versions          map[string][]MockVersion // projectKey → versions
+	issuesByVersion   map[string][]MockIssue   // fixVersionName → issues
+	issuesByKey       map[string]MockIssue     // issueKey → issue (for issueKey IN queries)
+	unavailable       bool                     // when true, all /rest/api/3/ endpoints return 503
+}
+
+// MockVersion is a configurable JIRA fix version for test fixtures.
+type MockVersion struct {
+	ID          string
+	Name        string
+	Released    bool
+	ReleaseDate string // ISO date, empty if unreleased
+}
+
+// MockIssueParent is the parent reference on a MockIssue.
+type MockIssueParent struct {
+	Key       string
+	IssueType string
+}
+
+// MockIssue is a configurable JIRA issue for test fixtures.
+type MockIssue struct {
+	Key       string
+	Summary   string
+	Status    string
+	IssueType string
+	Parent    *MockIssueParent
 }
 
 // JiraProject represents a JIRA project
@@ -69,6 +96,9 @@ func NewMockJiraServer() *MockJiraServer {
 				ProjectTypeKey: "software",
 			},
 		},
+		versions:        make(map[string][]MockVersion),
+		issuesByVersion: make(map[string][]MockIssue),
+		issuesByKey:     make(map[string]MockIssue),
 	}
 
 	mux := http.NewServeMux()
@@ -80,18 +110,22 @@ func NewMockJiraServer() *MockJiraServer {
 func (m *MockJiraServer) setupRoutes(mux *http.ServeMux) {
 	// Authentication endpoint
 	mux.HandleFunc("/rest/api/2/myself", m.handleMyself)
-	
-	// Project endpoints
+
+	// Project endpoints (v2)
 	mux.HandleFunc("/rest/api/2/project/", m.handleProject)
-	
+
 	// Field configuration endpoint
 	mux.HandleFunc("/rest/api/2/field", m.handleFields)
-	
+
 	// Issue type endpoint
 	mux.HandleFunc("/rest/api/2/issuetype", m.handleIssueTypes)
-	
+
 	// Server info endpoint (for JIRA version detection)
 	mux.HandleFunc("/rest/api/2/serverInfo", m.handleServerInfo)
+
+	// Coverage endpoints (v3)
+	mux.HandleFunc("/rest/api/3/project/", m.handleProjectV3)
+	mux.HandleFunc("/rest/api/3/issue/search", m.handleIssueSearch)
 }
 
 func (m *MockJiraServer) handleMyself(w http.ResponseWriter, r *http.Request) {
@@ -292,4 +326,196 @@ func (m *MockJiraServer) AddValidToken(token string) {
 // AddProject adds a project for testing
 func (m *MockJiraServer) AddProject(key string, project JiraProject) {
 	m.projects[key] = project
+}
+
+// SetVersions configures the fix versions returned for a project key.
+func (m *MockJiraServer) SetVersions(projectKey string, versions []MockVersion) {
+	m.versions[projectKey] = versions
+}
+
+// SetIssuesForVersion configures the issues returned when searching by fix version name.
+func (m *MockJiraServer) SetIssuesForVersion(fixVersionName string, issues []MockIssue) {
+	m.issuesByVersion[fixVersionName] = issues
+	for _, issue := range issues {
+		m.issuesByKey[issue.Key] = issue
+	}
+}
+
+// AddIssueByKey registers an issue that can be retrieved via issueKey IN (...) JQL.
+// Use this for parent epics that are not themselves in any fix version.
+func (m *MockJiraServer) AddIssueByKey(issue MockIssue) {
+	m.issuesByKey[issue.Key] = issue
+}
+
+// SimulateUnavailable makes all /rest/api/3/ endpoints return 503.
+func (m *MockJiraServer) SimulateUnavailable(on bool) {
+	m.unavailable = on
+}
+
+// --- v3 handlers ---
+
+func (m *MockJiraServer) handleProjectV3(w http.ResponseWriter, r *http.Request) {
+	if m.unavailable {
+		http.Error(w, `{"errorMessages":["Service unavailable"]}`, http.StatusServiceUnavailable)
+		return
+	}
+	if !m.authenticate(r) {
+		http.Error(w, `{"errorMessages":["Unauthorized"],"errors":{}}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Expect path: /rest/api/3/project/{key}/versions
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 5 || parts[4] != "versions" {
+		http.Error(w, `{"errorMessages":["Not found"]}`, http.StatusNotFound)
+		return
+	}
+	projectKey := parts[3]
+
+	type versionResponse struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Released    bool   `json:"released"`
+		ReleaseDate string `json:"releaseDate,omitempty"`
+	}
+
+	versions := m.versions[projectKey]
+	resp := make([]versionResponse, len(versions))
+	for i, v := range versions {
+		resp[i] = versionResponse{ID: v.ID, Name: v.Name, Released: v.Released, ReleaseDate: v.ReleaseDate}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (m *MockJiraServer) handleIssueSearch(w http.ResponseWriter, r *http.Request) {
+	if m.unavailable {
+		http.Error(w, `{"errorMessages":["Service unavailable"]}`, http.StatusServiceUnavailable)
+		return
+	}
+	if !m.authenticate(r) {
+		http.Error(w, `{"errorMessages":["Unauthorized"],"errors":{}}`, http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"errorMessages":["Method not allowed"]}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		JQL        string `json:"jql"`
+		StartAt    int    `json:"startAt"`
+		MaxResults int    `json:"maxResults"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"errorMessages":["Bad request"]}`, http.StatusBadRequest)
+		return
+	}
+	if body.MaxResults <= 0 {
+		body.MaxResults = 50
+	}
+
+	issues := m.resolveJQL(body.JQL)
+
+	// Paginate
+	total := len(issues)
+	start := body.StartAt
+	if start > total {
+		start = total
+	}
+	end := start + body.MaxResults
+	if end > total {
+		end = total
+	}
+	page := issues[start:end]
+
+	type issueStatus struct {
+		Name string `json:"name"`
+	}
+	type issueType struct {
+		Name string `json:"name"`
+	}
+	type parentFields struct {
+		IssueType issueType `json:"issuetype"`
+	}
+	type issueParent struct {
+		Key    string       `json:"key"`
+		Fields parentFields `json:"fields"`
+	}
+	type issueFields struct {
+		Summary   string       `json:"summary"`
+		Status    issueStatus  `json:"status"`
+		IssueType issueType    `json:"issuetype"`
+		Parent    *issueParent `json:"parent,omitempty"`
+	}
+	type issueResponse struct {
+		Key    string      `json:"key"`
+		Fields issueFields `json:"fields"`
+	}
+	type searchResponse struct {
+		StartAt    int             `json:"startAt"`
+		MaxResults int             `json:"maxResults"`
+		Total      int             `json:"total"`
+		Issues     []issueResponse `json:"issues"`
+	}
+
+	issueResponses := make([]issueResponse, len(page))
+	for i, issue := range page {
+		fields := issueFields{
+			Summary:   issue.Summary,
+			Status:    issueStatus{Name: issue.Status},
+			IssueType: issueType{Name: issue.IssueType},
+		}
+		if issue.Parent != nil {
+			fields.Parent = &issueParent{
+				Key:    issue.Parent.Key,
+				Fields: parentFields{IssueType: issueType{Name: issue.Parent.IssueType}},
+			}
+		}
+		issueResponses[i] = issueResponse{Key: issue.Key, Fields: fields}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(searchResponse{
+		StartAt:    body.StartAt,
+		MaxResults: body.MaxResults,
+		Total:      total,
+		Issues:     issueResponses,
+	})
+}
+
+// resolveJQL returns issues matching a simple JQL expression.
+// Supports: fixVersion = "name"  and  issueKey IN (KEY-1,KEY-2,...)
+func (m *MockJiraServer) resolveJQL(jql string) []MockIssue {
+	jql = strings.TrimSpace(jql)
+
+	if strings.Contains(jql, "fixVersion") {
+		// Extract version name from: fixVersion = "Atmos vNext" ORDER BY ...
+		start := strings.Index(jql, `"`)
+		end := strings.LastIndex(jql, `"`)
+		if start >= 0 && end > start {
+			versionName := jql[start+1 : end]
+			return m.issuesByVersion[versionName]
+		}
+	}
+
+	if strings.Contains(jql, "issueKey IN") || strings.Contains(jql, "issuekey in") {
+		// Extract keys from: issueKey IN (KEY-1, KEY-2, ...)
+		open := strings.Index(jql, "(")
+		close := strings.Index(jql, ")")
+		if open >= 0 && close > open {
+			keyPart := jql[open+1 : close]
+			var result []MockIssue
+			for _, raw := range strings.Split(keyPart, ",") {
+				key := strings.TrimSpace(raw)
+				if issue, ok := m.issuesByKey[key]; ok {
+					result = append(result, issue)
+				}
+			}
+			return result
+		}
+	}
+
+	return nil
 }
