@@ -159,6 +159,28 @@ type CoverageTagRepository interface {
 	GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]tagsdomain.CoverageCount, error)
 }
 
+// CoverageTree is the assembled result of a requirementCoverage query.
+type CoverageTree struct {
+	FixVersion JiraVersion
+	Epics      []EpicNode
+	Unassigned []StoryNode
+}
+
+// EpicNode groups the stories that belong to a single epic in a fix version.
+type EpicNode struct {
+	Issue        JiraIssue
+	Stories      []StoryNode
+	CoveredCount int // stories with at least one test run
+	TotalCount   int // total stories under this epic
+}
+
+// StoryNode is a single non-epic issue with its Fern test-run coverage.
+type StoryNode struct {
+	Issue           JiraIssue
+	Covered         bool
+	TestRunCoverage *tagsdomain.CoverageCount // nil when not covered
+}
+
 // Sentinel errors for field mapping validation
 var (
 	ErrRequiredFieldUnmapped     = errors.New("required Fern field is unmapped")

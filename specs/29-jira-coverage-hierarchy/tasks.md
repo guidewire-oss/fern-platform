@@ -1,6 +1,6 @@
 # 29-jira-coverage-hierarchy - Tasks
 
-## Status: In Progress (7/13 complete)
+## Status: In Progress (11/13 complete)
 
 TDD discipline: every RED task writes failing tests that define the expected behaviour.
 Every GREEN task writes the minimum implementation to make those tests pass.
@@ -80,7 +80,7 @@ No implementation code is written without a failing test first.
 
 ### Phase 4: Coverage Service TDD
 
-- [ ] **Task 4.1** 🔴 RED: Write failing coverage service tests
+- [x] **Task 4.1** 🔴 RED: Write failing coverage service tests
   - **ID**: `task-4.1`
   - **BlockedBy**: `task-1.1`
   - **File**: `internal/jira/coverage_service_test.go`
@@ -88,7 +88,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: Failing tests specify the two-phase orchestration and tree assembly contract precisely. Can start in parallel with tasks 2.x and 3.x since it mocks the interfaces.
   - **Context**: Req 2 AC1–5, Req 3 AC2–4, Req 4 AC1–2. Design §2 data flow. A story is "covered" when `CoverageCount.Total > 0`.
 
-- [ ] **Task 4.2** 🟢 GREEN: Implement CoverageService
+- [x] **Task 4.2** 🟢 GREEN: Implement CoverageService
   - **ID**: `task-4.2`
   - **BlockedBy**: `task-4.1, task-2.2, task-3.2`
   - **File**: `internal/jira/coverage_service.go`
@@ -100,7 +100,7 @@ No implementation code is written without a failing test first.
 
 ### Phase 5: Resolver TDD
 
-- [ ] **Task 5.1** 🔴 RED: Write failing resolver tests
+- [x] **Task 5.1** 🔴 RED: Write failing resolver tests
   - **ID**: `task-5.1`
   - **BlockedBy**: `task-1.2, task-4.2`
   - **File**: `internal/graph/resolvers/coverage_resolvers_test.go`
@@ -108,7 +108,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: Failing tests specify resolver contract including all error cases. `make test` fails on this file.
   - **Context**: Design §5 error handling table — test each error scenario. Req 1 AC4 (no connection message).
 
-- [ ] **Task 5.2** 🟢 GREEN: Implement coverage resolvers
+- [x] **Task 5.2** 🟢 GREEN: Implement coverage resolvers
   - **ID**: `task-5.2`
   - **BlockedBy**: `task-5.1`
   - **File**: `internal/graph/resolvers/coverage.resolvers.go`

@@ -2,6 +2,8 @@
 package graphql
 
 import (
+	"context"
+
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
@@ -16,6 +18,12 @@ import (
 //
 // It serves as dependency injection for your app, add any dependencies you require here.
 
+// coverageServicer is the narrow interface the coverage resolvers depend on.
+type coverageServicer interface {
+	GetVersionsForProject(ctx context.Context, projectID string) ([]integrations.JiraVersion, error)
+	Build(ctx context.Context, projectID, fixVersionName string) (*integrations.CoverageTree, error)
+}
+
 // Resolver is the root GraphQL resolver
 type Resolver struct {
 	testingService          *testingApp.TestRunService
@@ -24,6 +32,7 @@ type Resolver struct {
 	flakyDetectionService   *analyticsApp.FlakyDetectionService
 	jiraConnectionService   *integrations.JiraConnectionService
 	jiraFieldMappingService *integrations.JiraFieldMappingService
+	coverageService         coverageServicer
 	loaders                 *dataloader.Loaders
 	db                      *gorm.DB
 	logger                  *logging.Logger

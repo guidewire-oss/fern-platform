@@ -128,6 +128,12 @@ func (j *JiraConnection) GetEncryptedCredentialDirect() string {
 	return j.encryptedCredential
 }
 
+// SetEncryptedCredentialForTest replaces the stored credential with an already-encrypted
+// value. Use only in tests to simulate a connection retrieved from the database.
+func (j *JiraConnection) SetEncryptedCredentialForTest(encrypted string) {
+	j.encryptedCredential = encrypted
+}
+
 // LastTestedAt returns when the connection was last tested
 func (j *JiraConnection) LastTestedAt() *time.Time {
 	return j.lastTestedAt

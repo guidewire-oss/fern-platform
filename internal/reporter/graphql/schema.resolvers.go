@@ -881,12 +881,88 @@ func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]
 
 // JiraFixVersions is the resolver for the jiraFixVersions field.
 func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error) {
-	panic(fmt.Errorf("not implemented: JiraFixVersions - jiraFixVersions"))
+	if r.coverageService == nil {
+		return nil, fmt.Errorf("coverage service not configured")
+	}
+	versions, err := r.coverageService.GetVersionsForProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.JiraRelease, len(versions))
+	for i, v := range versions {
+		rel := &model.JiraRelease{ID: v.ID, Name: v.Name, Released: v.Released}
+		if v.ReleaseDate != "" {
+			rd := v.ReleaseDate
+			rel.ReleaseDate = &rd
+		}
+		result[i] = rel
+	}
+	return result, nil
 }
 
 // RequirementCoverage is the resolver for the requirementCoverage field.
 func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error) {
-	panic(fmt.Errorf("not implemented: RequirementCoverage - requirementCoverage"))
+	if r.coverageService == nil {
+		return nil, fmt.Errorf("coverage service not configured")
+	}
+	tree, err := r.coverageService.Build(ctx, projectID, fixVersionName)
+	if err != nil {
+		return nil, err
+	}
+	return mapCoverageTree(tree), nil
+}
+
+func mapCoverageTree(tree *integrations.CoverageTree) *model.RequirementCoverageTree {
+	fv := tree.FixVersion
+	rel := &model.JiraRelease{ID: fv.ID, Name: fv.Name, Released: fv.Released}
+	if fv.ReleaseDate != "" {
+		rd := fv.ReleaseDate
+		rel.ReleaseDate = &rd
+	}
+
+	epics := make([]*model.EpicCoverageNode, len(tree.Epics))
+	for i, e := range tree.Epics {
+		epics[i] = &model.EpicCoverageNode{
+			Issue:        mapIssueSummary(e.Issue),
+			Stories:      mapStoryNodes(e.Stories),
+			CoveredCount: e.CoveredCount,
+			TotalCount:   e.TotalCount,
+		}
+	}
+
+	return &model.RequirementCoverageTree{
+		FixVersion: rel,
+		Epics:      epics,
+		Unassigned: mapStoryNodes(tree.Unassigned),
+	}
+}
+
+func mapIssueSummary(issue integrations.JiraIssue) *model.JiraIssueSummary {
+	return &model.JiraIssueSummary{
+		Key:        issue.Key,
+		Summary:    issue.Summary,
+		StatusName: issue.StatusName,
+		IssueType:  issue.IssueType,
+	}
+}
+
+func mapStoryNodes(stories []integrations.StoryNode) []*model.StoryCoverageNode {
+	nodes := make([]*model.StoryCoverageNode, len(stories))
+	for i, s := range stories {
+		node := &model.StoryCoverageNode{
+			Issue:   mapIssueSummary(s.Issue),
+			Covered: s.Covered,
+		}
+		if s.TestRunCoverage != nil {
+			node.TestRunCoverage = &model.TestRunCoverage{
+				Total:  s.TestRunCoverage.Total,
+				Passed: s.TestRunCoverage.Passed,
+				Failed: s.TestRunCoverage.Failed,
+			}
+		}
+		nodes[i] = node
+	}
+	return nodes
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.
