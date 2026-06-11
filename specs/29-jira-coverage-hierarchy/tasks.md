@@ -1,6 +1,6 @@
 # 29-jira-coverage-hierarchy - Tasks
 
-## Status: In Progress (6/13 complete)
+## Status: In Progress (7/13 complete)
 
 TDD discipline: every RED task writes failing tests that define the expected behaviour.
 Every GREEN task writes the minimum implementation to make those tests pass.
@@ -68,7 +68,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: Failing tests specify client contract including pagination behaviour. `make test` fails on this file.
   - **Context**: Req 4 AC4 (up to 500 issues). Design §3 client methods, Decision 3 (paginate), Decision 4 (POST).
 
-- [ ] **Task 3.2** 🟢 GREEN: Implement JIRA client methods
+- [x] **Task 3.2** 🟢 GREEN: Implement JIRA client methods
   - **ID**: `task-3.2`
   - **BlockedBy**: `task-3.1`
   - **File**: `internal/jira/client.go`
