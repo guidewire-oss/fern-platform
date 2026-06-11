@@ -572,6 +572,41 @@ const QUERIES = {
                 updatedAt
             }
         }
+    `,
+
+    // JIRA Coverage queries
+    JIRA_FIX_VERSIONS: `
+        query JiraFixVersions($projectId: ID!) {
+            jiraFixVersions(projectId: $projectId) {
+                id
+                name
+                released
+                releaseDate
+            }
+        }
+    `,
+
+    REQUIREMENT_COVERAGE: `
+        query RequirementCoverage($projectId: ID!, $fixVersionName: String!) {
+            requirementCoverage(projectId: $projectId, fixVersionName: $fixVersionName) {
+                fixVersion { id name released releaseDate }
+                epics {
+                    issue { key summary statusName issueType }
+                    coveredCount
+                    totalCount
+                    stories {
+                        issue { key summary statusName issueType }
+                        covered
+                        testRunCoverage { total passed failed }
+                    }
+                }
+                unassigned {
+                    issue { key summary statusName issueType }
+                    covered
+                    testRunCoverage { total passed failed }
+                }
+            }
+        }
     `
 };
 

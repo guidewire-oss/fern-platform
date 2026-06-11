@@ -38,6 +38,12 @@ type Resolver struct {
 	logger                  *logging.Logger
 }
 
+// SetCoverageService wires the coverage service into the resolver after construction.
+// The coverageServicer interface is unexported, so this setter accepts the concrete type.
+func (r *Resolver) SetCoverageService(svc *integrations.CoverageService) {
+	r.coverageService = svc
+}
+
 // NewResolver creates a new GraphQL resolver
 func NewResolver(
 	testingService *testingApp.TestRunService,

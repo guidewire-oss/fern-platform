@@ -1,6 +1,6 @@
 # 29-jira-coverage-hierarchy - Tasks
 
-## Status: In Progress (11/13 complete)
+## Status: Complete (13/13 complete)
 
 TDD discipline: every RED task writes failing tests that define the expected behaviour.
 Every GREEN task writes the minimum implementation to make those tests pass.
@@ -120,7 +120,7 @@ No implementation code is written without a failing test first.
 
 ### Phase 6: Frontend TDD (acceptance tests first)
 
-- [ ] **Task 6.1** 🔴 RED: Write failing acceptance tests for frontend behaviour
+- [x] **Task 6.1** 🔴 RED: Write failing acceptance tests for frontend behaviour
   - **ID**: `task-6.1`
   - **BlockedBy**: `task-1.2, task-1.3`
   - **File**: `acceptance/coverage_test.go`
@@ -128,7 +128,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: Full acceptance test suite is written and failing (RED). Precisely specifies all frontend behaviour. `make test-acceptance` fails.
   - **Context**: Design §6 acceptance tests. Req 1 AC2/AC4, Req 2 AC2–5, Req 3 AC5, Req 4 AC3. Writing tests first forces the UI contract to be explicit before any HTML is written.
 
-- [ ] **Task 6.2** 🟢 GREEN: Frontend Coverage tab, picker, and hierarchy tree
+- [x] **Task 6.2** 🟢 GREEN: Frontend Coverage tab, picker, and hierarchy tree
   - **ID**: `task-6.2`
   - **BlockedBy**: `task-6.1, task-5.2`
   - **File**: `web/index.html`
@@ -136,7 +136,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: Core coverage view works; tasks 6.1 scenarios 1–3 pass. `make test-acceptance` partial green.
   - **Context**: Req 1 AC1–3, Req 2 AC2–5, Req 3 AC2–4. Design §3 frontend. CLAUDE.md: static HTML/JS, no build pipeline. Hide tab when `jiraFixVersions` errors due to no connection.
 
-- [ ] **Task 6.3** 🟢 GREEN: Toggle, no-connection message, and error states
+- [x] **Task 6.3** 🟢 GREEN: Toggle, no-connection message, and error states
   - **ID**: `task-6.3`
   - **BlockedBy**: `task-6.2`
   - **File**: `web/index.html`

@@ -6761,6 +6761,243 @@
             );
         }
 
+        // --- JIRA Coverage Components ---
+
+        function StoryRow({ story, uncoveredOnly }) {
+            const hidden = uncoveredOnly && story.covered;
+            return (
+                <div
+                    className={`coverage-story-row${story.covered ? ' covered' : ' uncovered'}`}
+                    style={{
+                        display: hidden ? 'none' : 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.625rem 1rem 0.625rem 2.5rem',
+                        borderBottom: '1px solid var(--border-light)',
+                        fontSize: '0.875rem'
+                    }}
+                >
+                    <span style={{ color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.8125rem' }}>{story.issue.key}</span>
+                    <span style={{ flex: 1, color: 'var(--text-primary)' }}>{story.issue.summary}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{story.issue.statusName}</span>
+                    <span style={{
+                        padding: '0.125rem 0.5rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        background: story.covered ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.08)',
+                        color: story.covered ? '#16a34a' : '#dc2626'
+                    }}>
+                        {story.covered
+                            ? `✓ ${story.testRunCoverage ? story.testRunCoverage.total : ''}`
+                            : '✗ uncovered'}
+                    </span>
+                </div>
+            );
+        }
+
+        function UnassignedSection({ stories, uncoveredOnly }) {
+            const visible = uncoveredOnly ? stories.filter(s => !s.covered) : stories;
+            if (visible.length === 0) return null;
+            return (
+                <div className="coverage-unassigned-section">
+                    <div style={{
+                        padding: '0.625rem 1rem',
+                        background: 'var(--bg-secondary)',
+                        borderBottom: '1px solid var(--border-color)',
+                        fontWeight: '500',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.875rem'
+                    }}>
+                        Unassigned Stories
+                    </div>
+                    {stories.map(story => (
+                        <StoryRow key={story.issue.key} story={story} uncoveredOnly={uncoveredOnly} />
+                    ))}
+                </div>
+            );
+        }
+
+        function EpicRow({ epic, uncoveredOnly }) {
+            const [expanded, setExpanded] = React.useState(true);
+            const anyVisible = uncoveredOnly
+                ? epic.stories.some(s => !s.covered)
+                : true;
+            if (uncoveredOnly && !anyVisible) return null;
+            return (
+                <div>
+                    <div
+                        className="coverage-epic-row"
+                        onClick={() => setExpanded(x => !x)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            background: 'var(--bg-secondary)',
+                            borderBottom: '1px solid var(--border-color)',
+                            cursor: 'pointer',
+                            fontWeight: '500',
+                            fontSize: '0.9375rem'
+                        }}
+                    >
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', userSelect: 'none' }}>{expanded ? '▼' : '▶'}</span>
+                        <span style={{ color: 'var(--primary)', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' }}>{epic.issue.key}</span>
+                        <span style={{ flex: 1 }}>{epic.issue.summary}</span>
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                            {epic.coveredCount}/{epic.totalCount} covered
+                        </span>
+                    </div>
+                    {expanded && epic.stories.map(story => (
+                        <StoryRow key={story.issue.key} story={story} uncoveredOnly={uncoveredOnly} />
+                    ))}
+                </div>
+            );
+        }
+
+        function CoverageSection({ projectId }) {
+            const [hasConnection, setHasConnection] = React.useState(null);
+            const [versions, setVersions] = React.useState([]);
+            const [versionsError, setVersionsError] = React.useState(null);
+            const [filterText, setFilterText] = React.useState('');
+            const [selectedVersion, setSelectedVersion] = React.useState('');
+            const [tree, setTree] = React.useState(null);
+            const [treeLoading, setTreeLoading] = React.useState(false);
+            const [treeError, setTreeError] = React.useState(null);
+            const [uncoveredOnly, setUncoveredOnly] = React.useState(false);
+
+            React.useEffect(() => {
+                let cancelled = false;
+                const init = async () => {
+                    try {
+                        const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_CONNECTIONS, { projectId });
+                        const conns = data.jiraConnections || [];
+                        if (cancelled) return;
+                        setHasConnection(conns.length > 0);
+                        if (conns.length > 0) loadVersions(cancelled);
+                    } catch (_) {
+                        if (!cancelled) setHasConnection(false);
+                    }
+                };
+                const loadVersions = async (outerCancelled) => {
+                    setVersionsError(null);
+                    try {
+                        const data = await graphqlClient.query(GRAPHQL_QUERIES.JIRA_FIX_VERSIONS, { projectId });
+                        if (outerCancelled) return;
+                        const vs = data.jiraFixVersions || [];
+                        const unreleased = vs.filter(v => !v.released);
+                        const released = vs.filter(v => v.released).sort((a, b) =>
+                            (b.releaseDate || '').localeCompare(a.releaseDate || ''));
+                        setVersions([...unreleased, ...released]);
+                    } catch (err) {
+                        if (!outerCancelled) setVersionsError(err.message || 'Failed to load fix versions');
+                    }
+                };
+                init();
+                return () => { cancelled = true; };
+            }, [projectId]);
+
+            const handleVersionChange = async (e) => {
+                const name = e.target.value;
+                setSelectedVersion(name);
+                setTree(null);
+                setTreeError(null);
+                if (!name) return;
+                setTreeLoading(true);
+                try {
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.REQUIREMENT_COVERAGE, { projectId, fixVersionName: name });
+                    setTree(data.requirementCoverage);
+                } catch (err) {
+                    setTreeError(err.message || 'Failed to load coverage data');
+                } finally {
+                    setTreeLoading(false);
+                }
+            };
+
+            if (!hasConnection) return null;
+
+            const filteredVersions = filterText
+                ? versions.filter(v => v.name.toLowerCase().includes(filterText.toLowerCase()))
+                : versions;
+
+            return (
+                <div id="coverage-panel" style={{ padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.25rem', letterSpacing: '-0.01em' }}>
+                        Requirement Coverage
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        Track test coverage for JIRA issues by fix version
+                    </p>
+
+                    {versionsError ? (
+                        <div className="coverage-error" role="alert" style={{ color: 'var(--error)', fontSize: '0.875rem', padding: '0.75rem', background: 'rgba(239,68,68,0.06)', borderRadius: '0.375rem', border: '1px solid rgba(239,68,68,0.2)' }}>
+                            {versionsError}
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <input
+                                    id="coverage-version-filter"
+                                    type="text"
+                                    placeholder="Filter versions…"
+                                    value={filterText}
+                                    onChange={e => setFilterText(e.target.value)}
+                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '160px' }}
+                                />
+                                <select
+                                    id="coverage-version-picker"
+                                    value={selectedVersion}
+                                    onChange={handleVersionChange}
+                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '200px' }}
+                                >
+                                    <option value="">— Select fix version —</option>
+                                    {filteredVersions.map(v => (
+                                        <option key={v.id} value={v.name}>
+                                            {v.name}{v.released ? ` (released${v.releaseDate ? ' ' + v.releaseDate : ''})` : ' (unreleased)'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {treeError && (
+                                <div className="coverage-error" role="alert" style={{ color: 'var(--error)', fontSize: '0.875rem', padding: '0.75rem', background: 'rgba(239,68,68,0.06)', borderRadius: '0.375rem', border: '1px solid rgba(239,68,68,0.2)', marginBottom: '1rem' }}>
+                                    {treeError}
+                                </div>
+                            )}
+
+                            {treeLoading && (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading coverage…</div>
+                            )}
+
+                            {tree && !treeLoading && (
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="coverage-uncovered-only"
+                                            checked={uncoveredOnly}
+                                            onChange={e => setUncoveredOnly(e.target.checked)}
+                                        />
+                                        <label htmlFor="coverage-uncovered-only" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                            Show uncovered only
+                                        </label>
+                                    </div>
+                                    <div style={{ border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                        {tree.epics.map(epic => (
+                                            <EpicRow key={epic.issue.key} epic={epic} uncoveredOnly={uncoveredOnly} />
+                                        ))}
+                                        {tree.unassigned.length > 0 && (
+                                            <UnassignedSection stories={tree.unassigned} uncoveredOnly={uncoveredOnly} />
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+        }
+
         // JIRA Connection Management Component
         function JiraConnectionManager({ projectId }) {
             const [connections, setConnections] = useState([]);
@@ -8796,6 +9033,7 @@
                                         </p>
                                     </div>
                                     <JiraConnectionManager projectId={projectId} />
+                                    <CoverageSection projectId={projectId} />
                                 </div>
                             )}
 
