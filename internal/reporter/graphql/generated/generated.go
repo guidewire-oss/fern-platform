@@ -132,6 +132,7 @@ type ComplexityRoot struct {
 		Status             func(childComplexity int) int
 		UpdatedAt          func(childComplexity int) int
 		Username           func(childComplexity int) int
+		VersionFilter      func(childComplexity int) int
 	}
 
 	JiraFieldGQL struct {
@@ -952,6 +953,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.JiraConnection.Username(childComplexity), true
+
+	case "JiraConnection.versionFilter":
+		if e.complexity.JiraConnection.VersionFilter == nil {
+			break
+		}
+
+		return e.complexity.JiraConnection.VersionFilter(childComplexity), true
 
 	case "JiraFieldGQL.custom":
 		if e.complexity.JiraFieldGQL.Custom == nil {
@@ -3327,6 +3335,7 @@ type JiraConnection {
   username: String!
   status: String!
   isActive: Boolean!
+  versionFilter: String!
   lastTestedAt: Time
   createdAt: Time!
   updatedAt: Time!
@@ -3346,6 +3355,7 @@ input UpdateJiraConnectionInput {
   name: String!
   jiraUrl: String!
   projectKey: String!
+  versionFilter: String
 }
 
 input UpdateJiraCredentialsInput {
@@ -6757,6 +6767,50 @@ func (ec *executionContext) fieldContext_JiraConnection_isActive(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _JiraConnection_versionFilter(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JiraConnection_versionFilter(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.VersionFilter, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JiraConnection_versionFilter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JiraConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _JiraConnection_lastTestedAt(ctx context.Context, field graphql.CollectedField, obj *model.JiraConnection) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 	if err != nil {
@@ -8900,6 +8954,8 @@ func (ec *executionContext) fieldContext_Mutation_createJiraConnection(ctx conte
 				return ec.fieldContext_JiraConnection_status(ctx, field)
 			case "isActive":
 				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "versionFilter":
+				return ec.fieldContext_JiraConnection_versionFilter(ctx, field)
 			case "lastTestedAt":
 				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 			case "createdAt":
@@ -8981,6 +9037,8 @@ func (ec *executionContext) fieldContext_Mutation_updateJiraConnection(ctx conte
 				return ec.fieldContext_JiraConnection_status(ctx, field)
 			case "isActive":
 				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "versionFilter":
+				return ec.fieldContext_JiraConnection_versionFilter(ctx, field)
 			case "lastTestedAt":
 				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 			case "createdAt":
@@ -9062,6 +9120,8 @@ func (ec *executionContext) fieldContext_Mutation_updateJiraCredentials(ctx cont
 				return ec.fieldContext_JiraConnection_status(ctx, field)
 			case "isActive":
 				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "versionFilter":
+				return ec.fieldContext_JiraConnection_versionFilter(ctx, field)
 			case "lastTestedAt":
 				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 			case "createdAt":
@@ -12652,6 +12712,8 @@ func (ec *executionContext) fieldContext_Query_jiraConnection(ctx context.Contex
 				return ec.fieldContext_JiraConnection_status(ctx, field)
 			case "isActive":
 				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "versionFilter":
+				return ec.fieldContext_JiraConnection_versionFilter(ctx, field)
 			case "lastTestedAt":
 				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 			case "createdAt":
@@ -12733,6 +12795,8 @@ func (ec *executionContext) fieldContext_Query_jiraConnections(ctx context.Conte
 				return ec.fieldContext_JiraConnection_status(ctx, field)
 			case "isActive":
 				return ec.fieldContext_JiraConnection_isActive(ctx, field)
+			case "versionFilter":
+				return ec.fieldContext_JiraConnection_versionFilter(ctx, field)
 			case "lastTestedAt":
 				return ec.fieldContext_JiraConnection_lastTestedAt(ctx, field)
 			case "createdAt":
@@ -21966,7 +22030,7 @@ func (ec *executionContext) unmarshalInputUpdateJiraConnectionInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "jiraUrl", "projectKey"}
+	fieldsInOrder := [...]string{"name", "jiraUrl", "projectKey", "versionFilter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -21994,6 +22058,13 @@ func (ec *executionContext) unmarshalInputUpdateJiraConnectionInput(ctx context.
 				return it, err
 			}
 			it.ProjectKey = data
+		case "versionFilter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("versionFilter"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VersionFilter = data
 		}
 	}
 
@@ -22732,6 +22803,11 @@ func (ec *executionContext) _JiraConnection(ctx context.Context, sel ast.Selecti
 			}
 		case "isActive":
 			out.Values[i] = ec._JiraConnection_isActive(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "versionFilter":
+			out.Values[i] = ec._JiraConnection_versionFilter(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

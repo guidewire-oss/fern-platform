@@ -138,6 +138,7 @@ type JiraConnection struct {
 	Username           string     `json:"username"`
 	Status             string     `json:"status"`
 	IsActive           bool       `json:"isActive"`
+	VersionFilter      string     `json:"versionFilter"`
 	LastTestedAt       *time.Time `json:"lastTestedAt,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
@@ -427,9 +428,10 @@ type TreemapData struct {
 }
 
 type UpdateJiraConnectionInput struct {
-	Name       string `json:"name"`
-	JiraURL    string `json:"jiraUrl"`
-	ProjectKey string `json:"projectKey"`
+	Name          string  `json:"name"`
+	JiraURL       string  `json:"jiraUrl"`
+	ProjectKey    string  `json:"projectKey"`
+	VersionFilter *string `json:"versionFilter,omitempty"`
 }
 
 type UpdateJiraCredentialsInput struct {

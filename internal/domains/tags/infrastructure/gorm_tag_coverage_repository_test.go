@@ -25,7 +25,13 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 		db, err = gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		Expect(err).NotTo(HaveOccurred())
 
-		err = db.AutoMigrate(&database.Tag{}, &database.TestRun{}, &database.TestRunTag{})
+		err = db.AutoMigrate(
+			&database.Tag{},
+			&database.TestRun{},
+			&database.TestRunTag{},
+			&database.SuiteRun{},
+			&database.SpecRun{},
+		)
 		Expect(err).NotTo(HaveOccurred())
 
 		repo = infrastructure.NewGormTagRepository(db)
@@ -40,7 +46,7 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 	})
 
 	Describe("GetJiraTagCoverageByProject", func() {
-		It("returns total, passed, and failed counts per jira issue key", func() {
+		It("returns total, passed, and failed counts from test-run-level tags", func() {
 			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
 			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
 
@@ -61,6 +67,60 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 			Expect(result).To(HaveKey("PROJ-1"))
 			Expect(result["PROJ-1"].Total).To(Equal(3))
 			Expect(result["PROJ-1"].Passed).To(Equal(2))
+			Expect(result["PROJ-1"].Failed).To(Equal(1))
+		})
+
+		It("returns total, passed, and failed counts from spec-run-level tags", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+
+			sr1 := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "passed", StartTime: time.Now()}
+			sr2 := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-2", Status: "failed", StartTime: time.Now()}
+			sr3 := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-3", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(sr1).Error).NotTo(HaveOccurred())
+			Expect(db.Create(sr2).Error).NotTo(HaveOccurred())
+			Expect(db.Create(sr3).Error).NotTo(HaveOccurred())
+
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr1.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr2.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr3.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			result, err := repo.GetJiraTagCoverageByProject(ctx, "proj-a")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("PROJ-1"))
+			Expect(result["PROJ-1"].Total).To(Equal(3))
+			Expect(result["PROJ-1"].Passed).To(Equal(2))
+			Expect(result["PROJ-1"].Failed).To(Equal(1))
+		})
+
+		It("merges counts from both test-run-level and spec-run-level tags for the same issue", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+
+			// one tag at the test-run level
+			Expect(db.Create(&database.TestRunTag{TestRunID: tr.ID, TagID: jiraTag.ID}).Error).NotTo(HaveOccurred())
+
+			// one tag at the spec-run level
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+			sr := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(sr).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			result, err := repo.GetJiraTagCoverageByProject(ctx, "proj-a")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result["PROJ-1"].Total).To(Equal(2))
+			Expect(result["PROJ-1"].Passed).To(Equal(1))
 			Expect(result["PROJ-1"].Failed).To(Equal(1))
 		})
 

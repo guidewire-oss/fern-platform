@@ -1,11 +1,13 @@
 package integrations
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // GetVersions fetches all fix versions for a JIRA project.
@@ -46,29 +48,26 @@ func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey
 }
 
 // SearchIssues executes a JQL query against JIRA and returns all matching issues, paginating as needed.
+// Uses GET /rest/api/3/search/jql (Atlassian Cloud cursor-based search endpoint).
 func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username, credential string, authType AuthenticationType, jql string, fields []string) ([]JiraIssue, error) {
-	endpoint := fmt.Sprintf("%s/rest/api/3/issue/search", baseURL)
 	const pageSize = 100
 
 	var all []JiraIssue
-	startAt := 0
+	nextPageToken := ""
 
 	for {
-		body, err := json.Marshal(map[string]any{
-			"jql":        jql,
-			"fields":     fields,
-			"maxResults": pageSize,
-			"startAt":    startAt,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal search request: %w", err)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/rest/api/3/search/jql", baseURL), nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
-		req.Header.Set("Content-Type", "application/json")
+		q := req.URL.Query()
+		q.Set("jql", jql)
+		q.Set("fields", strings.Join(fields, ","))
+		q.Set("maxResults", strconv.Itoa(pageSize))
+		if nextPageToken != "" {
+			q.Set("nextPageToken", nextPageToken)
+		}
+		req.URL.RawQuery = q.Encode()
 		c.setAuthHeader(req, username, credential, authType)
 
 		resp, err := c.httpClient.Do(req)
@@ -78,14 +77,13 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("JIRA search request failed: status %d", resp.StatusCode)
+			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			return nil, fmt.Errorf("JIRA search request failed: status %d url=%s body=%s", resp.StatusCode, req.URL.String(), string(errBody))
 		}
 
 		var page struct {
-			StartAt    int `json:"startAt"`
-			MaxResults int `json:"maxResults"`
-			Total      int `json:"total"`
-			Issues     []struct {
+			NextPageToken string `json:"nextPageToken"`
+			Issues        []struct {
 				Key    string `json:"key"`
 				Fields struct {
 					Summary   string `json:"summary"`
@@ -120,10 +118,10 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 			all = append(all, issue)
 		}
 
-		if startAt+len(page.Issues) >= page.Total {
+		if page.NextPageToken == "" {
 			break
 		}
-		startAt += len(page.Issues)
+		nextPageToken = page.NextPageToken
 	}
 
 	return all, nil

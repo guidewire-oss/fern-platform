@@ -28,6 +28,7 @@ type JiraConnection struct {
 	encryptedCredential string
 	status             ConnectionStatus
 	isActive           bool
+	versionFilter      string
 	lastTestedAt       *time.Time
 	createdAt          time.Time
 	updatedAt          time.Time
@@ -123,6 +124,11 @@ func (j *JiraConnection) IsActive() bool {
 	return j.isActive
 }
 
+// VersionFilter returns the comma-separated version name prefixes for the coverage picker
+func (j *JiraConnection) VersionFilter() string {
+	return j.versionFilter
+}
+
 // GetEncryptedCredentialDirect returns the encrypted credential directly (for repository use only)
 func (j *JiraConnection) GetEncryptedCredentialDirect() string {
 	return j.encryptedCredential
@@ -150,7 +156,7 @@ func (j *JiraConnection) UpdatedAt() time.Time {
 }
 
 // UpdateConnectionInfo updates the connection information
-func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey string) error {
+func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey, versionFilter string) error {
 	if name == "" {
 		return errors.New("connection name is required")
 	}
@@ -164,6 +170,7 @@ func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey string) 
 	j.name = name
 	j.jiraURL = strings.TrimRight(jiraURL, "/")
 	j.projectKey = projectKey
+	j.versionFilter = versionFilter
 	j.updatedAt = time.Now()
 	return nil
 }
@@ -275,6 +282,7 @@ func (j *JiraConnection) Snapshot() JiraConnectionSnapshot {
 		Username:           j.username,
 		Status:             j.status,
 		IsActive:           j.isActive,
+		VersionFilter:      j.versionFilter,
 		LastTestedAt:       j.lastTestedAt,
 		CreatedAt:          j.createdAt,
 		UpdatedAt:          j.updatedAt,
@@ -292,6 +300,7 @@ type JiraConnectionSnapshot struct {
 	Username           string
 	Status             ConnectionStatus
 	IsActive           bool
+	VersionFilter      string
 	LastTestedAt       *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -304,6 +313,7 @@ func ReconstructJiraConnection(
 	projectKey, username, encryptedCredential string,
 	status ConnectionStatus,
 	isActive bool,
+	versionFilter string,
 	lastTestedAt *time.Time,
 	createdAt, updatedAt time.Time,
 ) *JiraConnection {
@@ -318,6 +328,7 @@ func ReconstructJiraConnection(
 		encryptedCredential: encryptedCredential,
 		status:              status,
 		isActive:            isActive,
+		versionFilter:       versionFilter,
 		lastTestedAt:        lastTestedAt,
 		createdAt:           createdAt,
 		updatedAt:           updatedAt,

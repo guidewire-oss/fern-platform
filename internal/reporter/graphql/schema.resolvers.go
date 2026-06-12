@@ -352,12 +352,17 @@ func (r *mutationResolver) UpdateJiraConnection(ctx context.Context, id string, 
 		return nil, fmt.Errorf("forbidden")
 	}
 
+	versionFilter := ""
+	if input.VersionFilter != nil {
+		versionFilter = *input.VersionFilter
+	}
 	updated, err := r.jiraConnectionService.UpdateConnection(
 		ctx,
 		id,
 		input.Name,
 		input.JiraURL,
 		input.ProjectKey,
+		versionFilter,
 	)
 	if err != nil {
 		return nil, err
@@ -910,59 +915,6 @@ func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID strin
 		return nil, err
 	}
 	return mapCoverageTree(tree), nil
-}
-
-func mapCoverageTree(tree *integrations.CoverageTree) *model.RequirementCoverageTree {
-	fv := tree.FixVersion
-	rel := &model.JiraRelease{ID: fv.ID, Name: fv.Name, Released: fv.Released}
-	if fv.ReleaseDate != "" {
-		rd := fv.ReleaseDate
-		rel.ReleaseDate = &rd
-	}
-
-	epics := make([]*model.EpicCoverageNode, len(tree.Epics))
-	for i, e := range tree.Epics {
-		epics[i] = &model.EpicCoverageNode{
-			Issue:        mapIssueSummary(e.Issue),
-			Stories:      mapStoryNodes(e.Stories),
-			CoveredCount: e.CoveredCount,
-			TotalCount:   e.TotalCount,
-		}
-	}
-
-	return &model.RequirementCoverageTree{
-		FixVersion: rel,
-		Epics:      epics,
-		Unassigned: mapStoryNodes(tree.Unassigned),
-	}
-}
-
-func mapIssueSummary(issue integrations.JiraIssue) *model.JiraIssueSummary {
-	return &model.JiraIssueSummary{
-		Key:        issue.Key,
-		Summary:    issue.Summary,
-		StatusName: issue.StatusName,
-		IssueType:  issue.IssueType,
-	}
-}
-
-func mapStoryNodes(stories []integrations.StoryNode) []*model.StoryCoverageNode {
-	nodes := make([]*model.StoryCoverageNode, len(stories))
-	for i, s := range stories {
-		node := &model.StoryCoverageNode{
-			Issue:   mapIssueSummary(s.Issue),
-			Covered: s.Covered,
-		}
-		if s.TestRunCoverage != nil {
-			node.TestRunCoverage = &model.TestRunCoverage{
-				Total:  s.TestRunCoverage.Total,
-				Passed: s.TestRunCoverage.Passed,
-				Failed: s.TestRunCoverage.Failed,
-			}
-		}
-		nodes[i] = node
-	}
-	return nodes
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.

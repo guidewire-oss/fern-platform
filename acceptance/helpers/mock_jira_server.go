@@ -123,9 +123,9 @@ func (m *MockJiraServer) setupRoutes(mux *http.ServeMux) {
 	// Server info endpoint (for JIRA version detection)
 	mux.HandleFunc("/rest/api/2/serverInfo", m.handleServerInfo)
 
-	// Coverage endpoints (v3)
+	// Coverage endpoints
 	mux.HandleFunc("/rest/api/3/project/", m.handleProjectV3)
-	mux.HandleFunc("/rest/api/3/issue/search", m.handleIssueSearch)
+	mux.HandleFunc("/rest/api/3/search/jql", m.handleIssueSearch)
 }
 
 func (m *MockJiraServer) handleMyself(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +347,7 @@ func (m *MockJiraServer) AddIssueByKey(issue MockIssue) {
 	m.issuesByKey[issue.Key] = issue
 }
 
-// SimulateUnavailable makes all /rest/api/3/ endpoints return 503.
+// SimulateUnavailable makes coverage endpoints (versions and issue search) return 503.
 func (m *MockJiraServer) SimulateUnavailable(on bool) {
 	m.unavailable = on
 }
@@ -398,37 +398,13 @@ func (m *MockJiraServer) handleIssueSearch(w http.ResponseWriter, r *http.Reques
 		http.Error(w, `{"errorMessages":["Unauthorized"],"errors":{}}`, http.StatusUnauthorized)
 		return
 	}
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, `{"errorMessages":["Method not allowed"]}`, http.StatusMethodNotAllowed)
 		return
 	}
 
-	var body struct {
-		JQL        string `json:"jql"`
-		StartAt    int    `json:"startAt"`
-		MaxResults int    `json:"maxResults"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"errorMessages":["Bad request"]}`, http.StatusBadRequest)
-		return
-	}
-	if body.MaxResults <= 0 {
-		body.MaxResults = 50
-	}
-
-	issues := m.resolveJQL(body.JQL)
-
-	// Paginate
-	total := len(issues)
-	start := body.StartAt
-	if start > total {
-		start = total
-	}
-	end := start + body.MaxResults
-	if end > total {
-		end = total
-	}
-	page := issues[start:end]
+	jql := r.URL.Query().Get("jql")
+	issues := m.resolveJQL(jql)
 
 	type issueStatus struct {
 		Name string `json:"name"`
@@ -454,14 +430,12 @@ func (m *MockJiraServer) handleIssueSearch(w http.ResponseWriter, r *http.Reques
 		Fields issueFields `json:"fields"`
 	}
 	type searchResponse struct {
-		StartAt    int             `json:"startAt"`
-		MaxResults int             `json:"maxResults"`
-		Total      int             `json:"total"`
-		Issues     []issueResponse `json:"issues"`
+		NextPageToken string          `json:"nextPageToken,omitempty"`
+		Issues        []issueResponse `json:"issues"`
 	}
 
-	issueResponses := make([]issueResponse, len(page))
-	for i, issue := range page {
+	issueResponses := make([]issueResponse, len(issues))
+	for i, issue := range issues {
 		fields := issueFields{
 			Summary:   issue.Summary,
 			Status:    issueStatus{Name: issue.Status},
@@ -477,12 +451,7 @@ func (m *MockJiraServer) handleIssueSearch(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(searchResponse{
-		StartAt:    body.StartAt,
-		MaxResults: body.MaxResults,
-		Total:      total,
-		Issues:     issueResponses,
-	})
+	json.NewEncoder(w).Encode(searchResponse{Issues: issueResponses})
 }
 
 // resolveJQL returns issues matching a simple JQL expression.

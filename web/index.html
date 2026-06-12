@@ -6857,6 +6857,7 @@
 
         function CoverageSection({ projectId }) {
             const [hasConnection, setHasConnection] = React.useState(null);
+            const [versionFilter, setVersionFilter] = React.useState('');
             const [versions, setVersions] = React.useState([]);
             const [versionsError, setVersionsError] = React.useState(null);
             const [filterText, setFilterText] = React.useState('');
@@ -6874,7 +6875,11 @@
                         const conns = data.jiraConnections || [];
                         if (cancelled) return;
                         setHasConnection(conns.length > 0);
-                        if (conns.length > 0) loadVersions(cancelled);
+                        if (conns.length > 0) {
+                            const conn = conns[0];
+                            setVersionFilter(conn.versionFilter || '');
+                            loadVersions(cancelled);
+                        }
                     } catch (_) {
                         if (!cancelled) setHasConnection(false);
                     }
@@ -6885,9 +6890,9 @@
                         const data = await graphqlClient.query(GRAPHQL_QUERIES.JIRA_FIX_VERSIONS, { projectId });
                         if (outerCancelled) return;
                         const vs = data.jiraFixVersions || [];
-                        const unreleased = vs.filter(v => !v.released);
+                        const unreleased = vs.filter(v => !v.released).sort((a, b) => a.name.localeCompare(b.name));
                         const released = vs.filter(v => v.released).sort((a, b) =>
-                            (b.releaseDate || '').localeCompare(a.releaseDate || ''));
+                            (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name));
                         setVersions([...unreleased, ...released]);
                     } catch (err) {
                         if (!outerCancelled) setVersionsError(err.message || 'Failed to load fix versions');
@@ -6916,9 +6921,14 @@
 
             if (!hasConnection) return null;
 
-            const filteredVersions = filterText
-                ? versions.filter(v => v.name.toLowerCase().includes(filterText.toLowerCase()))
+            // Apply connection-level prefix filter first, then user's live text filter
+            const prefixes = versionFilter ? versionFilter.split(',').map(p => p.trim().toLowerCase()).filter(Boolean) : [];
+            const prefixFiltered = prefixes.length > 0
+                ? versions.filter(v => prefixes.some(p => v.name.toLowerCase().startsWith(p)))
                 : versions;
+            const filteredVersions = filterText
+                ? prefixFiltered.filter(v => v.name.toLowerCase().includes(filterText.toLowerCase()))
+                : prefixFiltered;
 
             return (
                 <div id="coverage-panel" style={{ padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
@@ -6999,7 +7009,7 @@
         }
 
         // JIRA Connection Management Component
-        function JiraConnectionManager({ projectId }) {
+        function JiraConnectionManager({ projectId, onConnectionChange }) {
             const [connections, setConnections] = useState([]);
             const [loading, setLoading] = useState(true);
             const [showAddModal, setShowAddModal] = useState(false);
@@ -7459,6 +7469,7 @@
                                 setShowAddModal(false);
                                 setEditingConnection(null);
                                 fetchConnections();
+                                if (onConnectionChange) onConnectionChange();
                             }}
                         />
                     )}
@@ -7488,7 +7499,8 @@
                 authenticationType: connection?.authenticationType || 'api_token',
                 projectKey: connection?.projectKey || '',
                 username: connection?.username || '',
-                credential: ''
+                credential: '',
+                versionFilter: connection?.versionFilter || ''
             });
             const [loading, setLoading] = useState(false);
             const [errors, setErrors] = useState({});
@@ -7544,7 +7556,8 @@
                             input: {
                                 name: formData.name,
                                 jiraUrl: formData.jiraUrl,
-                                projectKey: formData.projectKey
+                                projectKey: formData.projectKey,
+                                versionFilter: formData.versionFilter
                             }
                         });
                         
@@ -7737,6 +7750,29 @@
                                         {errors.projectKey}
                                     </p>
                                 )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Coverage Version Filter
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.versionFilter}
+                                    onChange={(e) => setFormData({ ...formData, versionFilter: e.target.value })}
+                                    placeholder="e.g. Atmos, Atmos NG"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                    Comma-separated prefixes to show in the Coverage picker (empty = show all)
+                                </p>
                             </div>
 
                             <div style={{ marginBottom: '1.5rem' }}>
@@ -8823,6 +8859,7 @@
             const [project, setProject] = useState(null);
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('general');
+            const [coverageRefreshKey, setCoverageRefreshKey] = useState(0);
 
             // Extract project ID from route (format: /project/:projectId/settings)
             const projectId = route.split('/')[2];
@@ -9032,8 +9069,8 @@
                                             Connect external tools and services to enhance your testing workflow
                                         </p>
                                     </div>
-                                    <JiraConnectionManager projectId={projectId} />
-                                    <CoverageSection projectId={projectId} />
+                                    <JiraConnectionManager projectId={projectId} onConnectionChange={() => setCoverageRefreshKey(k => k + 1)} />
+                                    <CoverageSection key={coverageRefreshKey} projectId={projectId} />
                                 </div>
                             )}
 

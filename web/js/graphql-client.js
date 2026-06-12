@@ -438,13 +438,14 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt
             }
         }
     `,
-    
+
     CREATE_JIRA_CONNECTION: `
         mutation CreateJiraConnection($input: CreateJiraConnectionInput!) {
             createJiraConnection(input: $input) {
@@ -457,13 +458,14 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt
             }
         }
     `,
-    
+
     UPDATE_JIRA_CONNECTION: `
         mutation UpdateJiraConnection($id: ID!, $input: UpdateJiraConnectionInput!) {
             updateJiraConnection(id: $id, input: $input) {
@@ -476,6 +478,7 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt

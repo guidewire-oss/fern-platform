@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
@@ -18,12 +20,10 @@ type jiraVersionsResponse []struct {
 	ReleaseDate string `json:"releaseDate,omitempty"`
 }
 
-// jiraSearchResponse matches the JIRA REST API POST /rest/api/3/issue/search response.
+// jiraSearchResponse matches the JIRA REST API GET /rest/api/3/search/jql response.
 type jiraSearchResponse struct {
-	StartAt    int               `json:"startAt"`
-	MaxResults int               `json:"maxResults"`
-	Total      int               `json:"total"`
-	Issues     []jiraSearchIssue `json:"issues"`
+	NextPageToken string            `json:"nextPageToken,omitempty"`
+	Issues        []jiraSearchIssue `json:"issues"`
 }
 
 type jiraSearchIssue struct {
@@ -141,7 +141,6 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 	t.Run("returns all issues from a single page", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resp := jiraSearchResponse{
-				StartAt: 0, MaxResults: 100, Total: 2,
 				Issues: []jiraSearchIssue{
 					{Key: "PROJ-1", Fields: jiraIssueFields{Summary: "Story one", Status: jiraStatus{Name: "To Do"}, IssueType: jiraIssueType{Name: "Story"}}},
 					{Key: "PROJ-2", Fields: jiraIssueFields{Summary: "Story two", Status: jiraStatus{Name: "Done"}, IssueType: jiraIssueType{Name: "Story"}}},
@@ -164,33 +163,27 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 		}
 	})
 
-	t.Run("paginates until all issues are fetched when total exceeds maxResults", func(t *testing.T) {
-		var requests []int
+	t.Run("paginates using nextPageToken until exhausted", func(t *testing.T) {
+		var capturedTokens []string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var body struct {
-				StartAt    int      `json:"startAt"`
-				MaxResults int      `json:"maxResults"`
-				JQL        string   `json:"jql"`
-				Fields     []string `json:"fields"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			requests = append(requests, body.StartAt)
+			token := r.URL.Query().Get("nextPageToken")
+			capturedTokens = append(capturedTokens, token)
 
-			var issues []jiraSearchIssue
-			if body.StartAt == 0 {
-				issues = []jiraSearchIssue{
-					{Key: "PROJ-1", Fields: jiraIssueFields{Summary: "S1", Status: jiraStatus{Name: "To Do"}, IssueType: jiraIssueType{Name: "Story"}}},
-					{Key: "PROJ-2", Fields: jiraIssueFields{Summary: "S2", Status: jiraStatus{Name: "To Do"}, IssueType: jiraIssueType{Name: "Story"}}},
+			var resp jiraSearchResponse
+			if token == "" {
+				resp = jiraSearchResponse{
+					NextPageToken: "page2",
+					Issues: []jiraSearchIssue{
+						{Key: "PROJ-1", Fields: jiraIssueFields{Summary: "S1", Status: jiraStatus{Name: "To Do"}, IssueType: jiraIssueType{Name: "Story"}}},
+						{Key: "PROJ-2", Fields: jiraIssueFields{Summary: "S2", Status: jiraStatus{Name: "To Do"}, IssueType: jiraIssueType{Name: "Story"}}},
+					},
 				}
 			} else {
-				issues = []jiraSearchIssue{
-					{Key: "PROJ-3", Fields: jiraIssueFields{Summary: "S3", Status: jiraStatus{Name: "Done"}, IssueType: jiraIssueType{Name: "Story"}}},
+				resp = jiraSearchResponse{
+					Issues: []jiraSearchIssue{
+						{Key: "PROJ-3", Fields: jiraIssueFields{Summary: "S3", Status: jiraStatus{Name: "Done"}, IssueType: jiraIssueType{Name: "Story"}}},
+					},
 				}
-			}
-
-			resp := jiraSearchResponse{
-				StartAt: body.StartAt, MaxResults: 2, Total: 3,
-				Issues: issues,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -204,24 +197,22 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 		if len(result) != 3 {
 			t.Fatalf("expected 3 issues (2 pages), got %d", len(result))
 		}
-		if len(requests) != 2 {
-			t.Errorf("expected 2 HTTP requests (one per page), got %d", len(requests))
+		if len(capturedTokens) != 2 {
+			t.Errorf("expected 2 HTTP requests, got %d", len(capturedTokens))
 		}
-		if requests[0] != 0 || requests[1] != 2 {
-			t.Errorf("unexpected startAt values: %v", requests)
+		if capturedTokens[0] != "" || capturedTokens[1] != "page2" {
+			t.Errorf("unexpected nextPageToken values: %v", capturedTokens)
 		}
 	})
 
-	t.Run("sends correct JQL and fields in POST body", func(t *testing.T) {
-		var capturedBody struct {
-			JQL        string   `json:"jql"`
-			Fields     []string `json:"fields"`
-			MaxResults int      `json:"maxResults"`
-		}
+	t.Run("sends correct JQL and fields as query params", func(t *testing.T) {
+		var capturedJQL, capturedFields, capturedMaxResults string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewDecoder(r.Body).Decode(&capturedBody)
+			capturedJQL = r.URL.Query().Get("jql")
+			capturedFields = r.URL.Query().Get("fields")
+			capturedMaxResults = r.URL.Query().Get("maxResults")
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(jiraSearchResponse{Total: 0, Issues: []jiraSearchIssue{}})
+			_ = json.NewEncoder(w).Encode(jiraSearchResponse{Issues: []jiraSearchIssue{}})
 		}))
 		defer srv.Close()
 
@@ -231,21 +222,21 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if capturedBody.JQL != wantJQL {
-			t.Errorf("expected JQL %q, got %q", wantJQL, capturedBody.JQL)
+		if capturedJQL != wantJQL {
+			t.Errorf("expected JQL %q, got %q", wantJQL, capturedJQL)
 		}
-		if len(capturedBody.Fields) != len(wantFields) {
-			t.Errorf("expected %d fields, got %d", len(wantFields), len(capturedBody.Fields))
+		if capturedFields != strings.Join(wantFields, ",") {
+			t.Errorf("expected fields %q, got %q", strings.Join(wantFields, ","), capturedFields)
 		}
-		if capturedBody.MaxResults <= 0 {
-			t.Errorf("expected MaxResults > 0, got %d", capturedBody.MaxResults)
+		maxResults, _ := strconv.Atoi(capturedMaxResults)
+		if maxResults <= 0 {
+			t.Errorf("expected maxResults > 0, got %q", capturedMaxResults)
 		}
 	})
 
 	t.Run("parses parent field on issues that have one", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resp := jiraSearchResponse{
-				Total: 1, StartAt: 0, MaxResults: 100,
 				Issues: []jiraSearchIssue{
 					{
 						Key: "PROJ-10",

@@ -181,14 +181,32 @@ func (r *GormTagRepository) toDomainModel(dbTag *database.Tag) (*domain.Tag, err
 // GetJiraTagCoverageByProject returns per-JIRA-issue-key coverage counts for all test runs in a project.
 func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]domain.CoverageCount, error) {
 	var rows []coverageRow
-	err := r.db.WithContext(ctx).
-		Table("tags t").
-		Select("t.value, COUNT(*) AS total, SUM(CASE WHEN tr.status = 'passed' THEN 1 ELSE 0 END) AS passed, SUM(CASE WHEN tr.status = 'failed' THEN 1 ELSE 0 END) AS failed").
-		Joins("JOIN test_run_tags trt ON trt.tag_id = t.id").
-		Joins("JOIN test_runs tr ON tr.id = trt.test_run_id").
-		Where("t.category = ? AND tr.project_id = ?", "jira", projectID).
-		Group("t.value").
-		Scan(&rows).Error
+	// UNION spec-run-level and test-run-level JIRA tags so both tagging
+	// granularities contribute to coverage counts.
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT t.value,
+		       COUNT(*)                                              AS total,
+		       SUM(CASE WHEN tagged.status = 'passed' THEN 1 ELSE 0 END) AS passed,
+		       SUM(CASE WHEN tagged.status = 'failed' THEN 1 ELSE 0 END) AS failed
+		FROM tags t
+		JOIN (
+		    SELECT srt.tag_id, sr.status
+		    FROM   spec_run_tags srt
+		    JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
+		    JOIN   suite_runs su ON su.id  = sr.suite_run_id
+		    JOIN   test_runs  tr ON tr.id  = su.test_run_id
+		    WHERE  tr.project_id = ? AND sr.deleted_at IS NULL
+
+		    UNION ALL
+
+		    SELECT trt.tag_id, tr.status
+		    FROM   test_run_tags trt
+		    JOIN   test_runs tr ON tr.id = trt.test_run_id
+		    WHERE  tr.project_id = ? AND tr.deleted_at IS NULL
+		) tagged ON tagged.tag_id = t.id
+		WHERE t.category = 'jira'
+		GROUP BY t.value
+	`, projectID, projectID).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query jira tag coverage: %w", err)
 	}

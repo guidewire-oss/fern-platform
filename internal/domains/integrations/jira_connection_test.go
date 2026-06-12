@@ -224,7 +224,7 @@ func TestJiraConnection_UpdateConnectionInfo(t *testing.T) {
 				"test-token",
 			)
 
-			err := testConn.UpdateConnectionInfo(tt.newName, tt.newURL, tt.newKey)
+			err := testConn.UpdateConnectionInfo(tt.newName, tt.newURL, tt.newKey, "")
 
 			if tt.wantErr {
 				assert.Error(t, err)

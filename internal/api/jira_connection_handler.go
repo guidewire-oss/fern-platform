@@ -42,9 +42,10 @@ type CreateJiraConnectionRequest struct {
 
 // UpdateJiraConnectionRequest represents the request to update a JIRA connection
 type UpdateJiraConnectionRequest struct {
-	Name       string `json:"name"`
-	JiraURL    string `json:"jiraUrl"`
-	ProjectKey string `json:"projectKey"`
+	Name          string `json:"name"`
+	JiraURL       string `json:"jiraUrl"`
+	ProjectKey    string `json:"projectKey"`
+	VersionFilter string `json:"versionFilter"`
 }
 
 // UpdateJiraCredentialsRequest represents the request to update JIRA credentials
@@ -65,6 +66,7 @@ type JiraConnectionResponse struct {
 	Username           string  `json:"username"`
 	Status             string  `json:"status"`
 	IsActive           bool    `json:"isActive"`
+	VersionFilter      string  `json:"versionFilter"`
 	LastTestedAt       *string `json:"lastTestedAt,omitempty"`
 	CreatedAt          string  `json:"createdAt"`
 	UpdatedAt          string  `json:"updatedAt"`
@@ -242,6 +244,7 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 		req.Name,
 		req.JiraURL,
 		req.ProjectKey,
+		req.VersionFilter,
 	)
 	if err != nil {
 		h.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -422,6 +425,7 @@ func (h *JiraConnectionHandler) convertToResponse(conn *integrations.JiraConnect
 		Username:           snapshot.Username,
 		Status:             string(snapshot.Status),
 		IsActive:           snapshot.IsActive,
+		VersionFilter:      snapshot.VersionFilter,
 		LastTestedAt:       lastTested,
 		CreatedAt:          snapshot.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:          snapshot.UpdatedAt.Format(time.RFC3339),

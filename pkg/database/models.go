@@ -193,6 +193,7 @@ type JiraConnection struct {
 	Status              string    `gorm:"type:varchar(50);not null;default:'pending'" json:"status"`
 	IsActive            bool      `gorm:"not null;default:false" json:"is_active"`
 	LastTestedAt        *time.Time `json:"last_tested_at,omitempty"`
+	VersionFilter       string    `gorm:"type:varchar(500);not null;default:''" json:"version_filter"`
 }
 
 // ProjectPermission represents explicit project permissions for a user

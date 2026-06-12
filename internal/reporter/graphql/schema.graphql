@@ -333,6 +333,7 @@ type JiraConnection {
   username: String!
   status: String!
   isActive: Boolean!
+  versionFilter: String!
   lastTestedAt: Time
   createdAt: Time!
   updatedAt: Time!
@@ -352,6 +353,7 @@ input UpdateJiraConnectionInput {
   name: String!
   jiraUrl: String!
   projectKey: String!
+  versionFilter: String
 }
 
 input UpdateJiraCredentialsInput {

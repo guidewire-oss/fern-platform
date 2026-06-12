@@ -106,7 +106,7 @@ func buildStoredConnection(t *testing.T, key []byte) *integrations.JiraConnectio
 		conn.AuthenticationType(), conn.ProjectKey(), conn.Username(),
 		encrypted,
 		integrations.ConnectionStatusPending,
-		false, nil, now, now,
+		false, "", nil, now, now,
 	)
 }
 

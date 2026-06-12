@@ -59,7 +59,7 @@ func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID,
 }
 
 // UpdateConnection updates an existing JIRA connection
-func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connectionID, name, jiraURL, projectKey string) (*JiraConnection, error) {
+func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connectionID, name, jiraURL, projectKey, versionFilter string) (*JiraConnection, error) {
 	// Retrieve the connection
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connection
 	}
 
 	// Update connection info
-	if err := conn.UpdateConnectionInfo(name, jiraURL, projectKey); err != nil {
+	if err := conn.UpdateConnectionInfo(name, jiraURL, projectKey, versionFilter); err != nil {
 		return nil, fmt.Errorf("failed to update connection info: %w", err)
 	}
 

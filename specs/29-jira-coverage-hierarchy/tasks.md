@@ -1,6 +1,6 @@
 # 29-jira-coverage-hierarchy - Tasks
 
-## Status: Complete (13/13 complete)
+## Status: In progress (13/15 complete)
 
 TDD discipline: every RED task writes failing tests that define the expected behaviour.
 Every GREEN task writes the minimum implementation to make those tests pass.
@@ -32,8 +32,8 @@ No implementation code is written without a failing test first.
   - **ID**: `task-1.3`
   - **BlockedBy**: `task-1.1`
   - **File**: `acceptance/helpers/mock_jira_server.go`
-  - **Change**: Added `MockVersion`, `MockIssue`, `MockIssueParent` fixture types. Extended `MockJiraServer` with `versions`, `issuesByVersion`, `issuesByKey`, `unavailable` fields. Registered `GET /rest/api/3/project/{key}/versions` (handleProjectV3) and `POST /rest/api/3/issue/search` (handleIssueSearch) on a new `/rest/api/3/` prefix. Issue search paginates via `startAt`/`maxResults`. JQL parser supports `fixVersion = "..."` and `issueKey IN (...)`. Added `SetVersions`, `SetIssuesForVersion`, `AddIssueByKey`, `SimulateUnavailable` helper methods. Acceptance module is separate (`acceptance/go.mod`).
-  - **Outcome**: Tests can configure versions and issues per project, drive paginated responses, and simulate JIRA unavailability.
+  - **Change**: Added `MockVersion`, `MockIssue`, `MockIssueParent` fixture types. Extended `MockJiraServer` with `versions`, `issuesByVersion`, `issuesByKey`, `unavailable` fields. Registered `GET /rest/api/3/project/{key}/versions` (handleProjectV3) and `GET /rest/api/3/search/jql` (handleIssueSearch) — the Atlassian Cloud cursor-based endpoint. Response format: `{nextPageToken, issues}` (no `startAt`/`total`); mock returns all matching issues in one shot (no server-side pagination). JQL parser supports `fixVersion = "..."` and `issueKey IN (...)`. Added `SetVersions`, `SetIssuesForVersion`, `AddIssueByKey`, `SimulateUnavailable` helper methods. Acceptance module is separate (`acceptance/go.mod`).
+  - **Outcome**: Tests can configure versions and issues per project and simulate JIRA unavailability.
   - **Context**: Design §3 mock endpoints.
 
 ---
@@ -51,10 +51,10 @@ No implementation code is written without a failing test first.
 - [x] **Task 2.2** 🟢 GREEN: Implement tag repository method
   - **ID**: `task-2.2`
   - **BlockedBy**: `task-2.1`
-  - **File**: `internal/repository/tag_repository.go`
-  - **Change**: Add `GetJiraTagCoverageByProject(projectID string) (map[string]CoverageCount, error)`. Join `tags → test_run_tags → test_runs` where `category = 'jira'` and `project_id = $1`, group by `t.value`, aggregate total/passed/failed. Implement until all tests from task-2.1 pass.
-  - **Outcome**: `make test` passes for tag_repository_test.go. No behaviour beyond what the tests specify.
-  - **Context**: Design §3 SQL. Minimum implementation to go green — no extra error handling for scenarios the tests don't cover.
+  - **File**: `internal/domains/tags/infrastructure/gorm_tag_repository.go`
+  - **Change**: Implemented `GetJiraTagCoverageByProject` using a raw SQL UNION query that aggregates from both `spec_run_tags` (individual test level, joined via `spec_runs → suite_runs → test_runs`) and `test_run_tags` (whole-run level, joined via `test_runs`) where `category = 'jira'` and `project_id = ?`, grouped by `t.value`. Both tagging granularities contribute to `Total`/`Passed`/`Failed` counts. Uses `db.Raw(...)` rather than the fluent GORM API because GORM cannot express UNION queries.
+  - **Outcome**: `make test` passes for coverage repository tests. Tags at either granularity show an issue as covered.
+  - **Context**: Design §3 SQL. Supports two tag workflows: whole-run tags (e.g. from CI reporter) and per-spec tags (e.g. from seed script or future reporter field).
 
 ---
 
@@ -71,10 +71,10 @@ No implementation code is written without a failing test first.
 - [x] **Task 3.2** 🟢 GREEN: Implement JIRA client methods
   - **ID**: `task-3.2`
   - **BlockedBy**: `task-3.1`
-  - **File**: `internal/jira/client.go`
-  - **Change**: Add `GetVersions(projectKey string) ([]JiraVersion, error)` — `GET /rest/api/3/project/{projectKey}/versions`. Add `SearchIssues(jql string, fields []string) ([]JiraIssue, error)` — `POST /rest/api/3/issue/search` with `maxResults=100`, loop until `startAt + len(issues) >= total`. Implement until all tests from task-3.1 pass.
-  - **Outcome**: `make test` passes for client_test.go. Pagination works correctly.
-  - **Context**: Design §3 client methods. Existing client usage patterns in client.go for auth/HTTP setup.
+  - **File**: `internal/domains/integrations/jira_client_coverage.go`
+  - **Change**: Implemented `GetVersions` — `GET /rest/api/3/project/{projectKey}/versions`. Implemented `SearchIssues` — `GET /rest/api/3/search/jql` (Atlassian Cloud cursor-based endpoint; `POST /rest/api/3/issue/search` returns 405 on Cloud and `GET /rest/api/3/issue/search` returns 404 by routing to a single-issue handler). Pagination uses `nextPageToken` in the response (not `startAt`/`total` offset). Loop breaks when response `nextPageToken` is empty. Error bodies included in error messages via `io.LimitReader` for diagnosability.
+  - **Outcome**: `make test` passes for JIRA client tests. Cursor-based pagination retrieves all pages.
+  - **Context**: Design §3 client methods. Atlassian Cloud only supports `GET /rest/api/3/search/jql` with cursor pagination — the v2 search endpoints return 410 Gone on Cloud instances.
 
 ---
 
@@ -144,6 +144,22 @@ No implementation code is written without a failing test first.
   - **Outcome**: `make test-acceptance` fully green. All acceptance scenarios pass.
   - **Context**: Req 1 AC4, Req 3 AC5, Req 4 AC3. Design §5 error handling.
 
+- [ ] **Task 6.4** 🟢 GREEN: JIRA issue keys as external links
+  - **ID**: `task-6.4`
+  - **BlockedBy**: `task-6.2`
+  - **File**: `web/index.html`
+  - **Change**: Render every issue key (epic and story) in the hierarchy tree as an `<a>` tag linking to `<jira-base-url>/browse/<issue-key>` in a new tab. The base URL is already available from the `JiraConnection` record — pass it through the `requirementCoverage` GraphQL response or read it from the connection state already held client-side when the coverage tab is opened.
+  - **Outcome**: Clicking any issue key in the coverage tree opens the JIRA issue directly. No new GraphQL field required if the base URL is already in client state.
+  - **Context**: UX improvement — closes the loop between coverage indicators and the source JIRA issues.
+
+- [ ] **Task 6.5** 🟢 GREEN: Drill down from covered story to its tagged test runs
+  - **ID**: `task-6.5`
+  - **BlockedBy**: `task-6.2`
+  - **File**: `web/index.html`
+  - **Change**: On covered story rows, make the test run count a clickable link or button. On click, open a panel or modal showing the spec runs tagged with that issue key for this project — spec name, status, suite, and a link to the full test run. Query the existing spec run / test run data filtered by the JIRA tag value. No new backend endpoint needed if the tag value can be passed as a filter to an existing query; add a lightweight GraphQL query (`specRunsByJiraTag(projectId, issueKey)`) if not.
+  - **Outcome**: A user can navigate from "3 tests cover PROJ-123" directly to those 3 tests. Closes the loop between coverage summary and the actual test evidence.
+  - **Context**: Complements task-6.4 — together they make the coverage view a navigation hub, not just a status display.
+
 ---
 
 ## Dependency Diagram
@@ -156,7 +172,8 @@ task-1.1 (types+ifaces) ──┬──▶ task-2.1 🔴 ──▶ task-2.2 🟢
                            └──▶ task-4.1 🔴 ───────────────────────────────────────┘
 
 task-1.2 (schema+codegen) ──────────────────────────────────────────────────────▶ task-5.1 🔴
-                            └──▶ task-6.1 🔴 ──▶ task-6.2 🟢 ──▶ task-6.3 🟢
+                            └──▶ task-6.1 🔴 ──▶ task-6.2 🟢 ──▶ task-6.3 🟢 ──┬──▶ task-6.4 🟢
+                                                                                   └──▶ task-6.5 🟢
 
 task-1.3 (mock server) ──────────────────────────────────────────────────────── task-3.1 🔴
                          └──▶ task-6.1 🔴
@@ -170,7 +187,9 @@ task-1.3 (mock server) ───────────────────
 - Task 4.1 (service RED, uses interface mocks) runs in parallel with 2.x and 3.x — no implementation needed to write the service tests
 - Frontend track (1.2 → 6.1 → 6.2 → 6.3) runs in parallel with backend service/resolver track
 
-**Critical path:** task-1.1 → task-3.1 → task-3.2 → task-4.2 → task-5.1 → task-5.2 → task-6.2 → task-6.3 (8 tasks)
+**Critical path:** task-1.1 → task-3.1 → task-3.2 → task-4.2 → task-5.1 → task-5.2 → task-6.2 → task-6.3 → task-6.5 (9 tasks)
+
+**Parallel opportunities (new):** Tasks 6.4 and 6.5 both unblock after 6.2 and can be developed simultaneously.
 
 Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed in parallel with the 3.x chain.
 
@@ -178,7 +197,7 @@ Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed 
 
 ## Completion Criteria
 
-- [ ] All 13 tasks checked off
+- [ ] All 15 tasks checked off
 - [ ] `make test` fully green (all unit + resolver tests pass)
 - [ ] `make test-acceptance` fully green (all 5 acceptance scenarios pass)
 - [ ] Every implementation task was preceded by a failing test
@@ -189,3 +208,5 @@ Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed 
 - [ ] "Show uncovered only" toggle works client-side
 - [ ] JIRA API errors show user-friendly messages; tab does not crash
 - [ ] No regressions in existing JIRA integration features
+- [ ] Every JIRA issue key in the coverage tree links to the issue in JIRA (new tab)
+- [ ] Clicking the test count on a covered story shows the tagged spec runs
