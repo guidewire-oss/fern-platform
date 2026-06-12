@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+type CoveredSpecRun struct {
+	SpecName  string    `json:"specName"`
+	Status    string    `json:"status"`
+	SuiteName string    `json:"suiteName"`
+	TestRunID string    `json:"testRunId"`
+	Branch    string    `json:"branch"`
+	StartTime time.Time `json:"startTime"`
+	Duration  int       `json:"duration"`
+}
+
 type CreateJiraConnectionInput struct {
 	ProjectID          string `json:"projectId"`
 	Name               string `json:"name"`
@@ -289,9 +299,10 @@ type StatusCount struct {
 }
 
 type StoryCoverageNode struct {
-	Issue           *JiraIssueSummary `json:"issue"`
-	Covered         bool              `json:"covered"`
-	TestRunCoverage *TestRunCoverage  `json:"testRunCoverage,omitempty"`
+	Issue           *JiraIssueSummary    `json:"issue"`
+	Covered         bool                 `json:"covered"`
+	TestRunCoverage *TestRunCoverage     `json:"testRunCoverage,omitempty"`
+	SubTasks        []*StoryCoverageNode `json:"subTasks"`
 }
 
 type Subscription struct {
@@ -393,9 +404,11 @@ type TestRunConnection struct {
 }
 
 type TestRunCoverage struct {
-	Total  int `json:"total"`
-	Passed int `json:"passed"`
-	Failed int `json:"failed"`
+	Total     int        `json:"total"`
+	Passed    int        `json:"passed"`
+	Failed    int        `json:"failed"`
+	Skipped   int        `json:"skipped"`
+	LastRunAt *time.Time `json:"lastRunAt,omitempty"`
 }
 
 type TestRunEdge struct {

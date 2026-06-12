@@ -1,8 +1,12 @@
 package domain
 
-// CoverageCount holds aggregated test-run pass/fail counts for a single JIRA issue key.
+import "time"
+
+// CoverageCount holds aggregated test-run counts for a single JIRA issue key.
 type CoverageCount struct {
-	Total  int
-	Passed int
-	Failed int
+	Total     int
+	Passed    int
+	Failed    int
+	Skipped   int
+	LastRunAt *time.Time
 }

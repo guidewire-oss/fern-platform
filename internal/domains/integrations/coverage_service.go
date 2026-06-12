@@ -87,18 +87,22 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 		return nil, fmt.Errorf("coverage: Phase 1 search failed: %w", err)
 	}
 
-	// Separate epics from non-epics; collect parent keys missing from Phase 1.
+	// Separate epics, stories, and sub-tasks from the Phase 1 results.
 	epicsByKey := make(map[string]JiraIssue)
-	var nonEpics []JiraIssue
+	var stories, subTasks []JiraIssue
 	for _, issue := range phase1Issues {
-		if issue.IssueType == "Epic" {
+		switch issue.IssueType {
+		case "Epic":
 			epicsByKey[issue.Key] = issue
-		} else {
-			nonEpics = append(nonEpics, issue)
+		case "Sub-task":
+			subTasks = append(subTasks, issue)
+		default:
+			stories = append(stories, issue)
 		}
 	}
 
-	missingEpicKeys := s.collectMissingEpicKeys(nonEpics, epicsByKey)
+	// Only look at stories (not sub-tasks) for missing parent epics.
+	missingEpicKeys := s.collectMissingEpicKeys(stories, epicsByKey)
 
 	// Phase 2: fetch any parent epics not returned by Phase 1.
 	if len(missingEpicKeys) > 0 {
@@ -118,7 +122,7 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 		return nil, fmt.Errorf("coverage: failed to fetch tag coverage: %w", err)
 	}
 
-	return s.assembleTree(fixVersion, epicsByKey, nonEpics, coverageMap), nil
+	return s.assembleTree(fixVersion, epicsByKey, stories, subTasks, coverageMap), nil
 }
 
 // resolveVersion finds the JiraVersion matching fixVersionName for the project.
@@ -153,12 +157,32 @@ func (s *CoverageService) collectMissingEpicKeys(nonEpics []JiraIssue, epicsByKe
 }
 
 // assembleTree builds the CoverageTree from the fetched issues and tag coverage map.
-func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, nonEpics []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
+func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
+	// Build story nodes indexed by key so sub-tasks can be attached.
+	storyNodesByKey := make(map[string]*StoryNode, len(stories))
+	for i := range stories {
+		node := s.buildStoryNode(stories[i], coverageMap)
+		storyNodesByKey[stories[i].Key] = &node
+	}
+
+	// Attach sub-tasks to their parent story; orphans go to Unassigned.
+	var unassignedSubTasks []StoryNode
+	for _, st := range subTasks {
+		node := s.buildStoryNode(st, coverageMap)
+		if st.Parent != nil && st.Parent.Key != "" {
+			if parent, ok := storyNodesByKey[st.Parent.Key]; ok {
+				parent.SubTasks = append(parent.SubTasks, node)
+				continue
+			}
+		}
+		unassignedSubTasks = append(unassignedSubTasks, node)
+	}
+
+	// Group stories by parent epic.
 	storiesByEpic := make(map[string][]StoryNode)
 	var unassigned []StoryNode
-
-	for _, issue := range nonEpics {
-		node := s.buildStoryNode(issue, coverageMap)
+	for _, issue := range stories {
+		node := *storyNodesByKey[issue.Key]
 		if issue.Parent != nil && issue.Parent.Key != "" {
 			storiesByEpic[issue.Parent.Key] = append(storiesByEpic[issue.Parent.Key], node)
 		} else {
@@ -168,21 +192,22 @@ func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[st
 
 	var epicNodes []EpicNode
 	for epicKey, epicIssue := range epicsByKey {
-		stories := storiesByEpic[epicKey]
+		epicStories := storiesByEpic[epicKey]
 		covered := 0
-		for _, s := range stories {
+		for _, s := range epicStories {
 			if s.Covered {
 				covered++
 			}
 		}
 		epicNodes = append(epicNodes, EpicNode{
 			Issue:        epicIssue,
-			Stories:      stories,
+			Stories:      epicStories,
 			CoveredCount: covered,
-			TotalCount:   len(stories),
+			TotalCount:   len(epicStories),
 		})
 	}
 
+	unassigned = append(unassigned, unassignedSubTasks...)
 	return &CoverageTree{
 		FixVersion: fixVersion,
 		Epics:      epicNodes,

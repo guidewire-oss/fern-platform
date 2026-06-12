@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
@@ -12,10 +13,12 @@ import (
 )
 
 type coverageRow struct {
-	Value  string
-	Total  int
-	Passed int
-	Failed int
+	Value        string
+	Total        int
+	Passed       int
+	Failed       int
+	Skipped      int
+	LastRunAtStr string `gorm:"column:last_run_at"` // SQLite returns datetime as string; parsed below
 }
 
 // GormTagRepository is a GORM implementation of TagRepository
@@ -185,12 +188,14 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 	// granularities contribute to coverage counts.
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT t.value,
-		       COUNT(*)                                              AS total,
-		       SUM(CASE WHEN tagged.status = 'passed' THEN 1 ELSE 0 END) AS passed,
-		       SUM(CASE WHEN tagged.status = 'failed' THEN 1 ELSE 0 END) AS failed
+		       COUNT(*)                                                    AS total,
+		       SUM(CASE WHEN tagged.status = 'passed'  THEN 1 ELSE 0 END) AS passed,
+		       SUM(CASE WHEN tagged.status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+		       SUM(CASE WHEN tagged.status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+		       MAX(tagged.run_at)                                          AS last_run_at
 		FROM tags t
 		JOIN (
-		    SELECT srt.tag_id, sr.status
+		    SELECT srt.tag_id, sr.status, sr.start_time AS run_at
 		    FROM   spec_run_tags srt
 		    JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
 		    JOIN   suite_runs su ON su.id  = sr.suite_run_id
@@ -199,7 +204,7 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 
 		    UNION ALL
 
-		    SELECT trt.tag_id, tr.status
+		    SELECT trt.tag_id, tr.status, tr.start_time AS run_at
 		    FROM   test_run_tags trt
 		    JOIN   test_runs tr ON tr.id = trt.test_run_id
 		    WHERE  tr.project_id = ? AND tr.deleted_at IS NULL
@@ -213,13 +218,65 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 
 	result := make(map[string]domain.CoverageCount, len(rows))
 	for _, row := range rows {
+		var lastRunAt *time.Time
+		if row.LastRunAtStr != "" {
+			for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02T15:04:05", "2006-01-02 15:04:05"} {
+				if t, err := time.Parse(layout, row.LastRunAtStr); err == nil {
+					lastRunAt = &t
+					break
+				}
+			}
+		}
 		result[row.Value] = domain.CoverageCount{
-			Total:  row.Total,
-			Passed: row.Passed,
-			Failed: row.Failed,
+			Total:     row.Total,
+			Passed:    row.Passed,
+			Failed:    row.Failed,
+			Skipped:   row.Skipped,
+			LastRunAt: lastRunAt,
 		}
 	}
 	return result, nil
+}
+
+// CoveredSpecRun holds the denormalised fields needed by the coverage drill-down.
+type CoveredSpecRun struct {
+	SpecName  string
+	Status    string
+	SuiteName string
+	TestRunID string
+	Branch    string
+	StartTime time.Time
+	Duration  int64
+}
+
+// GetSpecRunsByJiraTag returns spec runs tagged with the given JIRA issue key within a project.
+func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]CoveredSpecRun, error) {
+	var rows []CoveredSpecRun
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT sr.spec_name  AS spec_name,
+		       sr.status     AS status,
+		       su.suite_name AS suite_name,
+		       tr.run_id     AS test_run_id,
+		       COALESCE(tr.branch, '') AS branch,
+		       sr.start_time AS start_time,
+		       sr.duration_ms AS duration
+		FROM   spec_run_tags srt
+		JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
+		JOIN   suite_runs su ON su.id  = sr.suite_run_id
+		JOIN   test_runs  tr ON tr.id  = su.test_run_id
+		JOIN   tags        t ON t.id   = srt.tag_id
+		WHERE  tr.project_id = ?
+		  AND  t.category    = 'jira'
+		  AND  t.value       = ?
+		  AND  sr.deleted_at IS NULL
+		  AND  tr.deleted_at IS NULL
+		ORDER  BY sr.start_time DESC
+		LIMIT  200
+	`, projectID, issueKey).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to query spec runs by jira tag: %w", err)
+	}
+	return rows, nil
 }
 
 // GetOrCreateTag gets an existing tag by name or creates a new one

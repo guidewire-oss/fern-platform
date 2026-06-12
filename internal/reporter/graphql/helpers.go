@@ -291,14 +291,17 @@ func mapStoryNodes(stories []integrations.StoryNode) []*model.StoryCoverageNode 
 	nodes := make([]*model.StoryCoverageNode, len(stories))
 	for i, s := range stories {
 		node := &model.StoryCoverageNode{
-			Issue:   mapIssueSummary(s.Issue),
-			Covered: s.Covered,
+			Issue:    mapIssueSummary(s.Issue),
+			Covered:  s.Covered,
+			SubTasks: mapStoryNodes(s.SubTasks),
 		}
 		if s.TestRunCoverage != nil {
 			node.TestRunCoverage = &model.TestRunCoverage{
-				Total:  s.TestRunCoverage.Total,
-				Passed: s.TestRunCoverage.Passed,
-				Failed: s.TestRunCoverage.Failed,
+				Total:     s.TestRunCoverage.Total,
+				Passed:    s.TestRunCoverage.Passed,
+				Failed:    s.TestRunCoverage.Failed,
+				Skipped:   s.TestRunCoverage.Skipped,
+				LastRunAt: s.TestRunCoverage.LastRunAt,
 			}
 		}
 		nodes[i] = node

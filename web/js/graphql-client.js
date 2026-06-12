@@ -600,14 +600,33 @@ const QUERIES = {
                     stories {
                         issue { key summary statusName issueType }
                         covered
-                        testRunCoverage { total passed failed }
+                        testRunCoverage { total passed failed skipped lastRunAt }
+                        subTasks {
+                            issue { key summary statusName issueType }
+                            covered
+                            testRunCoverage { total passed failed skipped lastRunAt }
+                        }
                     }
                 }
                 unassigned {
                     issue { key summary statusName issueType }
                     covered
-                    testRunCoverage { total passed failed }
+                    testRunCoverage { total passed failed skipped lastRunAt }
                 }
+            }
+        }
+    `,
+
+    SPEC_RUNS_BY_JIRA_TAG: `
+        query SpecRunsByJiraTag($projectId: String!, $issueKey: String!) {
+            specRunsByJiraTag(projectId: $projectId, issueKey: $issueKey) {
+                specName
+                status
+                suiteName
+                testRunId
+                branch
+                startTime
+                duration
             }
         }
     `

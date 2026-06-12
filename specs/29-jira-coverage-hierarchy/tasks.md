@@ -1,6 +1,6 @@
 # 29-jira-coverage-hierarchy - Tasks
 
-## Status: In progress (13/15 complete)
+## Status: In progress (18/18 complete — acceptance tests still pending)
 
 TDD discipline: every RED task writes failing tests that define the expected behaviour.
 Every GREEN task writes the minimum implementation to make those tests pass.
@@ -144,7 +144,7 @@ No implementation code is written without a failing test first.
   - **Outcome**: `make test-acceptance` fully green. All acceptance scenarios pass.
   - **Context**: Req 1 AC4, Req 3 AC5, Req 4 AC3. Design §5 error handling.
 
-- [ ] **Task 6.4** 🟢 GREEN: JIRA issue keys as external links
+- [x] **Task 6.4** 🟢 GREEN: JIRA issue keys as external links
   - **ID**: `task-6.4`
   - **BlockedBy**: `task-6.2`
   - **File**: `web/index.html`
@@ -152,13 +152,44 @@ No implementation code is written without a failing test first.
   - **Outcome**: Clicking any issue key in the coverage tree opens the JIRA issue directly. No new GraphQL field required if the base URL is already in client state.
   - **Context**: UX improvement — closes the loop between coverage indicators and the source JIRA issues.
 
-- [ ] **Task 6.5** 🟢 GREEN: Drill down from covered story to its tagged test runs
+- [x] **Task 6.5** 🟢 GREEN: Drill-down from covered story to its tagged spec runs
   - **ID**: `task-6.5`
   - **BlockedBy**: `task-6.2`
   - **File**: `web/index.html`
   - **Change**: On covered story rows, make the test run count a clickable link or button. On click, open a panel or modal showing the spec runs tagged with that issue key for this project — spec name, status, suite, and a link to the full test run. Query the existing spec run / test run data filtered by the JIRA tag value. No new backend endpoint needed if the tag value can be passed as a filter to an existing query; add a lightweight GraphQL query (`specRunsByJiraTag(projectId, issueKey)`) if not.
   - **Outcome**: A user can navigate from "3 tests cover PROJ-123" directly to those 3 tests. Closes the loop between coverage summary and the actual test evidence.
   - **Context**: Complements task-6.4 — together they make the coverage view a navigation hub, not just a status display.
+
+- [x] **Task 6.6** 🟢 GREEN: Epic coverage % format, visual bar, and story pass/fail + last-run date
+  - **ID**: `task-6.6`
+  - **BlockedBy**: `task-6.2`
+  - **File**: `web/index.html`, `internal/reporter/graphql/schema.graphql`, `internal/domains/tags/infrastructure/gorm_tag_repository.go`
+  - **Change**:
+    1. **Backend** — add `lastRunAt: Time` field to `TestRunCoverage` GraphQL type. Add `LastRunAt *time.Time` to `domain.CoverageCount` and `coverageRow`. Update `GetJiraTagCoverageByProject` SQL to include `MAX(tagged.run_at)` in both UNION branches (use `sr.start_time` for spec-run branch, `tr.start_time` for test-run branch). Run `go generate`. Update resolver to populate the new field.
+    2. **Frontend epic row** — change `{coveredCount}/{totalCount} covered` to `{pct}% ({coveredCount}/{totalCount})` where `pct = Math.round(coveredCount/totalCount*100)`. Add a thin visual bar (e.g. `<div style={{width: pct+'%', height:'4px', background:'var(--primary)', ...}}>`) under the text.
+    3. **Frontend story row** — change badge from `✓ N` to `✓ N (Xp Yf)` using `testRunCoverage.passed` and `testRunCoverage.failed`. Show `lastRunAt` date beside the badge (e.g. `toLocaleDateString()`).
+  - **Outcome**: Epic rows show "60% (3/5)" with a partial fill bar. Covered story rows show pass/fail split and last execution date.
+  - **Context**: Req 2 AC5, Req 2 AC6, Req 3 AC3. `testRunCoverage` already carries `total/passed/failed`; only `lastRunAt` is new backend work.
+
+- [x] **Task 6.7** 🟢 GREEN: Sort unassigned section by coverage percentage
+  - **ID**: `task-6.7`
+  - **BlockedBy**: `task-6.2`
+  - **File**: `web/index.html`
+  - **Change**: Add a sort control (e.g. a small `<select>` or toggle button) in the Unassigned section header with options "All (default)", "Covered first", "Uncovered first". Apply client-side sort to the `stories` array before rendering — covered stories sorted by `testRunCoverage.total` desc, uncovered after. No re-query required.
+  - **Outcome**: User can sort the Unassigned section to surface the most or least covered stories.
+  - **Context**: Req 2 AC3.
+
+- [x] **Task 6.8** 🟢 GREEN: Sub-tasks as a third hierarchy level
+  - **ID**: `task-6.8`
+  - **BlockedBy**: `task-6.2`
+  - **Agent**: `chief-programmer`
+  - **File**: `internal/reporter/graphql/schema.graphql`, `internal/domains/integrations/coverage_service.go`, `web/index.html`
+  - **Change**:
+    1. **GraphQL** — add `SubTaskCoverageNode` type (same fields as `StoryCoverageNode`). Add `subTasks: [SubTaskCoverageNode!]!` to `StoryCoverageNode`. Run `go generate`.
+    2. **Service** — in `CoverageService.Build`, identify sub-tasks by `issue.IssueType == "Sub-task"` (or having a story-type parent). Group them under their parent story node. Orphan sub-tasks (parent not in result set) go to Unassigned alongside stories.
+    3. **Frontend** — render sub-task rows indented beneath each story (3rd level). A story with sub-tasks shows a collapse toggle. Sub-task rows follow the same covered/uncovered badge pattern as stories.
+  - **Outcome**: Three-level hierarchy renders when the fix version contains sub-tasks. Projects with no sub-tasks are unaffected.
+  - **Context**: Req 2 AC2. Note: this is the most complex new task — it touches service logic, schema, codegen, and frontend. Implement after 6.6 and 6.7.
 
 ---
 
@@ -179,6 +210,16 @@ task-1.3 (mock server) ───────────────────
                          └──▶ task-6.1 🔴
 ```
 
+New tasks (all unblock after 6.2):
+```
+task-6.2 ──┬──▶ task-6.3 🟢
+            ├──▶ task-6.4 🟢 (done)
+            ├──▶ task-6.5 🟢 (done)
+            ├──▶ task-6.6 🟢 (% bar + pass/fail + last-run date)
+            ├──▶ task-6.7 🟢 (sort unassigned)
+            └──▶ task-6.8 🟢 (sub-tasks — most complex, do last)
+```
+
 **Parallel opportunities:**
 - Tasks 1.1, 1.2: both root tasks — start simultaneously
 - Task 1.3 starts as soon as 1.1 is done (types needed to define mock shapes)
@@ -186,10 +227,9 @@ task-1.3 (mock server) ───────────────────
 - Tasks 2.1 and 3.1 are independent RED tracks — run simultaneously after their prerequisites
 - Task 4.1 (service RED, uses interface mocks) runs in parallel with 2.x and 3.x — no implementation needed to write the service tests
 - Frontend track (1.2 → 6.1 → 6.2 → 6.3) runs in parallel with backend service/resolver track
+- Tasks 6.4–6.8 all unblock after 6.2 and can be developed simultaneously (6.6 and 6.7 are frontend-only; 6.8 touches service layer)
 
-**Critical path:** task-1.1 → task-3.1 → task-3.2 → task-4.2 → task-5.1 → task-5.2 → task-6.2 → task-6.3 → task-6.5 (9 tasks)
-
-**Parallel opportunities (new):** Tasks 6.4 and 6.5 both unblock after 6.2 and can be developed simultaneously.
+**Critical path:** task-1.1 → task-3.1 → task-3.2 → task-4.2 → task-5.1 → task-5.2 → task-6.2 → task-6.8 (8 tasks, including new sub-task work)
 
 Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed in parallel with the 3.x chain.
 
@@ -197,15 +237,18 @@ Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed 
 
 ## Completion Criteria
 
-- [ ] All 15 tasks checked off
+- [ ] All 18 tasks checked off
 - [ ] `make test` fully green (all unit + resolver tests pass)
 - [ ] `make test-acceptance` fully green (all 5 acceptance scenarios pass)
 - [ ] Every implementation task was preceded by a failing test
 - [ ] Coverage tab visible on projects with a JIRA connection; absent without one
 - [ ] Fix version picker loads, filters, and groups correctly (unreleased before released)
-- [ ] Two-level hierarchy renders with correct epic/story grouping
-- [ ] Covered stories show test run count and pass/fail; uncovered clearly marked
-- [ ] "Show uncovered only" toggle works client-side
+- [ ] Three-level hierarchy renders (epics → stories → sub-tasks where present)
+- [ ] Epic rows show `N% (X/Y)` with a visual fill bar
+- [ ] Covered stories show test run count, pass/fail split, and last execution date
+- [ ] Uncovered stories clearly marked
+- [ ] "Show uncovered only" toggle works client-side, maintains hierarchy structure
+- [ ] Unassigned section sortable by coverage
 - [ ] JIRA API errors show user-friendly messages; tab does not crash
 - [ ] No regressions in existing JIRA integration features
 - [ ] Every JIRA issue key in the coverage tree links to the issue in JIRA (new tab)

@@ -15,6 +15,7 @@ import (
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
+	taginfra "github.com/guidewire-oss/fern-platform/internal/domains/tags/infrastructure"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/generated"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
@@ -915,6 +916,28 @@ func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID strin
 		return nil, err
 	}
 	return mapCoverageTree(tree), nil
+}
+
+// SpecRunsByJiraTag is the resolver for the specRunsByJiraTag field.
+func (r *queryResolver) SpecRunsByJiraTag(ctx context.Context, projectID string, issueKey string) ([]*model.CoveredSpecRun, error) {
+	repo := taginfra.NewGormTagRepository(r.db)
+	rows, err := repo.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.CoveredSpecRun, len(rows))
+	for i, row := range rows {
+		result[i] = &model.CoveredSpecRun{
+			SpecName:  row.SpecName,
+			Status:    row.Status,
+			SuiteName: row.SuiteName,
+			TestRunID: row.TestRunID,
+			Branch:    row.Branch,
+			StartTime: row.StartTime,
+			Duration:  int(row.Duration),
+		}
+	}
+	return result, nil
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.

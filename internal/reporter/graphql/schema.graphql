@@ -431,15 +431,18 @@ type JiraIssueSummary {
 }
 
 type TestRunCoverage {
-  total:  Int!
-  passed: Int!
-  failed: Int!
+  total:     Int!
+  passed:    Int!
+  failed:    Int!
+  skipped:   Int!
+  lastRunAt: Time
 }
 
 type StoryCoverageNode {
   issue:           JiraIssueSummary!
   covered:         Boolean!
   testRunCoverage: TestRunCoverage
+  subTasks:        [StoryCoverageNode!]!
 }
 
 type EpicCoverageNode {
@@ -453,6 +456,16 @@ type RequirementCoverageTree {
   fixVersion: JiraRelease!
   epics:      [EpicCoverageNode!]!
   unassigned: [StoryCoverageNode!]!
+}
+
+type CoveredSpecRun {
+  specName:  String!
+  status:    String!
+  suiteName: String!
+  testRunId: String!
+  branch:    String!
+  startTime: Time!
+  duration:  Int!
 }
 
 # Health Status Type
@@ -580,6 +593,7 @@ type Query {
   # JIRA Requirements Coverage
   jiraFixVersions(projectId: ID!): [JiraRelease!]!
   requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
+  specRunsByJiraTag(projectId: String!, issueKey: String!): [CoveredSpecRun!]!
 }
 
 # Mutation Root

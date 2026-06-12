@@ -175,10 +175,12 @@ type EpicNode struct {
 }
 
 // StoryNode is a single non-epic issue with its Fern test-run coverage.
+// Sub-tasks are represented as child StoryNodes (at most one level deep).
 type StoryNode struct {
 	Issue           JiraIssue
 	Covered         bool
 	TestRunCoverage *tagsdomain.CoverageCount // nil when not covered
+	SubTasks        []StoryNode
 }
 
 // Sentinel errors for field mapping validation
