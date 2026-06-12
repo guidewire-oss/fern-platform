@@ -58,7 +58,7 @@ Browser                  GraphQL Server             External
 4. **Phase 1 — fix version issues:** JQL `fixVersion = "Atmos vNext" ORDER BY issuetype`, fields `key,summary,status,issuetype,parent`, paginated (`maxResults=100`, loop until `startAt + len(results) >= total`).
 5. Separate results into epics (issuetype = Epic) and non-epics. Collect parent epic keys from non-epic issues.
 6. **Phase 2 — missing epics:** Keys in parent set but absent from Phase 1 → single batched JQL `issueKey IN (PROJ-10,PROJ-11,...)`; skip if set is empty.
-7. **Fern coverage:** `tag_repository.GetJiraTagCoverageByProject(projectID)` — returns `map[issueKey]CoverageCount{Total, Passed, Failed}`.
+7. **Fern coverage:** `tag_repository.GetJiraTagCoverageByProject(ctx, projectID)` — returns `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`, aggregating JIRA tags at both spec-run and test-run granularity.
 8. **Assemble tree:** For each epic, collect its stories from Phase 1/2 results. Cross-reference story keys against the Fern coverage map. Group stories with no parent under "Unassigned".
 9. Return `RequirementCoverageTree` — epics with story children + unassigned stories.
 
@@ -124,22 +124,49 @@ Issue search uses POST to avoid URL length limits when the `issueKey IN (...)` b
 ### New Repository Method (internal/repository/tag_repository.go)
 
 ```go
-// GetJiraTagCoverageByProject returns pass/fail counts per JIRA issue key
-// for all test runs in the given project.
-GetJiraTagCoverageByProject(projectID string) (map[string]CoverageCount, error)
+// GetJiraTagCoverageByProject returns per-JIRA-issue-key coverage counts
+// for all test runs in the given project, honoring JIRA tags applied at
+// BOTH granularities: spec-run level (individual tests) and test-run level
+// (whole run).
+GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]CoverageCount, error)
 ```
+
+**Both tagging granularities count.** A `category='jira'` tag may be applied to a
+`spec_run` (an individual test) or to a whole `test_run`. Per requirements §1–2, a
+story is covered if *either* carries a matching `jira:{issueKey}` tag, so coverage
+aggregates over both. This is expressed as a `UNION ALL` of the two tag tables —
+`spec_run_tags` (joined `spec_runs → suite_runs → test_runs`) and `test_run_tags`
+(joined `test_runs`) — each contributing its `status` and `start_time`. The query
+must use `db.Raw(...)` rather than GORM's fluent API, which cannot express UNION.
+Soft-deleted rows are excluded on both legs.
 
 SQL:
 ```sql
 SELECT t.value AS issue_key,
-       COUNT(tr.id)                                                AS total,
-       SUM(CASE WHEN tr.result = 'passed' THEN 1 ELSE 0 END)      AS passed,
-       SUM(CASE WHEN tr.result = 'failed' THEN 1 ELSE 0 END)      AS failed
+       COUNT(*)                                                   AS total,
+       SUM(CASE WHEN tagged.status = 'passed'  THEN 1 ELSE 0 END) AS passed,
+       SUM(CASE WHEN tagged.status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+       SUM(CASE WHEN tagged.status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+       MAX(tagged.run_at)                                         AS last_run_at
 FROM   tags t
-JOIN   test_run_tags trt ON t.id  = trt.tag_id
-JOIN   test_runs     tr  ON tr.id = trt.test_run_id
-WHERE  t.category    = 'jira'
-AND    tr.project_id = $1
+JOIN (
+    -- spec-run-level tags (individual test granularity)
+    SELECT srt.tag_id, sr.status, sr.start_time AS run_at
+    FROM   spec_run_tags srt
+    JOIN   spec_runs  sr ON sr.id = srt.spec_run_id
+    JOIN   suite_runs su ON su.id = sr.suite_run_id
+    JOIN   test_runs  tr ON tr.id = su.test_run_id
+    WHERE  tr.project_id = $1 AND sr.deleted_at IS NULL
+
+    UNION ALL
+
+    -- test-run-level tags (whole-run granularity)
+    SELECT trt.tag_id, tr.status, tr.start_time AS run_at
+    FROM   test_run_tags trt
+    JOIN   test_runs tr ON tr.id = trt.test_run_id
+    WHERE  tr.project_id = $1 AND tr.deleted_at IS NULL
+) tagged ON tagged.tag_id = t.id
+WHERE  t.category = 'jira'
 GROUP  BY t.value
 ```
 
@@ -154,11 +181,19 @@ GROUP  BY t.value
 
 | Element | Location | Notes |
 |---------|----------|-------|
-| "Coverage" tab button | Project detail tab bar | Visible only when project has active JIRA connection |
-| Fix version picker | Top of Coverage tab panel | Text `<input>` filter + dropdown; grouped unreleased/released |
+| "Coverage" tab | Project **Settings** page left-nav (alongside General / Integrations / Team / Notifications) | Visible only when project has active JIRA connection |
+| Fix version picker | Top of Coverage panel | Text `<input>` filter + dropdown; grouped unreleased/released |
 | Coverage tree | Below picker | Epic rows expand to story rows; key, summary, status, coverage badge |
 | "Show uncovered only" toggle | Above tree | Checkbox; client-side filter |
 | No-connection message | Coverage panel | Shown when project has no JIRA connection |
+
+> **Placement is interim.** The Coverage view lives in the Project Settings page
+> for now as the pragmatic home while the feature lands. The intended permanent
+> surface for JIRA completion / release-readiness display is the **readiness
+> dashboard** ([issue #30](https://github.com/guidewire-oss/fern-platform/issues/30)),
+> owned separately. When #30 ships, this Coverage view should move (or be
+> superseded) there; nothing here should be read as committing to Project
+> Settings as the final location.
 
 ## 4. Technical Decisions
 
