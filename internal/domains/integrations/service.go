@@ -8,9 +8,9 @@ import (
 
 // JiraConnectionService handles JIRA connection operations
 type JiraConnectionService struct {
-	repo           JiraConnectionRepository
-	jiraClient     JiraClient
-	encryptionKey  []byte
+	repo          JiraConnectionRepository
+	jiraClient    JiraClient
+	encryptionKey []byte
 }
 
 // NewJiraConnectionService creates a new JIRA connection service
@@ -29,14 +29,14 @@ func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID,
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing connections: %w", err)
 	}
-	
+
 	// Check for any non-deleted connections
 	// Since we use soft deletion with deleted_at timestamp, we only need to check
 	// if any active connections exist (the repository should filter out deleted ones)
 	if len(existingConnections) > 0 {
 		return nil, fmt.Errorf("project already has a JIRA connection")
 	}
-	
+
 	// Create the connection
 	conn, err := NewJiraConnection(projectID, name, jiraURL, authType, projectKey, username, credential)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s *JiraConnectionService) TestConnection(ctx context.Context, connectionID
 	}
 
 	// Log connection details (without sensitive info)
-	log.Printf("[JiraConnectionService] Testing connection ID: %s, URL: %s, Project: %s, Username: %s", 
+	log.Printf("[JiraConnectionService] Testing connection ID: %s, URL: %s, Project: %s, Username: %s",
 		connectionID, conn.jiraURL, conn.projectKey, conn.username)
 
 	// Decrypt the credential
@@ -128,17 +128,17 @@ func (s *JiraConnectionService) TestConnection(ctx context.Context, connectionID
 
 	// Save the original encrypted credential
 	originalEncrypted := conn.GetEncryptedCredentialDirect()
-	
+
 	// Temporarily set the decrypted credential for testing
 	conn.encryptedCredential = decrypted
-	
+
 	// Test the connection
 	log.Printf("[JiraConnectionService] Calling TestConnection on JIRA client for URL: %s", conn.jiraURL)
 	err = conn.TestConnection(ctx, s.jiraClient)
-	
+
 	// CRITICAL: Restore the original encrypted credential before saving
 	conn.encryptedCredential = originalEncrypted
-	
+
 	// Now save with the original encrypted credential
 	if err != nil {
 		log.Printf("[JiraConnectionService] Test failed for %s: %v", conn.jiraURL, err)
@@ -148,7 +148,7 @@ func (s *JiraConnectionService) TestConnection(ctx context.Context, connectionID
 		}
 		return err
 	}
-	
+
 	log.Printf("[JiraConnectionService] Test successful for %s, activating and updating connection", conn.jiraURL)
 	conn.Activate()
 	return s.repo.Update(ctx, conn)

@@ -75,7 +75,7 @@ func (r *queryResolver) ReleaseCoverage_domain(ctx context.Context, projectID st
 		return nil, fmt.Errorf("failed to load JIRA tag coverage: %w", err)
 	}
 
-	return aggregateReleaseCoverage(target, epics, children, coverage), nil
+	return aggregateReleaseCoverage(*target, epics, children, coverage), nil
 }
 
 // findFixVersion resolves a fixVersion by name. The JIRA API returns all
@@ -122,13 +122,14 @@ func buildEpicJQL(projectKey, fixVersionName string) string {
 
 // aggregateReleaseCoverage rolls the JIRA issue tree + tag coverage into the
 // GraphQL response. Pulled out as a pure function so it's testable in
-// isolation from the JIRA / tag dependencies.
+// isolation from the JIRA / tag dependencies. Takes target by value so a nil
+// version can't panic here.
 //
 // "Covered" = at least one test_run is tagged against the work item.
 // "Fully covered" epic = epic itself AND every child has coverage.
 // "Passing" = every test_run tagged against the work item passed.
 func aggregateReleaseCoverage(
-	target *integrations.JiraVersion,
+	target integrations.JiraVersion,
 	epics []integrations.JiraIssue,
 	children []integrations.JiraIssue,
 	coverage map[string]tagsdomain.CoverageCount,
@@ -136,7 +137,7 @@ func aggregateReleaseCoverage(
 	childrenByParent := groupChildrenByParent(children)
 
 	result := &model.ReleaseCoverage{
-		FixVersion: jiraVersionToRelease(*target),
+		FixVersion: jiraVersionToRelease(target),
 		TotalEpics: len(epics),
 		Epics:      make([]*model.EpicCoverageSummary, 0, len(epics)),
 	}
@@ -163,10 +164,12 @@ type epicGroup struct {
 	coveredChildren int
 }
 
-// summarizeEpic counts (epic + children) work items with coverage / all-passing.
+// summarizeEpic counts work items (the epic itself + its children) that have
+// coverage and that are all-passing. A single addItem closure handles both the
+// epic and each child; the isChild flag drives the children-only tally.
 func summarizeEpic(epic integrations.JiraIssue, children []integrations.JiraIssue, coverage map[string]tagsdomain.CoverageCount) epicGroup {
 	total := 1 + len(children)
-	covered, passing := 0, 0
+	covered, passing, coveredChildren := 0, 0, 0
 
 	addItem := func(key string, isChild bool) {
 		c, ok := coverage[strings.ToLower(key)]
@@ -174,24 +177,17 @@ func summarizeEpic(epic integrations.JiraIssue, children []integrations.JiraIssu
 			return
 		}
 		covered++
+		if isChild {
+			coveredChildren++
+		}
 		if c.Passed == c.Total {
 			passing++
 		}
-		_ = isChild // counted in the outer summary
 	}
-	addItem(epic.Key, false)
 
-	coveredChildren := 0
+	addItem(epic.Key, false)
 	for _, child := range children {
-		c, ok := coverage[strings.ToLower(child.Key)]
-		if !ok || c.Total == 0 {
-			continue
-		}
-		covered++
-		coveredChildren++
-		if c.Passed == c.Total {
-			passing++
-		}
+		addItem(child.Key, true)
 	}
 
 	return epicGroup{
