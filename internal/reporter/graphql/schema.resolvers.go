@@ -889,6 +889,13 @@ func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID strin
 	panic(fmt.Errorf("not implemented: RequirementCoverage - requirementCoverage"))
 }
 
+// ReleaseCoverage is the resolver for the releaseCoverage field.
+// Implementation lives in release_coverage_resolver.go (ReleaseCoverage_domain)
+// so it survives gqlgen regeneration. See the JiraFieldMapping pattern.
+func (r *queryResolver) ReleaseCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.ReleaseCoverage, error) {
+	return r.ReleaseCoverage_domain(ctx, projectID, fixVersionName)
+}
+
 // TestRunCreated is the resolver for the testRunCreated field.
 func (r *subscriptionResolver) TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error) {
 	ch := make(chan *model.TestRun)

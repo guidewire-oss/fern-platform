@@ -453,6 +453,30 @@ type RequirementCoverageTree {
   unassigned: [StoryCoverageNode!]!
 }
 
+# Release-level coverage rollup (#30). Thin wrapper around per-Epic counts,
+# served by the releaseCoverage query. The full per-Epic detail is fetched
+# via the requirementCoverage query when the user drills into an Epic card.
+#
+# A "work item" in this rollup = the Epic itself OR one of its direct children.
+# "Covered" = at least one test_run is tagged jira:<KEY> against the work item.
+# "Passing" = every test_run tagged against the work item passed (Passed == Total).
+type EpicCoverageSummary {
+  issue:        JiraIssueSummary!  # the Epic itself
+  coveredCount: Int!               # work items (epic + children) with >=1 matching test run
+  totalCount:   Int!               # total work items: 1 (the epic) + its direct children
+  passingCount: Int!               # work items where every matching test run passed
+}
+
+type ReleaseCoverage {
+  fixVersion:        JiraRelease!
+  totalEpics:        Int!
+  coveredEpics:      Int!          # epic groups with >=1 covered work item (epic itself or any child)
+  fullyCoveredEpics: Int!          # epic groups where every work item (epic + all children) is covered
+  totalChildren:     Int!          # sum of direct children across all epics in the release
+  coveredChildren:   Int!          # children with >=1 matching test run
+  epics:             [EpicCoverageSummary!]!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -578,6 +602,7 @@ type Query {
   # JIRA Requirements Coverage
   jiraFixVersions(projectId: ID!): [JiraRelease!]!
   requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
+  releaseCoverage(projectId: ID!, fixVersionName: String!): ReleaseCoverage!
 }
 
 # Mutation Root

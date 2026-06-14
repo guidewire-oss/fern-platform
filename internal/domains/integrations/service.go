@@ -195,3 +195,25 @@ func (s *JiraConnectionService) GetProjectConnections(ctx context.Context, proje
 func (s *JiraConnectionService) GetActiveProjectConnections(ctx context.Context, projectID string) ([]*JiraConnection, error) {
 	return s.repo.FindActiveByProjectID(ctx, projectID)
 }
+
+// GetActiveConnectionWithCredential returns the first active JIRA connection
+// for the project along with the decrypted credential, ready to pass to a
+// JiraClient. Coverage resolvers (#29 epicCoverage, #30 releaseCoverage) call
+// this -- they need plaintext credentials but should not touch the encryption
+// key directly. Returns (nil, "", nil) when no active connection exists for
+// the project.
+func (s *JiraConnectionService) GetActiveConnectionWithCredential(ctx context.Context, projectID string) (*JiraConnection, string, error) {
+	conns, err := s.repo.FindActiveByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to fetch active connections: %w", err)
+	}
+	if len(conns) == 0 {
+		return nil, "", nil
+	}
+	conn := conns[0]
+	credential, err := DecryptCredential(conn.GetEncryptedCredentialDirect(), s.encryptionKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to decrypt JIRA credential: %w", err)
+	}
+	return conn, credential, nil
+}

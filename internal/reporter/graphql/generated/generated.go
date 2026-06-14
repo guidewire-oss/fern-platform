@@ -70,6 +70,13 @@ type ComplexityRoot struct {
 		TotalCount   func(childComplexity int) int
 	}
 
+	EpicCoverageSummary struct {
+		CoveredCount func(childComplexity int) int
+		Issue        func(childComplexity int) int
+		PassingCount func(childComplexity int) int
+		TotalCount   func(childComplexity int) int
+	}
+
 	FieldMappingEntry struct {
 		FernField             func(childComplexity int) int
 		JiraFieldID           func(childComplexity int) int
@@ -260,6 +267,7 @@ type ComplexityRoot struct {
 		Projects                func(childComplexity int, filter *model.ProjectFilter, first *int, after *string) int
 		RecentTestRuns          func(childComplexity int, projectID *string, limit *int) int
 		RecentlyAddedFlakyTests func(childComplexity int, projectID *string, days *int, limit *int) int
+		ReleaseCoverage         func(childComplexity int, projectID string, fixVersionName string) int
 		RequirementCoverage     func(childComplexity int, projectID string, fixVersionName string) int
 		SystemConfig            func(childComplexity int) int
 		Tag                     func(childComplexity int, id string) int
@@ -272,6 +280,16 @@ type ComplexityRoot struct {
 		TestRuns                func(childComplexity int, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
 		TreemapData             func(childComplexity int, projectID *string, days *int) int
 		UserPreferences         func(childComplexity int) int
+	}
+
+	ReleaseCoverage struct {
+		CoveredChildren   func(childComplexity int) int
+		CoveredEpics      func(childComplexity int) int
+		Epics             func(childComplexity int) int
+		FixVersion        func(childComplexity int) int
+		FullyCoveredEpics func(childComplexity int) int
+		TotalChildren     func(childComplexity int) int
+		TotalEpics        func(childComplexity int) int
 	}
 
 	RequirementCoverageTree struct {
@@ -535,6 +553,7 @@ type QueryResolver interface {
 	JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error)
 	JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error)
 	RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error)
+	ReleaseCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.ReleaseCoverage, error)
 }
 type SubscriptionResolver interface {
 	TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error)
@@ -651,6 +670,34 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.EpicCoverageNode.TotalCount(childComplexity), true
+
+	case "EpicCoverageSummary.coveredCount":
+		if e.complexity.EpicCoverageSummary.CoveredCount == nil {
+			break
+		}
+
+		return e.complexity.EpicCoverageSummary.CoveredCount(childComplexity), true
+
+	case "EpicCoverageSummary.issue":
+		if e.complexity.EpicCoverageSummary.Issue == nil {
+			break
+		}
+
+		return e.complexity.EpicCoverageSummary.Issue(childComplexity), true
+
+	case "EpicCoverageSummary.passingCount":
+		if e.complexity.EpicCoverageSummary.PassingCount == nil {
+			break
+		}
+
+		return e.complexity.EpicCoverageSummary.PassingCount(childComplexity), true
+
+	case "EpicCoverageSummary.totalCount":
+		if e.complexity.EpicCoverageSummary.TotalCount == nil {
+			break
+		}
+
+		return e.complexity.EpicCoverageSummary.TotalCount(childComplexity), true
 
 	case "FieldMappingEntry.fernField":
 		if e.complexity.FieldMappingEntry.FernField == nil {
@@ -1782,6 +1829,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Query.RecentlyAddedFlakyTests(childComplexity, args["projectId"].(*string), args["days"].(*int), args["limit"].(*int)), true
 
+	case "Query.releaseCoverage":
+		if e.complexity.Query.ReleaseCoverage == nil {
+			break
+		}
+
+		args, err := ec.field_Query_releaseCoverage_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ReleaseCoverage(childComplexity, args["projectId"].(string), args["fixVersionName"].(string)), true
+
 	case "Query.requirementCoverage":
 		if e.complexity.Query.RequirementCoverage == nil {
 			break
@@ -1910,6 +1969,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.UserPreferences(childComplexity), true
+
+	case "ReleaseCoverage.coveredChildren":
+		if e.complexity.ReleaseCoverage.CoveredChildren == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.CoveredChildren(childComplexity), true
+
+	case "ReleaseCoverage.coveredEpics":
+		if e.complexity.ReleaseCoverage.CoveredEpics == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.CoveredEpics(childComplexity), true
+
+	case "ReleaseCoverage.epics":
+		if e.complexity.ReleaseCoverage.Epics == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.Epics(childComplexity), true
+
+	case "ReleaseCoverage.fixVersion":
+		if e.complexity.ReleaseCoverage.FixVersion == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.FixVersion(childComplexity), true
+
+	case "ReleaseCoverage.fullyCoveredEpics":
+		if e.complexity.ReleaseCoverage.FullyCoveredEpics == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.FullyCoveredEpics(childComplexity), true
+
+	case "ReleaseCoverage.totalChildren":
+		if e.complexity.ReleaseCoverage.TotalChildren == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.TotalChildren(childComplexity), true
+
+	case "ReleaseCoverage.totalEpics":
+		if e.complexity.ReleaseCoverage.TotalEpics == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.TotalEpics(childComplexity), true
 
 	case "RequirementCoverageTree.epics":
 		if e.complexity.RequirementCoverageTree.Epics == nil {
@@ -3447,6 +3555,30 @@ type RequirementCoverageTree {
   unassigned: [StoryCoverageNode!]!
 }
 
+# Release-level coverage rollup (#30). Thin wrapper around per-Epic counts,
+# served by the releaseCoverage query. The full per-Epic detail is fetched
+# via the requirementCoverage query when the user drills into an Epic card.
+#
+# A "work item" in this rollup = the Epic itself OR one of its direct children.
+# "Covered" = at least one test_run is tagged jira:<KEY> against the work item.
+# "Passing" = every test_run tagged against the work item passed (Passed == Total).
+type EpicCoverageSummary {
+  issue:        JiraIssueSummary!  # the Epic itself
+  coveredCount: Int!               # work items (epic + children) with >=1 matching test run
+  totalCount:   Int!               # total work items: 1 (the epic) + its direct children
+  passingCount: Int!               # work items where every matching test run passed
+}
+
+type ReleaseCoverage {
+  fixVersion:        JiraRelease!
+  totalEpics:        Int!
+  coveredEpics:      Int!          # epic groups with >=1 covered work item (epic itself or any child)
+  fullyCoveredEpics: Int!          # epic groups where every work item (epic + all children) is covered
+  totalChildren:     Int!          # sum of direct children across all epics in the release
+  coveredChildren:   Int!          # children with >=1 matching test run
+  epics:             [EpicCoverageSummary!]!
+}
+
 # Health Status Type
 type HealthStatus {
   status: String!
@@ -3572,6 +3704,7 @@ type Query {
   # JIRA Requirements Coverage
   jiraFixVersions(projectId: ID!): [JiraRelease!]!
   requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
+  releaseCoverage(projectId: ID!, fixVersionName: String!): ReleaseCoverage!
 }
 
 # Mutation Root
@@ -4131,6 +4264,22 @@ func (ec *executionContext) field_Query_recentlyAddedFlakyTests_args(ctx context
 		return nil, err
 	}
 	args["limit"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_releaseCoverage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixVersionName", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["fixVersionName"] = arg1
 	return args, nil
 }
 
@@ -4920,6 +5069,192 @@ func (ec *executionContext) _EpicCoverageNode_totalCount(ctx context.Context, fi
 func (ec *executionContext) fieldContext_EpicCoverageNode_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "EpicCoverageNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EpicCoverageSummary_issue(ctx context.Context, field graphql.CollectedField, obj *model.EpicCoverageSummary) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EpicCoverageSummary_issue(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Issue, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraIssueSummary)
+	fc.Result = res
+	return ec.marshalNJiraIssueSummary2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraIssueSummary(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EpicCoverageSummary_issue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EpicCoverageSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_JiraIssueSummary_key(ctx, field)
+			case "summary":
+				return ec.fieldContext_JiraIssueSummary_summary(ctx, field)
+			case "statusName":
+				return ec.fieldContext_JiraIssueSummary_statusName(ctx, field)
+			case "issueType":
+				return ec.fieldContext_JiraIssueSummary_issueType(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraIssueSummary", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EpicCoverageSummary_coveredCount(ctx context.Context, field graphql.CollectedField, obj *model.EpicCoverageSummary) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EpicCoverageSummary_coveredCount(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.CoveredCount, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EpicCoverageSummary_coveredCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EpicCoverageSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EpicCoverageSummary_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.EpicCoverageSummary) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EpicCoverageSummary_totalCount(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.TotalCount, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EpicCoverageSummary_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EpicCoverageSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EpicCoverageSummary_passingCount(ctx context.Context, field graphql.CollectedField, obj *model.EpicCoverageSummary) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_EpicCoverageSummary_passingCount(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.PassingCount, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_EpicCoverageSummary_passingCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EpicCoverageSummary",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -13015,6 +13350,77 @@ func (ec *executionContext) fieldContext_Query_requirementCoverage(ctx context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_releaseCoverage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_releaseCoverage(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().ReleaseCoverage(rctx, fc.Args["projectId"].(string), fc.Args["fixVersionName"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.ReleaseCoverage)
+	fc.Result = res
+	return ec.marshalNReleaseCoverage2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseCoverage(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_releaseCoverage(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fixVersion":
+				return ec.fieldContext_ReleaseCoverage_fixVersion(ctx, field)
+			case "totalEpics":
+				return ec.fieldContext_ReleaseCoverage_totalEpics(ctx, field)
+			case "coveredEpics":
+				return ec.fieldContext_ReleaseCoverage_coveredEpics(ctx, field)
+			case "fullyCoveredEpics":
+				return ec.fieldContext_ReleaseCoverage_fullyCoveredEpics(ctx, field)
+			case "totalChildren":
+				return ec.fieldContext_ReleaseCoverage_totalChildren(ctx, field)
+			case "coveredChildren":
+				return ec.fieldContext_ReleaseCoverage_coveredChildren(ctx, field)
+			case "epics":
+				return ec.fieldContext_ReleaseCoverage_epics(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReleaseCoverage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_releaseCoverage_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Query___type(ctx, field)
 	if err != nil {
@@ -13141,6 +13547,334 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_fixVersion(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_fixVersion(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.FixVersion, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.JiraRelease)
+	fc.Result = res
+	return ec.marshalNJiraRelease2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraRelease(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_fixVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraRelease_id(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraRelease_name(ctx, field)
+			case "released":
+				return ec.fieldContext_JiraRelease_released(ctx, field)
+			case "releaseDate":
+				return ec.fieldContext_JiraRelease_releaseDate(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraRelease", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_totalEpics(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_totalEpics(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.TotalEpics, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_totalEpics(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_coveredEpics(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_coveredEpics(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.CoveredEpics, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_coveredEpics(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_fullyCoveredEpics(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_fullyCoveredEpics(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.FullyCoveredEpics, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_fullyCoveredEpics(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_totalChildren(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_totalChildren(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.TotalChildren, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_totalChildren(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_coveredChildren(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_coveredChildren(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.CoveredChildren, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_coveredChildren(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_epics(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_epics(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Epics, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.EpicCoverageSummary)
+	fc.Result = res
+	return ec.marshalNEpicCoverageSummary2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐEpicCoverageSummaryᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_epics(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "issue":
+				return ec.fieldContext_EpicCoverageSummary_issue(ctx, field)
+			case "coveredCount":
+				return ec.fieldContext_EpicCoverageSummary_coveredCount(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_EpicCoverageSummary_totalCount(ctx, field)
+			case "passingCount":
+				return ec.fieldContext_EpicCoverageSummary_passingCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EpicCoverageSummary", field.Name)
 		},
 	}
 	return fc, nil
@@ -22335,6 +23069,60 @@ func (ec *executionContext) _EpicCoverageNode(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var epicCoverageSummaryImplementors = []string{"EpicCoverageSummary"}
+
+func (ec *executionContext) _EpicCoverageSummary(ctx context.Context, sel ast.SelectionSet, obj *model.EpicCoverageSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, epicCoverageSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EpicCoverageSummary")
+		case "issue":
+			out.Values[i] = ec._EpicCoverageSummary_issue(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "coveredCount":
+			out.Values[i] = ec._EpicCoverageSummary_coveredCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._EpicCoverageSummary_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "passingCount":
+			out.Values[i] = ec._EpicCoverageSummary_passingCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var fieldMappingEntryImplementors = []string{"FieldMappingEntry"}
 
 func (ec *executionContext) _FieldMappingEntry(ctx context.Context, sel ast.SelectionSet, obj *model.FieldMappingEntry) graphql.Marshaler {
@@ -24229,6 +25017,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "releaseCoverage":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_releaseCoverage(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -24237,6 +25047,75 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___schema(ctx, field)
 			})
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var releaseCoverageImplementors = []string{"ReleaseCoverage"}
+
+func (ec *executionContext) _ReleaseCoverage(ctx context.Context, sel ast.SelectionSet, obj *model.ReleaseCoverage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, releaseCoverageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReleaseCoverage")
+		case "fixVersion":
+			out.Values[i] = ec._ReleaseCoverage_fixVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalEpics":
+			out.Values[i] = ec._ReleaseCoverage_totalEpics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "coveredEpics":
+			out.Values[i] = ec._ReleaseCoverage_coveredEpics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fullyCoveredEpics":
+			out.Values[i] = ec._ReleaseCoverage_fullyCoveredEpics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalChildren":
+			out.Values[i] = ec._ReleaseCoverage_totalChildren(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "coveredChildren":
+			out.Values[i] = ec._ReleaseCoverage_coveredChildren(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "epics":
+			out.Values[i] = ec._ReleaseCoverage_epics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -26100,6 +26979,60 @@ func (ec *executionContext) marshalNEpicCoverageNode2ᚖgithubᚗcomᚋguidewire
 	return ec._EpicCoverageNode(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNEpicCoverageSummary2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐEpicCoverageSummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.EpicCoverageSummary) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNEpicCoverageSummary2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐEpicCoverageSummary(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNEpicCoverageSummary2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐEpicCoverageSummary(ctx context.Context, sel ast.SelectionSet, v *model.EpicCoverageSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EpicCoverageSummary(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNFernField2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐFernField(ctx context.Context, v any) (model.FernField, error) {
 	var res model.FernField
 	err := res.UnmarshalGQL(v)
@@ -26750,6 +27683,20 @@ func (ec *executionContext) marshalNProjectTreemapNode2ᚖgithubᚗcomᚋguidewi
 		return graphql.Null
 	}
 	return ec._ProjectTreemapNode(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNReleaseCoverage2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseCoverage(ctx context.Context, sel ast.SelectionSet, v model.ReleaseCoverage) graphql.Marshaler {
+	return ec._ReleaseCoverage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNReleaseCoverage2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseCoverage(ctx context.Context, sel ast.SelectionSet, v *model.ReleaseCoverage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReleaseCoverage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRequirementCoverageTree2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐRequirementCoverageTree(ctx context.Context, sel ast.SelectionSet, v model.RequirementCoverageTree) graphql.Marshaler {

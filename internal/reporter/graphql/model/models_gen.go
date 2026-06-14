@@ -64,6 +64,13 @@ type EpicCoverageNode struct {
 	TotalCount   int                  `json:"totalCount"`
 }
 
+type EpicCoverageSummary struct {
+	Issue        *JiraIssueSummary `json:"issue"`
+	CoveredCount int               `json:"coveredCount"`
+	TotalCount   int               `json:"totalCount"`
+	PassingCount int               `json:"passingCount"`
+}
+
 type FieldMappingEntry struct {
 	FernField             FernField          `json:"fernField"`
 	JiraFieldID           string             `json:"jiraFieldId"`
@@ -234,6 +241,16 @@ type ProjectTreemapNode struct {
 }
 
 type Query struct {
+}
+
+type ReleaseCoverage struct {
+	FixVersion        *JiraRelease           `json:"fixVersion"`
+	TotalEpics        int                    `json:"totalEpics"`
+	CoveredEpics      int                    `json:"coveredEpics"`
+	FullyCoveredEpics int                    `json:"fullyCoveredEpics"`
+	TotalChildren     int                    `json:"totalChildren"`
+	CoveredChildren   int                    `json:"coveredChildren"`
+	Epics             []*EpicCoverageSummary `json:"epics"`
 }
 
 type RequirementCoverageTree struct {

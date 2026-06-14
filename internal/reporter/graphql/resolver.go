@@ -24,9 +24,12 @@ type Resolver struct {
 	flakyDetectionService   *analyticsApp.FlakyDetectionService
 	jiraConnectionService   *integrations.JiraConnectionService
 	jiraFieldMappingService *integrations.JiraFieldMappingService
-	loaders                 *dataloader.Loaders
-	db                      *gorm.DB
-	logger                  *logging.Logger
+	// Coverage dependencies (#29 epicCoverage, #30 releaseCoverage). Wired post-construction in main.go; tests assign directly.
+	jiraCoverageClient integrations.CoverageJiraClient
+	tagCoverageRepo    integrations.CoverageTagRepository
+	loaders            *dataloader.Loaders
+	db                 *gorm.DB
+	logger             *logging.Logger
 }
 
 // NewResolver creates a new GraphQL resolver
