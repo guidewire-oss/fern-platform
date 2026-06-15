@@ -195,6 +195,29 @@ GROUP  BY t.value
 > superseded) there; nothing here should be read as committing to Project
 > Settings as the final location.
 
+**Color semantics (all levels).** Coverage breadth and test health are SEPARATE
+axes. Color encodes *health*; failures (red) block "ready", **skips do not**
+(skip counts still appear as `↺N` in text):
+- **grey** — uncovered / not started (no tests)
+- **red** — has ≥1 failing test
+- **green** — covered, no failures (skips allowed)
+- **neutral** — (rollups only) partially covered with no failures = in progress
+
+Story badge: grey `uncovered` / red `✗ total (✓p ✗f ↺s)` / green `✓ total`.
+
+Epic row: the **% and bar width** are coverage breadth (covered/total stories);
+the **color** is health (red if any story incl. sub-tasks has a failing test,
+even at 100%; green at 100% no fails; grey at 0%; neutral when partial). A red
+`✗ N failing` chip shows the count of failing issues.
+
+**Release roll-up (top line).** The tree is headed by a release summary
+(`ReleaseSummary`): the selected release version, a quantified health pill
+(**Release ready** / **✗ N failing** / **In progress** / **Not started**), and a
+**labelled** coverage figure `<covered>/<total> covered · <pct>%` aggregated
+across all epics + Issues-without-an-Epic (walking sub-tasks). Coverage and health
+are shown as distinct elements so neither is misread as the other. Hierarchy is
+**Release → Epic → Story → Sub-task**.
+
 ## 4. Technical Decisions
 
 ### Decision 1: Fix version passed as name, not ID

@@ -253,3 +253,33 @@ Note: task-4.2 also waits for task-2.2 and task-4.1, but those can be completed 
 - [ ] No regressions in existing JIRA integration features
 - [ ] Every JIRA issue key in the coverage tree links to the issue in JIRA (new tab)
 - [ ] Clicking the test count on a covered story shows the tagged spec runs
+
+---
+
+## Post-original-scope enhancements (2026-06-15, demo prep)
+
+Frontend-only changes to `web/index.html` (no build step; served from disk).
+Satisfy Requirement 4 and the terminology updates in requirements.md. All done;
+**uncommitted** in the working tree pending review.
+
+- [x] **Results-aware color semantics** — badge/epic/release color encodes health,
+  not just covered/uncovered: grey = uncovered, red = has a failing test, green =
+  covered & passing; **skips no longer change color** (shown as `↺N` in text).
+  Fixes "red = uncovered" colliding with "red = failing", and covered-but-failing
+  stories no longer show green. (`StoryRow`, `EpicRow`.)
+- [x] **Epic health roll-up** — epic color reflects descendant failures (red even at
+  100% coverage); adds an `✗ N failing` chip. (`EpicRow`.)
+- [x] **Release roll-up row** — new top-level `ReleaseSummary`: release version +
+  labelled coverage (`<covered>/<total> covered · <pct>%`) + quantified health pill
+  (Release ready / ✗ N failing / In progress / Not started). Hierarchy is now
+  Release → Epic → Story → Sub-task.
+- [x] **Terminology** — UI "fix version" → "release version"; picker placeholder
+  "Filter versions…" → "Filter releases…"; "Unassigned Stories" → "Issues without
+  an Epic". `fixVersion` JQL/API names unchanged.
+- [x] **Placement note** — Coverage tab lives in Project Settings as interim home;
+  permanent surface is the readiness dashboard (#30). (design.md.)
+
+> Not yet covered by automated tests — the acceptance suite asserts the
+> `.coverage-story-row`/`.covered` classes (unchanged), not the new colors/labels.
+> Add assertions for Requirement 4 (release pill text, health colors) when the
+> verification pass runs.

@@ -2,19 +2,21 @@
 
 ## Introduction
 
-Fern already ingests test tags in the form `jira:PROJ-123`, creating an association between tests and JIRA issue keys. This feature adds a Requirements Coverage view that lets managers see, for a selected JIRA fix version (e.g. "Atmos vNext"), which epics and stories have test coverage in Fern and which do not — without syncing JIRA data into Fern. The hierarchy is fetched live from JIRA using the project's stored connection credentials.
+Fern already ingests test tags in the form `jira:PROJ-123`, creating an association between tests and JIRA issue keys. This feature adds a Requirements Coverage view that lets managers see, for a selected JIRA **release version** (a JIRA fix version, e.g. "Atmos vNext"), which epics and stories have test coverage in Fern and which do not — without syncing JIRA data into Fern. The hierarchy is fetched live from JIRA using the project's stored connection credentials, and rolls up Release → Epic → Story → Sub-task with results-aware status.
+
+> Terminology: the UI labels these **"release versions"** (matching JIRA's Releases page); the JIRA API/JQL field is `fixVersion`, which is retained verbatim in queries.
 
 ## Requirements
 
-### Requirement 1: Fix Version Selection
+### Requirement 1: Release Version Selection
 
-**User Story:** As a manager, I want to select a JIRA fix version so that I can see coverage for a specific release.
+**User Story:** As a manager, I want to select a JIRA release version so that I can see coverage for a specific release.
 
 #### Acceptance Criteria
 
-1. WHEN a user opens the Requirements Coverage view for a project THEN the system SHALL fetch the full list of fix versions (JIRA Releases) from the JIRA project configured in the project's connection, using `GET /rest/api/3/project/{projectKey}/versions`.
-2. THE SYSTEM SHALL display fix versions in a searchable picker: unreleased versions first (sorted alphabetically), released versions below (sorted newest first by release date). The user narrows the list by typing (e.g. "Atmos") to filter by name.
-3. WHEN a user selects a fix version THE SYSTEM SHALL fetch all JIRA issues assigned to that version via JQL: `fixVersion = "{version}" ORDER BY issuetype`.
+1. WHEN a user opens the Requirements Coverage view for a project THEN the system SHALL fetch the full list of release versions (JIRA fix versions / Releases) from the JIRA project configured in the project's connection, using `GET /rest/api/3/project/{projectKey}/versions`.
+2. THE SYSTEM SHALL display release versions in a searchable picker (placeholder "Filter releases…"): unreleased versions first (sorted alphabetically), released versions below (sorted newest first by release date). The user narrows the list by typing (e.g. "Atmos") to filter by name.
+3. WHEN a user selects a release version THE SYSTEM SHALL fetch all JIRA issues assigned to that version via JQL: `fixVersion = "{version}" ORDER BY issuetype`.
 4. IF a project has no active JIRA connection THEN THE SYSTEM SHALL display an appropriate message prompting the user to configure one.
 5. The JIRA project key is already a required field on the JIRA connection (`JiraConnection.ProjectKey()`) — no schema change is needed.
 
@@ -26,9 +28,9 @@ Fern already ingests test tags in the form `jira:PROJ-123`, creating an associat
 
 1. WHEN issues are fetched for a fix version THE SYSTEM SHALL request the `parent` field in the JQL search response (JIRA Cloud supports `parent` uniformly for both classic and next-gen projects). Issues whose `parent` is an Epic are linked directly; no custom epic-link field lookup is required.
 2. THE SYSTEM SHALL display issues in a three-level hierarchy: epics at the top, stories grouped beneath their epic, and sub-tasks grouped beneath their parent story (where sub-tasks exist in the fix version result set).
-3. WHEN an issue has no parent epic THE SYSTEM SHALL group it under an "Unassigned" section. The Unassigned section SHALL be sortable by coverage percentage (most-covered first or least-covered first).
-4. WHEN displaying each story THE SYSTEM SHALL show: issue key, summary, status, and coverage indicator (covered / not covered).
-5. WHEN displaying each epic THE SYSTEM SHALL show: coverage percentage (e.g. "60% (3/5 stories)"), total story count, and a visual coverage bar whose fill corresponds to the coverage percentage.
+3. WHEN an issue has no parent epic THE SYSTEM SHALL group it under an **"Issues without an Epic"** section. That section SHALL be sortable by coverage percentage (most-covered first or least-covered first).
+4. WHEN displaying each story THE SYSTEM SHALL show: issue key, summary, status, and a results-aware coverage indicator — see Requirement 4 for color semantics (grey = uncovered, red = has a failing test, green = covered & passing).
+5. WHEN displaying each epic THE SYSTEM SHALL show: coverage percentage (e.g. "60% (3/5 stories)") and a visual coverage bar whose fill corresponds to that percentage, an `✗ N failing` chip when any descendant story has a failing test, and a color conveying aggregate health (see Requirement 4).
 6. WHEN displaying a covered story or sub-task THE SYSTEM SHALL show: total number of tests linked, pass/fail/skipped breakdown, and date of last test execution.
 7. Every JIRA issue key displayed in the hierarchy (epic, story, sub-task) SHALL be rendered as a hyperlink to the corresponding issue in the JIRA instance (`<jira-base-url>/browse/<key>`), opening in a new tab.
 
@@ -45,7 +47,19 @@ Fern already ingests test tags in the form `jira:PROJ-123`, creating an associat
 5. THE SYSTEM SHALL support a toggle to show only uncovered stories, hiding fully covered ones while maintaining the hierarchical structure and the path from epic to uncovered story.
 6. WHEN a user clicks the test count badge on a covered story THE SYSTEM SHALL open a detail view listing the individual spec runs tagged with that issue key, including spec name, status, suite name, branch, and execution date.
 
-### Requirement 4: Non-Functional Requirements
+### Requirement 4: Release Roll-Up and Status / Color Semantics
+
+**User Story:** As a manager, I want one top-level release status and consistent colors so that I can read release readiness at a glance without confusing coverage with pass/fail.
+
+#### Acceptance Criteria
+
+1. THE SYSTEM SHALL display a release-level roll-up row at the top of the tree showing the selected release version and aggregate coverage across all epics and the Issues-without-an-Epic bucket (walking sub-tasks). Hierarchy is **Release → Epic → Story → Sub-task**.
+2. Coverage breadth and test health SHALL be presented as **separate** elements so neither is misread as the other: a labelled coverage figure (`<covered>/<total> covered · <pct>%`) and a distinct health pill.
+3. The release health pill SHALL be one of: **Release ready** (fully covered, no failures), **✗ N failing** (N = issues with a failing test), **In progress** (partially covered, no failures), **Not started** (0% covered).
+4. Color SHALL encode health, not coverage: **grey** = uncovered / not started, **red** = has ≥1 failing test, **green** = covered with no failures, neutral = partially covered with no failures. Failures block "ready"; **skips do not** (skip counts are shown as `↺N` in text but never change color).
+5. A story/epic/release that is fully covered but has a failing test SHALL NOT appear green; red SHALL NOT be used to mean "uncovered" at any level.
+
+### Requirement 5: Non-Functional Requirements
 
 **User Story:** As a user, I want the coverage view to load in a reasonable time so that it is usable in practice.
 

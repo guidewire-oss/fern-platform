@@ -6846,6 +6846,23 @@
             const hidden = uncoveredOnly && story.covered && (!story.subTasks || story.subTasks.every(st => st.covered));
             const leftPad = indent ? '4rem' : '2.5rem';
             const issueLinkStyle = { color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.8125rem' };
+            // Badge color reflects RESULTS, not just covered/uncovered:
+            //   uncovered = grey, any failure = red, skips-only = amber, all pass = green.
+            const cov = story.testRunCoverage;
+            const covFailed = cov ? cov.failed : 0;
+            const covSkipped = cov ? cov.skipped : 0;
+            const covBreakdown = cov ? `✓${cov.passed} ✗${cov.failed}${covSkipped > 0 ? ` ↺${covSkipped}` : ''}` : '';
+            let badgeBg, badgeColor, badgeText;
+            if (!story.covered) {
+                badgeBg = 'rgba(107,114,128,0.12)'; badgeColor = '#6b7280'; badgeText = 'uncovered';
+            } else if (covFailed > 0) {
+                badgeBg = 'rgba(239,68,68,0.12)'; badgeColor = '#dc2626';
+                badgeText = cov ? `✗ ${cov.total} (${covBreakdown})` : '✗ failing';
+            } else {
+                // covered, no failures — green even if some skips (shown in text)
+                badgeBg = 'rgba(34,197,94,0.12)'; badgeColor = '#16a34a';
+                badgeText = cov ? (covSkipped > 0 ? `✓ ${cov.total} (${covBreakdown})` : `✓ ${cov.total}`) : '✓';
+            }
             return (
                 <>
                     <div
@@ -6870,16 +6887,14 @@
                                     borderRadius: '9999px',
                                     fontSize: '0.75rem',
                                     fontWeight: '600',
-                                    background: story.covered ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.08)',
-                                    color: story.covered ? '#16a34a' : '#dc2626',
+                                    background: badgeBg,
+                                    color: badgeColor,
                                     cursor: story.covered ? 'pointer' : 'default',
                                     textDecoration: story.covered ? 'underline dotted' : 'none',
                                     whiteSpace: 'nowrap'
                                 }}
                             >
-                                {story.covered && story.testRunCoverage
-                                    ? `✓ ${story.testRunCoverage.total} (✓${story.testRunCoverage.passed} ✗${story.testRunCoverage.failed}${story.testRunCoverage.skipped > 0 ? ` ↺${story.testRunCoverage.skipped}` : ''})`
-                                    : story.covered ? '✓' : '✗ uncovered'}
+                                {badgeText}
                             </span>
                             {story.covered && story.testRunCoverage && story.testRunCoverage.lastRunAt && (
                                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
@@ -6924,7 +6939,7 @@
                         color: 'var(--text-secondary)',
                         fontSize: '0.875rem'
                     }}>
-                        <span>Unassigned Stories</span>
+                        <span>Issues without an Epic</span>
                         <select
                             value={sortOrder}
                             onChange={e => setSortOrder(e.target.value)}
@@ -6943,6 +6958,46 @@
             );
         }
 
+        // Top-level release roll-up: coverage breadth across all epics + unassigned
+        // issues, with the same health palette (red if anything fails, etc.).
+        function ReleaseSummary({ tree, versionName }) {
+            // Coverage breadth (issues with tests) and health (failing issues) are
+            // SEPARATE: the % is labelled "covered", the pill quantifies failures.
+            let covered = 0, total = 0, failed = 0, failingIssues = 0;
+            const walk = s => {
+                if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
+                (s.subTasks || []).forEach(walk);
+            };
+            (tree.epics || []).forEach(e => {
+                covered += e.coveredCount; total += e.totalCount;
+                (e.stories || []).forEach(walk);
+            });
+            (tree.unassigned || []).forEach(s => { total += 1; if (s.covered) covered += 1; walk(s); });
+            const pct = total > 0 ? Math.round(covered / total * 100) : 0;
+            // health: failures block "ready"; skips do not.
+            const state = failed > 0 ? 'failed'
+                : pct === 0 ? 'uncovered'
+                : pct === 100 ? 'ready'
+                : 'partial';
+            const pillColor = { failed: '#dc2626', uncovered: '#6b7280', ready: '#16a34a', partial: 'var(--text-primary)' }[state];
+            const pillBg    = { failed: 'rgba(239,68,68,0.12)', uncovered: 'rgba(107,114,128,0.12)', ready: 'rgba(34,197,94,0.12)', partial: 'rgba(16,185,129,0.10)' }[state];
+            const barColor  = { failed: '#dc2626', uncovered: '#9ca3af', ready: '#16a34a', partial: 'var(--primary)' }[state];
+            const label     = { failed: `✗ ${failingIssues} failing`, uncovered: 'Not started', ready: 'Release ready', partial: 'In progress' }[state];
+            return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem 1rem', background: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', fontWeight: '600' }}>
+                    <span style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Release</span>
+                    <span style={{ flex: 1, fontSize: '1rem', color: 'var(--text-primary)' }}>{versionName}</span>
+                    <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: pillBg, color: pillColor, whiteSpace: 'nowrap' }}>{label}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', minWidth: '140px' }}>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{covered}/{total} covered · {pct}%</span>
+                        <div style={{ width: '120px', height: '5px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ width: pct + '%', height: '100%', background: barColor, borderRadius: '2px' }} />
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         function EpicRow({ epic, jiraUrl, projectId, uncoveredOnly }) {
             const [expanded, setExpanded] = React.useState(true);
             const anyVisible = uncoveredOnly
@@ -6950,6 +7005,24 @@
                 : true;
             if (uncoveredOnly && !anyVisible) return null;
             const pct = epic.totalCount > 0 ? Math.round(epic.coveredCount / epic.totalCount * 100) : 0;
+            // The % is coverage breadth (stories with tests); the COLOR conveys health,
+            // so a fully-covered-but-failing epic is red, not green. Count failing
+            // issues from the epic's stories (and their sub-tasks).
+            const epicAgg = (() => {
+                let failed = 0, failingIssues = 0;
+                const walk = s => {
+                    if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
+                    (s.subTasks || []).forEach(walk);
+                };
+                (epic.stories || []).forEach(walk);
+                return { failed, failingIssues };
+            })();
+            const epicState = epicAgg.failed > 0 ? 'failed'
+                : pct === 0 ? 'uncovered'
+                : pct === 100 ? 'passed'
+                : 'partial';
+            const epicTextColor = { failed: '#dc2626', uncovered: '#6b7280', passed: '#16a34a', partial: 'var(--text-secondary)' }[epicState];
+            const epicBarColor  = { failed: '#dc2626', uncovered: '#9ca3af', passed: '#16a34a', partial: 'var(--primary)' }[epicState];
             const issueLinkStyle = { color: 'var(--primary)', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' };
             return (
                 <div>
@@ -6971,12 +7044,17 @@
                         <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', userSelect: 'none' }}>{expanded ? '▼' : '▶'}</span>
                         <IssueLink issueKey={epic.issue.key} jiraUrl={jiraUrl} style={issueLinkStyle} />
                         <span style={{ flex: 1 }}>{epic.issue.summary}</span>
+                        {epicAgg.failingIssues > 0 && (
+                            <span style={{ fontSize: '0.6875rem', fontWeight: '600', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', whiteSpace: 'nowrap' }}>
+                                ✗ {epicAgg.failingIssues} failing
+                            </span>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', minWidth: '120px' }}>
-                            <span style={{ fontSize: '0.8125rem', color: pct === 100 ? '#16a34a' : pct === 0 ? '#dc2626' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.8125rem', color: epicTextColor, whiteSpace: 'nowrap' }}>
                                 {pct}% ({epic.coveredCount}/{epic.totalCount})
                             </span>
                             <div style={{ width: '100px', height: '4px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: pct + '%', height: '100%', background: pct === 100 ? '#16a34a' : pct === 0 ? '#dc2626' : 'var(--primary)', borderRadius: '2px' }} />
+                                <div style={{ width: pct + '%', height: '100%', background: epicBarColor, borderRadius: '2px' }} />
                             </div>
                         </div>
                     </div>
@@ -7056,7 +7134,7 @@
                         if (outerCancelled) return;
                         setVersions(sortVersions(data.jiraFixVersions || []));
                     } catch (err) {
-                        if (!outerCancelled) setVersionsError(err.message || 'Failed to load fix versions');
+                        if (!outerCancelled) setVersionsError(err.message || 'Failed to load release versions');
                     }
                 };
                 init();
@@ -7118,7 +7196,7 @@
                         Requirement Coverage
                     </h3>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                        Track test coverage for JIRA issues by fix version
+                        Track test coverage for JIRA issues by release version
                     </p>
 
                     {versionsError ? (
@@ -7131,7 +7209,7 @@
                                 <input
                                     id="coverage-version-filter"
                                     type="text"
-                                    placeholder="Filter versions…"
+                                    placeholder="Filter releases…"
                                     value={filterText}
                                     onChange={e => setFilterText(e.target.value)}
                                     style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '160px' }}
@@ -7142,7 +7220,7 @@
                                     onChange={handleVersionChange}
                                     style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '220px' }}
                                 >
-                                    <option value="">— Select fix version —</option>
+                                    <option value="">— Select release version —</option>
                                     {groups.map(g => g.label
                                         ? <optgroup key={g.label} label={g.label}>
                                             {g.versions.map(v => (
@@ -7195,6 +7273,7 @@
                                         </label>
                                     </div>
                                     <div style={{ border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                        <ReleaseSummary tree={tree} versionName={selectedVersion} />
                                         {tree.epics.map(epic => (
                                             <EpicRow key={epic.issue.key} epic={epic} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
                                         ))}
