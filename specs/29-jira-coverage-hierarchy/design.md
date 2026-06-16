@@ -7,20 +7,20 @@
 ```
 fern-platform/
 ├── internal/
-│   ├── jira/
-│   │   ├── client.go                    (modify: add SearchIssues, GetVersions, pagination)
-│   │   ├── model.go                     (modify: add JiraVersion, JiraIssue, JiraParent)
-│   │   └── coverage_service.go          (new: two-phase fetch + Fern coverage cross-ref)
-│   ├── graph/
-│   │   ├── schema.graphql               (modify: add JiraVersion, coverage types + queries)
-│   │   ├── model/
-│   │   │   └── models_gen.go            (auto-generated — do not edit)
-│   │   └── resolvers/
-│   │       └── coverage.resolvers.go    (new: requirementCoverage + jiraFixVersions)
-│   └── repository/
-│       └── tag_repository.go            (modify: add GetJiraTagCoverageByProject)
+│   ├── domains/integrations/
+│   │   ├── jira_client_coverage.go      (modify: GetEpicReleases, SearchIssues)
+│   │   ├── coverage_service.go          (modify: Epic-first three-phase cascade)
+│   │   └── types.go                     (modify: JiraIssue, JiraVersion, JiraParent)
+│   ├── reporter/graphql/
+│   │   ├── schema.graphql               (modify: update query signatures)
+│   │   └── schema.resolvers.go          (modify: jiraReleases, requirementCoverage)
+│   └── domains/tags/
+│       └── infrastructure/
+│           └── gorm_tag_repository.go   (unchanged: GetJiraTagCoverageByProject)
+├── migrations/
+│   └── 000024_add_release_field_id_to_jira_connections.up.sql  (new)
 └── web/
-    └── index.html                       (modify: add Coverage tab, version picker, tree UI)
+    └── index.html                       (modify: release picker, tree UI)
 ```
 
 ### Component Diagram
@@ -28,50 +28,64 @@ fern-platform/
 ```
 Browser                  GraphQL Server             External
   │                           │
-  │──jiraFixVersions(proj)────▶│
-  │                           │──GetVersions(projectKey)──▶ JIRA REST API
-  │◀──[JiraVersion]────────────│
+  │──jiraReleases(projId)─────▶│
+  │                           │──GetEpicReleases(fieldId,key)─▶ JIRA REST API
+  │◀──[String]────────────────│   (distinct cf[fieldId] values on Epics)
   │                           │
   │──requirementCoverage()────▶│
-  │                           │──SearchIssues(JQL phase1)─▶ JIRA REST API
-  │                           │──SearchIssues(JQL phase2)─▶ JIRA REST API (if needed)
-  │                           │──GetJiraTagCoverage()─────▶ Fern DB (PostgreSQL)
+  │                           │──SearchIssues(Phase1: cf[]=value, Epic)──▶ JIRA
+  │                           │──SearchIssues(Phase2: parent IN epics)───▶ JIRA
+  │                           │──SearchIssues(Phase3: parent IN stories)─▶ JIRA
+  │                           │──GetJiraTagCoverage()────────────────────▶ Fern DB
   │◀──RequirementCoverageTree──│
 ```
 
 ## 2. Data Flow
 
-### Fix Version Picker Load
+### Release Picker Load
 
 1. User opens the Coverage tab for a project.
-2. Frontend calls GraphQL `jiraFixVersions(projectId: "...")`.
-3. Resolver fetches `JiraConnection` for the project (existing service call).
-4. `jira_client.GetVersions(projectKey)` calls `GET /rest/api/3/project/{projectKey}/versions`.
-5. Results returned as `[JiraVersion]` — unreleased/released flag + releaseDate included.
-6. Frontend groups client-side (unreleased first, alphabetical; released below, newest first) and renders the searchable picker.
+2. Frontend calls GraphQL `jiraReleases(projectId: "...")`.
+3. Resolver fetches `JiraConnection` for the project, reads `releaseFieldId` and `projectKey`.
+4. `jira_client.GetEpicReleases(ctx, baseURL, projectKey, releaseFieldId, username, credential, authType)` calls:
+   ```
+   GET /rest/api/3/search/jql?jql=project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY&fields=cf[{fieldId}]&maxResults=100
+   ```
+   Paginates until all Epics are fetched. Collects distinct non-null values of the custom field.
+5. Distinct release values returned as `[String]` — sorted alphabetically.
+6. Frontend renders the searchable picker.
 
 ### Coverage Tree Load
 
-1. User selects a fix version name from the picker.
-2. Frontend calls `requirementCoverage(projectId: "...", fixVersionName: "Atmos vNext")`.
-3. Resolver calls `CoverageService.Build(projectId, fixVersionName)`.
-4. **Phase 1 — fix version issues:** JQL `fixVersion = "Atmos vNext" ORDER BY issuetype`, fields `key,summary,status,issuetype,parent`, paginated (`maxResults=100`, loop until `startAt + len(results) >= total`).
-5. Separate results into epics (issuetype = Epic) and non-epics. Collect parent epic keys from non-epic issues.
-6. **Phase 2 — missing epics:** Keys in parent set but absent from Phase 1 → single batched JQL `issueKey IN (PROJ-10,PROJ-11,...)`; skip if set is empty.
-7. **Fern coverage:** `tag_repository.GetJiraTagCoverageByProject(ctx, projectID)` — returns `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`, aggregating JIRA tags at both spec-run and test-run granularity.
-8. **Assemble tree:** For each epic, collect its stories from Phase 1/2 results. Cross-reference story keys against the Fern coverage map. Group stories with no parent under "Unassigned".
-9. Return `RequirementCoverageTree` — epics with story children + unassigned stories.
+1. User selects a release value from the picker.
+2. Frontend calls `requirementCoverage(projectId: "...", releaseValue: "OLOS (2025.06M)")`.
+3. Resolver calls `CoverageService.Build(ctx, projectId, releaseValue)`.
+4. Service reads `JiraConnection` → `releaseFieldId`, `projectKey`, credentials.
+5. **Phase 1 — Epics:** JQL `cf[{fieldId}] = "{releaseValue}" AND issuetype = Epic ORDER BY key`,
+   fields `key,summary,status,issuetype`, paginated via cursor (`nextPageToken`).
+6. **Phase 2 — Stories:** For each chunk of ≤50 epic keys:
+   `parent IN (PROJ-1,...,PROJ-50) ORDER BY key`, fields `key,summary,status,issuetype,parent`.
+   Results merged across chunks.
+7. **Phase 3 — Sub-tasks:** For each chunk of ≤50 story keys:
+   `parent IN (PROJ-51,...,PROJ-100) ORDER BY key`, same fields.
+   Results merged across chunks.
+8. **Fern coverage:** `GetJiraTagCoverageByProject(ctx, projectID)` returns
+   `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`.
+9. **Assemble tree:** stories attached to their parent epic; sub-tasks attached to their parent
+   story. Stories/sub-tasks with unresolvable parents go to "Issues without an Epic".
+   Cross-reference all keys against the Fern coverage map.
+10. Return `RequirementCoverageTree`.
 
 ## 3. Interface Specifications
 
-### New GraphQL Types (graph/schema.graphql)
+### GraphQL Types (schema.graphql)
 
 ```graphql
-type JiraVersion {
-  id:          String!
-  name:        String!
-  released:    Boolean!
-  releaseDate: String      # ISO date string, null if not released
+# A release value returned by the release picker.
+# Simple string — the distinct value of the configured custom field on Epics.
+# (Named JiraRelease to reserve the type name; may gain metadata in future.)
+type JiraRelease {
+  name: String!
 }
 
 type JiraIssueSummary {
@@ -82,15 +96,18 @@ type JiraIssueSummary {
 }
 
 type TestRunCoverage {
-  total:  Int!
-  passed: Int!
-  failed: Int!
+  total:     Int!
+  passed:    Int!
+  failed:    Int!
+  skipped:   Int!
+  lastRunAt: String   # ISO datetime, null if not available
 }
 
 type StoryCoverageNode {
   issue:           JiraIssueSummary!
   covered:         Boolean!
-  testRunCoverage: TestRunCoverage  # null if not covered
+  testRunCoverage: TestRunCoverage   # null if not covered
+  subTasks:        [StoryCoverageNode!]!
 }
 
 type EpicCoverageNode {
@@ -101,27 +118,54 @@ type EpicCoverageNode {
 }
 
 type RequirementCoverageTree {
-  fixVersion: JiraVersion!
+  release:    JiraRelease!
   epics:      [EpicCoverageNode!]!
   unassigned: [StoryCoverageNode!]!
 }
 
 extend type Query {
-  jiraFixVersions(projectId: ID!): [JiraVersion!]!
-  requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
+  # Returns distinct release values from the configured custom field on Epics.
+  jiraReleases(projectId: ID!): [JiraRelease!]!
+
+  # Builds the full coverage tree for the selected release value.
+  requirementCoverage(projectId: ID!, releaseValue: String!): RequirementCoverageTree!
+
+  # Returns spec runs tagged with a specific JIRA issue key (drill-down).
+  specRunsByJiraTag(projectId: ID!, issueKey: String!): [SpecRunSummary!]!
 }
 ```
 
-### New JIRA Client Methods (internal/jira/client.go)
+### JIRA Client Methods
 
 | Method | JIRA Endpoint | Notes |
 |--------|--------------|-------|
-| `GetVersions(projectKey string) ([]JiraVersion, error)` | `GET /rest/api/3/project/{projectKey}/versions` | Full list; no pagination |
-| `SearchIssues(jql string, fields []string) ([]JiraIssue, error)` | `POST /rest/api/3/issue/search` | Paginates via `startAt`; `maxResults=100` per page |
+| `GetEpicReleases(ctx, baseURL, projectKey, releaseFieldId, username, credential, authType)` | `GET /rest/api/3/search/jql` | JQL: `project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY`; collect distinct non-null field values; paginated |
+| `SearchIssues(ctx, baseURL, username, credential, authType, jql, fields)` | `GET /rest/api/3/search/jql` | Cursor-based pagination via `nextPageToken`; `maxResults=100` per page |
 
-Issue search uses POST to avoid URL length limits when the `issueKey IN (...)` batch is large.
+### New/Modified Service Methods
 
-### New Repository Method (internal/repository/tag_repository.go)
+```go
+// GetReleasesForProject returns distinct release values from the custom field
+// on Epics for the project's JIRA connection.
+func (s *CoverageService) GetReleasesForProject(ctx context.Context, projectID string) ([]string, error)
+
+// Build fetches the full Epic→Story→Sub-task hierarchy for the release value
+// and cross-references with Fern tag coverage.
+func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue string) (*CoverageTree, error)
+```
+
+### New Migration
+
+```sql
+-- 000024_add_release_field_id_to_jira_connections.up.sql
+ALTER TABLE jira_connections ADD COLUMN release_field_id TEXT NOT NULL DEFAULT '';
+```
+
+`release_field_id` stores the JIRA custom field ID for release-scope determination
+(e.g. `"12345"` for `cf[12345]`). Empty string means not yet configured; the coverage
+resolver returns an appropriate error when unset.
+
+### Repository Method (unchanged)
 
 ```go
 // GetJiraTagCoverageByProject returns per-JIRA-issue-key coverage counts
@@ -132,25 +176,21 @@ GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]C
 ```
 
 **Both tagging granularities count.** A `category='jira'` tag may be applied to a
-`spec_run` (an individual test) or to a whole `test_run`. Per requirements §1–2, a
-story is covered if *either* carries a matching `jira:{issueKey}` tag, so coverage
-aggregates over both. This is expressed as a `UNION ALL` of the two tag tables —
-`spec_run_tags` (joined `spec_runs → suite_runs → test_runs`) and `test_run_tags`
-(joined `test_runs`) — each contributing its `status` and `start_time`. The query
-must use `db.Raw(...)` rather than GORM's fluent API, which cannot express UNION.
+`spec_run` (an individual test) or to a whole `test_run`. Coverage aggregates over both.
+Expressed as a `UNION ALL` of the two tag tables — `spec_run_tags` and `test_run_tags`.
+The query uses `db.Raw(...)` because GORM's fluent API cannot express UNION.
 Soft-deleted rows are excluded on both legs.
 
 SQL:
 ```sql
 SELECT t.value AS issue_key,
-       COUNT(*)                                                   AS total,
+       COUNT(*)                                                    AS total,
        SUM(CASE WHEN tagged.status = 'passed'  THEN 1 ELSE 0 END) AS passed,
        SUM(CASE WHEN tagged.status = 'failed'  THEN 1 ELSE 0 END) AS failed,
        SUM(CASE WHEN tagged.status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-       MAX(tagged.run_at)                                         AS last_run_at
+       MAX(tagged.run_at)                                          AS last_run_at
 FROM   tags t
 JOIN (
-    -- spec-run-level tags (individual test granularity)
     SELECT srt.tag_id, sr.status, sr.start_time AS run_at
     FROM   spec_run_tags srt
     JOIN   spec_runs  sr ON sr.id = srt.spec_run_id
@@ -160,7 +200,6 @@ JOIN (
 
     UNION ALL
 
-    -- test-run-level tags (whole-run granularity)
     SELECT trt.tag_id, tr.status, tr.start_time AS run_at
     FROM   test_run_tags trt
     JOIN   test_runs tr ON tr.id = trt.test_run_id
@@ -168,36 +207,32 @@ JOIN (
 ) tagged ON tagged.tag_id = t.id
 WHERE  t.category = 'jira'
 GROUP  BY t.value
+LIMIT  1000
 ```
 
-### New Mock JIRA Endpoints (acceptance/helpers/mock_jira_server.go)
+### Mock JIRA Endpoints (acceptance/helpers/mock_jira_server.go)
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /rest/api/3/project/{key}/versions` | Returns test version list |
-| `POST /rest/api/3/issue/search` | Returns paginated issue results filtered by JQL |
+| `GET /rest/api/3/search/jql` | Returns paginated issues filtered by JQL (used for all three phases + release picker) |
 
 ### Frontend (web/index.html)
 
 | Element | Location | Notes |
 |---------|----------|-------|
-| "Coverage" tab | Project **Settings** page left-nav (alongside General / Integrations / Team / Notifications) | Visible only when project has active JIRA connection |
-| Fix version picker | Top of Coverage panel | Text `<input>` filter + dropdown; grouped unreleased/released |
-| Coverage tree | Below picker | Epic rows expand to story rows; key, summary, status, coverage badge |
+| "Coverage" tab | Project **Settings** page left-nav | Visible only when project has active JIRA connection with `releaseFieldId` set |
+| Release picker | Top of Coverage panel | Text `<input>` filter + dropdown; options from `jiraReleases` query |
+| Coverage tree | Below picker | Epic rows expand to story rows to sub-task rows |
 | "Show uncovered only" toggle | Above tree | Checkbox; client-side filter |
-| No-connection message | Coverage panel | Shown when project has no JIRA connection |
+| No-connection / not-configured message | Coverage panel | Shown when project has no JIRA connection or `releaseFieldId` not set |
 
-> **Placement is interim.** The Coverage view lives in the Project Settings page
-> for now as the pragmatic home while the feature lands. The intended permanent
-> surface for JIRA completion / release-readiness display is the **readiness
-> dashboard** ([issue #30](https://github.com/guidewire-oss/fern-platform/issues/30)),
-> owned separately. When #30 ships, this Coverage view should move (or be
-> superseded) there; nothing here should be read as committing to Project
-> Settings as the final location.
+> **Placement is interim.** The Coverage view lives in Project Settings for now. The
+> intended permanent surface for release-readiness display is the **readiness dashboard**
+> ([issue #30](https://github.com/guidewire-oss/fern-platform/issues/30)), owned
+> separately. When #30 ships, this view should move or be superseded there.
 
-**Color semantics (all levels).** Coverage breadth and test health are SEPARATE
-axes. Color encodes *health*; failures (red) block "ready", **skips do not**
-(skip counts still appear as `↺N` in text):
+**Color semantics (all levels).** Coverage breadth and test health are SEPARATE axes.
+Color encodes *health*; failures (red) block "ready", **skips do not**:
 - **grey** — uncovered / not started (no tests)
 - **red** — has ≥1 failing test
 - **green** — covered, no failures (skips allowed)
@@ -205,131 +240,162 @@ axes. Color encodes *health*; failures (red) block "ready", **skips do not**
 
 Story badge: grey `uncovered` / red `✗ total (✓p ✗f ↺s)` / green `✓ total`.
 
-Epic row: the **% and bar width** are coverage breadth (covered/total stories);
-the **color** is health (red if any story incl. sub-tasks has a failing test,
-even at 100%; green at 100% no fails; grey at 0%; neutral when partial). A red
-`✗ N failing` chip shows the count of failing issues.
+Epic row: the **% and bar width** are coverage breadth (covered/total stories); the
+**color** is health. A red `✗ N failing` chip shows the count of failing issues.
 
-**Release roll-up (top line).** The tree is headed by a release summary
-(`ReleaseSummary`): the selected release version, a quantified health pill
-(**Release ready** / **✗ N failing** / **In progress** / **Not started**), and a
-**labelled** coverage figure `<covered>/<total> covered · <pct>%` aggregated
-across all epics + Issues-without-an-Epic (walking sub-tasks). Coverage and health
-are shown as distinct elements so neither is misread as the other. Hierarchy is
-**Release → Epic → Story → Sub-task**.
+**Release roll-up (top line).** The tree is headed by a release summary (`ReleaseSummary`):
+the selected release value, a health pill (**Release ready** / **✗ N failing** /
+**In progress** / **Not started**), and a labelled coverage figure
+`<covered>/<total> covered · <pct>%` aggregated across all epics + Issues-without-an-Epic.
+Hierarchy is **Release → Epic → Story → Sub-task**.
 
 ## 4. Technical Decisions
 
-### Decision 1: Fix version passed as name, not ID
+### Decision 1: Release value passed as plain string
 
-**Choice:** `requirementCoverage(fixVersionName: String!)` — pass the version name.
+**Choice:** `requirementCoverage(releaseValue: String!)` — pass the release value as a string.
 
-**Rationale:** JIRA JQL uses the version name (`fixVersion = "Atmos vNext"`), not the internal numeric ID. Passing the name avoids a name→ID lookup step on the backend.
+**Rationale:** The release value is whatever the custom field contains (e.g. `"OLOS (2025.06M)"`).
+It is used verbatim in JQL: `cf[{fieldId}] = "{releaseValue}"`. No ID lookup is needed.
 
-**Alternatives Considered:** Pass ID and look up name server-side — extra round-trip with no benefit.
+**Alternatives Considered:** Pass a structured `JiraRelease` object — unnecessary; the name is
+the only field used in queries.
 
-### Decision 2: Client-side fix version filtering
+### Decision 2: Release picker populated from Epic custom field values
 
-**Choice:** Fetch all versions once (`jiraFixVersions`) and filter client-side as the user types.
+**Choice:** `jiraReleases` queries Epics for distinct non-null values of `cf[releaseFieldId]`.
 
-**Rationale:** The JIRA versions endpoint returns the full list in a single call (measured: 3,437 GWCP versions in ~0.67s). There is no server-side search API. Client-side substring match on the pre-loaded list is instant.
+**Rationale:** There is no standard JIRA API for listing custom field values in use. Querying
+Epics that have the field set gives the actual in-use release values for this project, which
+is exactly what the picker needs.
 
-**Alternatives Considered:** Re-query on every keystroke — unnecessary latency, no API to support it.
+**Alternatives Considered:** JIRA's field context options API (`/rest/api/3/field/{id}/context`)
+— returns all *possible* values, not just those in use; produces a noisy picker for large field
+option lists.
 
-### Decision 3: Paginate Phase 1 JQL (maxResults=100)
+### Decision 3: Three-phase cascade with chunked batches
 
-**Choice:** Loop Phase 1 calls using `startAt`/`total` until all results are fetched.
+**Choice:** Phase 1 fetches Epics; Phase 2 fetches Stories by `parent IN (epics)`; Phase 3
+fetches Sub-tasks by `parent IN (stories)`. Each phase chunks its key list into ≤50 keys per
+request.
 
-**Rationale:** JIRA Cloud caps results at 100 per call. Requirement supports up to 500 issues per fix version. Pagination is required.
+**Rationale:** The cascade naturally handles the case where sub-tasks and stories do not carry
+the release signal themselves. Chunking at 50 keeps JQL URL lengths well within JIRA's limits
+even for large releases.
 
-**Alternatives Considered:** Request `maxResults=500` — JIRA API silently clamps to 100; would truncate silently.
+**Alternatives Considered:** Single JQL with `cf[id] in subtaskOf(...)` — not supported by
+JIRA Cloud. Fetching all children recursively per-epic — one request per epic; too many calls.
 
 ### Decision 4: GET for issue search
 
 **Choice:** Use `GET /rest/api/3/search/jql` with query parameters.
 
-**Rationale:** The JIRA Cloud cursor-based search endpoint (`/rest/api/3/search/jql`) is GET-only. JQL and field lists are passed as query parameters. URL length has not been a practical issue at the observed issue-set sizes (≤500 per fix version). The cursor-based pagination token approach is simpler than `startAt`/`total` arithmetic.
+**Rationale:** The JIRA Cloud cursor-based search endpoint (`/rest/api/3/search/jql`) is
+GET-only. Cursor-based pagination (`nextPageToken`) is simpler than `startAt`/`total`
+arithmetic. URL length is manageable with ≤50-key chunks.
 
-**Alternatives Considered:** `POST /rest/api/3/issue/search` with a JSON body — not supported on the Cloud cursor endpoint; requires falling back to the older offset-based pagination API. URL length limit concerns are mitigated because Phase 2 batches are bounded by the number of distinct parent epics referenced by Phase 1 stories, which is small in practice.
+**Alternatives Considered:** `POST /rest/api/3/issue/search` — not supported on the cursor
+endpoint; requires the older offset-based pagination API.
 
 ### Decision 5: No caching in v1
 
 **Choice:** Every coverage tree request fetches live from JIRA.
 
-**Rationale:** Simplest correct implementation. Cache invalidation (issue status changes, new issues added to a version) adds complexity. Coverage view is a management dashboard used infrequently.
+**Rationale:** Simplest correct implementation. Cache invalidation (status changes, new issues
+added) adds complexity. Coverage view is a management dashboard used infrequently.
 
-**Alternatives Considered:** Server-side TTL cache per (projectId, fixVersionName) — deferred to v2 if latency proves problematic.
+**Alternatives Considered:** Server-side TTL cache per `(projectId, releaseValue)` — deferred
+to v2 if latency proves problematic.
 
-### Decision 7: Release-scope determination is `fixVersion`-only in v1; custom-field strategies deferred
+### Decision 6: `parent` field for story/sub-task linking
 
-**Choice:** Release scope is always determined by the standard JIRA `fixVersion` field.
+**Choice:** Use the JIRA `parent` field for all parent-child relationships.
 
-**Rationale:** `fixVersion` is a standard JIRA field present in every project type and on every
-JIRA Cloud tier. It is the correct default for an open-source project with a diverse user base.
-
-Some organizations use custom fields for release mapping (e.g. Guidewire's "Aha Release (edit
-only in Aha)" field on Epics). Supporting these inline would require hardcoding
-organization-specific logic — wrong for an open-source tool. The right shape is a pluggable
-*release-mapping module* interface so each deployment can configure its own release-scope
-strategy. This is deferred to a follow-up issue; the `fixVersion` implementation remains the
-default and is not removed.
-
-**Alternatives Considered:** Custom-field support in v1 — rejected; introduces
-non-standard coupling and complicates the interface for all other users without a
-general extensibility model in place.
-
-### Decision 6: `parent` field for epic linking
-
-**Choice:** Use the JIRA `parent` field, not `customfield_epicLink`.
-
-**Rationale:** `parent` works uniformly across JIRA Cloud classic and next-gen projects. `customfield_epicLink` is legacy and absent from next-gen projects. Aligns with `FernFieldParentRequirement: "parent"` already in the field mapping service.
+**Rationale:** `parent` works uniformly across JIRA Cloud classic and next-gen projects.
+`customfield_epicLink` is legacy and absent from next-gen projects.
 
 **Alternatives Considered:** `customfield_epicLink` — only classic projects; breaks next-gen.
+
+### Decision 7: `releaseFieldId` stored on JiraConnection
+
+**Choice:** Add `release_field_id TEXT` column to `jira_connections` table.
+
+**Rationale:** The custom field ID is organization-specific and must be configurable per JIRA
+connection. The JIRA connection record is already the canonical store for per-project JIRA
+configuration, so this is the natural home.
+
+**Alternatives Considered:** Store in `JiraFieldMapping` (feature #26) — that table maps Fern
+result fields to JIRA issue fields; `releaseFieldId` is a structural configuration, not a
+field mapping. Different concern, different table.
+
+### Decision 8: fixVersion approach archived as pluggable strategy reference
+
+**Choice:** The original `fixVersion`-based implementation is removed from the live code path
+and preserved as a documented reference design.
+
+**Rationale:** `fixVersion` does not work for teams where the release signal is on Epics via a
+custom field. Sub-tasks in those projects can't carry `fixVersion`, making the sub-task level
+invisible. The Epic-first cascade is strictly more powerful.
+
+The `fixVersion` approach remains valid for open-source adopters and standard JIRA users. It is
+the reference implementation for a future `ReleaseDimension` pluggable module interface
+(see requirements *Deferred Strategies* section and
+[issue #197](https://github.com/guidewire-oss/fern-platform/issues/197)).
 
 ## 5. Error Handling
 
 | Scenario | Detection | Response |
 |----------|-----------|----------|
-| No JIRA connection for project | `JiraConnectionService.GetByProject` returns not-found | GraphQL error: "No JIRA connection configured for this project" |
-| JIRA API unreachable / timeout | HTTP error or network timeout from `jira_client` | GraphQL error: "JIRA API unavailable — please try again" |
+| No JIRA connection for project | `FindActiveByProjectID` returns empty | GraphQL error: "No JIRA connection configured for this project" |
+| `releaseFieldId` not configured | `conn.ReleaseFieldID()` is empty string | GraphQL error: "Release field ID not configured — set it in Integration settings" |
+| JIRA API unreachable / timeout | HTTP error or 30s context timeout | GraphQL error: "JIRA API unavailable — please try again" |
 | JIRA authentication failure (401/403) | HTTP 401/403 from JIRA | GraphQL error: "JIRA credentials are invalid or expired" |
-| Fix version has no issues | Phase 1 returns 0 results | Return tree with empty `epics` and `unassigned`; not an error |
-| Phase 2 parent batch fails | JIRA error on `issueKey IN (...)` call | Return tree with Phase 1 epics only; log warning; partial result acceptable |
+| Release value has no Epics | Phase 1 returns 0 results | Return tree with empty `epics` and `unassigned`; not an error |
+| Phase 2 or 3 chunk fails | JIRA error on `parent IN (...)` call | Propagate error; do not return partial tree silently |
 | Fern DB query fails | DB error in `GetJiraTagCoverageByProject` | GraphQL error: "Failed to load coverage data" |
-| Fix version name contains special chars | Unescaped name in JQL string | Escape `fixVersionName` before embedding (replace `"` with `\"`); reject names containing `;` |
+| Release value contains special chars | Raw value embedded in JQL | Validate: reject values containing `;`; quote value with `%q` in JQL string |
 
 ## 6. Testing Approach
 
-### Unit Tests (Go, Ginkgo/Gomega)
+### Unit Tests (Go, standard testing)
 
 **coverage_service_test.go:**
-- Phase 2 triggered only when parent epic keys are absent from Phase 1
-- Phase 2 skipped when all parent epics are already in Phase 1 results
+- Phase 1 returns Epics; Phase 2 fetches Stories; Phase 3 fetches Sub-tasks
+- Phase 2 and 3 are skipped when the respective parent list is empty
+- Key lists are correctly chunked into ≤50 per request
 - Stories correctly grouped under their parent epics
-- Stories with no parent grouped under unassigned
+- Sub-tasks correctly attached to their parent stories
+- Orphaned stories/sub-tasks go to Unassigned
 - Coverage cross-reference: covered/uncovered correctly computed from tag map
-- Empty fix version: empty tree returned without error
+- Empty release: empty tree returned without error
+- `releaseFieldId` empty: error returned before any JIRA calls
+
+**coverage_assemble_test.go (package integrations):**
+- `assembleTree`: empty version, orphan story, orphan sub-task, sub-task attached to story,
+  epic coverage counts, `buildStoryNode` covered/uncovered flag
+
+**jira_client_coverage_test.go:**
+- `GetEpicReleases` returns distinct non-null field values; handles pagination
+- `SearchIssues` paginates correctly via `nextPageToken`
+- `issuetype.subtask` boolean correctly parsed
 
 **tag_repository_test.go (go-sqlmock):**
 - `GetJiraTagCoverageByProject` returns correct counts per issue key
 - Rows with `category != 'jira'` excluded
 
-**jira_client_test.go:**
-- `SearchIssues` paginates correctly when `total > maxResults`
-- POST body includes correct `fields` and `jql` params
-- `GetVersions` parses unreleased and released versions correctly
-
 ### Acceptance Tests (Ginkgo, mock JIRA server)
 
-- **Happy path:** mock returns Phase 1 issues (mix of epics and stories, some parents missing from Phase 1); verify Phase 2 fetches only the missing parent epics; verify tree structure
-- **No-connection error:** project without JIRA connection returns appropriate GraphQL error; frontend shows message
+- **Happy path:** mock returns Phase 1 Epics, Phase 2 Stories, Phase 3 Sub-tasks; verify
+  full three-level hierarchy renders correctly
+- **No-connection error:** project without JIRA connection shows appropriate message
+- **releaseFieldId not set:** appropriate error shown; no JIRA calls made
 - **JIRA unavailable:** mock returns 503; frontend shows error, no crash
-- **"Show uncovered only" toggle:** covered stories hidden client-side, uncovered remain visible
-- **Fix version picker grouping:** unreleased versions appear before released; released sorted newest-first
+- **"Show uncovered only" toggle:** covered stories hidden client-side
+- **Release picker:** options populated from distinct Epic custom field values
 
 ### Smoke Tests
 
-1. Open Coverage tab on a project with an active JIRA connection
-2. Select a known fix version; verify hierarchy renders with at least one epic
-3. Verify at least one covered story appears if jira-tagged test runs exist for the project
+1. Open Coverage tab on a project with an active JIRA connection and `releaseFieldId` set
+2. Select a known release value; verify hierarchy renders with at least one epic
+3. Verify at least one covered story appears if jira-tagged test runs exist
 4. Toggle "Show uncovered only" and confirm covered stories disappear
