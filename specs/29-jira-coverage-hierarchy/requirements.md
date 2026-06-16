@@ -84,3 +84,57 @@ The following items appear in GitHub issue #29 but are deferred pending confirma
 
 - **Export to PDF/Excel** — not implemented; raise a follow-on issue if confirmed needed
 - **Lazy loading / virtual scrolling for 1000+ nodes** — current implementation loads the full tree upfront; acceptable for typical fix-version sizes; revisit if performance becomes a problem in practice
+
+## Known Limitations & Follow-ups
+
+### Discovered against the live GWCP project (2026-06-15)
+
+Both items below block the third (sub-task) hierarchy level from appearing for
+real teams. Logged for a follow-up; not yet implemented.
+
+1. **Sub-tasks only appear if the release is set on the sub-task itself.**
+   `CoverageService` takes sub-tasks only from the Phase-1 `fixVersion = "..."`
+   result set; it does not fetch a story's children. In practice teams set the
+   fix version on the story (and let sub-tasks inherit context), so sub-tasks
+   carry no `fixVersion` and never appear — even though their parent story does.
+   **Follow-up:** add a downward fetch (e.g. `parent IN (<in-version story keys>)`)
+   so a sub-task surfaces via its parent without needing its own fix version —
+   mirroring how missing parent epics are already auto-fetched in Phase 2.
+
+2. **Sub-task detection matches the literal issue-type name `"Sub-task"`.**
+   `coverage_service.go` classifies via `case "Sub-task"`, so any project whose
+   sub-task type is renamed is misclassified as a story. GWCP's sub-tasks are
+   type **"Dev Task"** (`issuetype.subtask == true`, `hierarchyLevel == -1`), so
+   they would render as stories even if versioned.
+   **Follow-up:** detect sub-tasks by the JIRA `issuetype.subtask` flag
+   (or `hierarchyLevel == -1`) rather than a hard-coded type name.
+
+> Net effect today: for projects like GWCP the coverage tree is effectively
+> **Epic → Story** (+ Issues-without-an-Epic); the sub-task level is dormant
+> until both follow-ups land.
+
+### Discovered 2026-06-16 — custom-field release mapping
+
+3. **Release-to-Epic mapping via custom JIRA fields is not supported.**
+   Some organizations do not use `fixVersion` as the primary release-scope signal.
+   For example, Guidewire uses a custom field **"Aha Release (edit only in Aha)"**
+   set on *Epics* (not stories) to associate them with a release (e.g. `"OLOS (2025.06M)"`).
+   Under this model:
+   - The `fixVersion` approach will miss in-scope epics whose stories were never
+     individually versioned.
+   - There may also be issues required for a release that have neither `fixVersion`
+     nor the custom field set — making completeness hard to guarantee regardless of
+     approach.
+
+   **Decision:** Continue with the current `fixVersion` approach — it uses standard
+   JIRA fields and is valid for the majority of projects, including open-source
+   adopters. We do not hard-code support for Guidewire-specific custom fields.
+
+   Since Fern is an open-source project, release-scope determination logic should
+   be pluggable. A follow-up issue will design a **customizable release-mapping
+   module** interface so organizations can configure how "what's in scope for this
+   release" is determined (e.g. custom fields, labels, external metadata) without
+   forking Fern.
+
+   **Follow-up:** See GitHub issue [#197](https://github.com/guidewire-oss/fern-platform/issues/197) — *Customizable release-scope
+   mapping modules (support non-fixVersion release strategies)*.

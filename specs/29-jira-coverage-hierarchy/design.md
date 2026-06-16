@@ -260,6 +260,24 @@ are shown as distinct elements so neither is misread as the other. Hierarchy is
 
 **Alternatives Considered:** Server-side TTL cache per (projectId, fixVersionName) — deferred to v2 if latency proves problematic.
 
+### Decision 7: Release-scope determination is `fixVersion`-only in v1; custom-field strategies deferred
+
+**Choice:** Release scope is always determined by the standard JIRA `fixVersion` field.
+
+**Rationale:** `fixVersion` is a standard JIRA field present in every project type and on every
+JIRA Cloud tier. It is the correct default for an open-source project with a diverse user base.
+
+Some organizations use custom fields for release mapping (e.g. Guidewire's "Aha Release (edit
+only in Aha)" field on Epics). Supporting these inline would require hardcoding
+organization-specific logic — wrong for an open-source tool. The right shape is a pluggable
+*release-mapping module* interface so each deployment can configure its own release-scope
+strategy. This is deferred to a follow-up issue; the `fixVersion` implementation remains the
+default and is not removed.
+
+**Alternatives Considered:** Custom-field support in v1 — rejected; introduces
+non-standard coupling and complicates the interface for all other users without a
+general extensibility model in place.
+
 ### Decision 6: `parent` field for epic linking
 
 **Choice:** Use the JIRA `parent` field, not `customfield_epicLink`.
