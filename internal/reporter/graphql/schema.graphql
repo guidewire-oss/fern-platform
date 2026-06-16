@@ -467,8 +467,22 @@ type EpicCoverageSummary {
   passingCount: Int!               # work items where every matching test run passed
 }
 
+# A grouping a project can view release coverage by. fixVersion is always
+# available (built-in); custom dimensions are configured per project (#30 Req 8).
+# Reuses the JiraRelease shape for release values: for FIX_VERSION it carries the
+# version id/released/releaseDate; for CUSTOM_FIELD/LABEL those are empty and
+# `name` is both the display value and the JQL selector value.
+type ReleaseDimension {
+  id:         String!   # "fixVersion" for built-in; JIRA field id for custom
+  label:      String!   # "Fix Version" | admin-chosen label e.g. "Release"
+  kind:       String!   # FIX_VERSION | CUSTOM_FIELD | LABEL
+  enumerable: Boolean!  # true if projectReleases can list values; else manual entry
+  isDefault:  Boolean!
+}
+
 type ReleaseCoverage {
-  fixVersion:        JiraRelease!
+  dimension:         ReleaseDimension!  # which dimension this rollup was grouped by
+  release:           JiraRelease!       # the release value (was fixVersion)
   totalEpics:        Int!
   coveredEpics:      Int!          # epic groups with >=1 covered work item (epic itself or any child)
   fullyCoveredEpics: Int!          # epic groups where every work item (epic + all children) is covered
@@ -600,9 +614,13 @@ type Query {
   jiraFields(connectionId: ID!): [JiraFieldGQL!]!
 
   # JIRA Requirements Coverage
-  jiraFixVersions(projectId: ID!): [JiraRelease!]!
+  jiraFixVersions(projectId: ID!): [JiraRelease!]!   # == projectReleases(id, "fixVersion"); retained for back-compat (#29)
   requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
-  releaseCoverage(projectId: ID!, fixVersionName: String!): ReleaseCoverage!
+
+  # #30 — Per-Release coverage by a configurable release dimension
+  projectReleaseDimensions(projectId: ID!): [ReleaseDimension!]!
+  projectReleases(projectId: ID!, dimensionId: String!): [JiraRelease!]!
+  releaseCoverage(projectId: ID!, dimensionId: String!, release: String!): ReleaseCoverage!
 }
 
 # Mutation Root

@@ -41,12 +41,14 @@
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                    │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  #30 — releaseCoverage(projectId, fixVersionName)            │  │
+│  │  #30 — releaseCoverage(projectId, dimensionId, release)      │  │
 │  │  (owner: bsekar — this spec)                                 │  │
-│  │    1. JIRA: GetVersions(projectKey) for the picker payload   │  │
-│  │       (or cached if already loaded)                          │  │
+│  │    0. Resolve release dimension by id (built-in fixVersion   │  │
+│  │       or a configured custom field) → selector + enumerator  │  │
+│  │    1. projectReleases(dimensionId) for the picker payload    │  │
 │  │    2. JIRA JQL: project=X AND issuetype=Epic                 │  │
-│  │                AND fixVersion="<releaseName>"                │  │
+│  │                AND <dimension.selector(release)>             │  │
+│  │       e.g. fixVersion="R" | cf[10042]="R" | labels="R"       │  │
 │  │    3. JIRA JQL: parent IN (epicKeys)  (paginated)            │  │
 │  │    4. SQL: same UNION as #29 over the union of child keys    │  │
 │  │    5. Aggregate per Epic + release-level rollup              │  │
@@ -69,9 +71,11 @@
 | Issue | Resolver | UI route | Owner | Branch |
 |---|---|---|---|---|
 | #29 | `requirementCoverage(projectId, epicKey)` | `/projects/:id/epics/:epicKey` | cwrm56 | `feature/29-jira-coverage-hierarchy` (in flight) |
-| #30 | `releaseCoverage(projectId, fixVersionName)` + `jiraFixVersions(projectId)` | `/projects/:id/coverage` (picker) | bsekar | TBD branch |
+| #30 | `releaseCoverage(projectId, dimensionId, release)` + `projectReleases(projectId, dimensionId)` + `projectReleaseDimensions(projectId)` | `/projects/:id/coverage` (dimension + release picker) | bsekar | `feature/30-release-coverage-dashboard` |
 
 cwrm56's branch already contains TDD foundations: mock JIRA server, `JiraClient.SearchIssues` / `.GetVersions`, GraphQL schema additions, repository scaffolding. #30 reuses these directly — no parallel implementation.
+
+**Schema generalization (coordinate with cwrm56):** #30 generalizes the release vocabulary from `fixVersion` to a configurable, source-agnostic **release dimension** (Req 8). `jiraFixVersions(projectId)` becomes a special case of `projectReleases(projectId, "fixVersion")`. The built-in `fixVersion` dimension preserves cwrm56's existing behavior; custom dimensions are additive. See the coordination note in `reviews/jira-sync-persistence-analysis/`.
 
 ---
 
@@ -268,21 +272,42 @@ type RequirementCoverageTree {
 }
 ```
 
-Added by #30 (this spec):
+Added by #30 (this spec). Vocabulary is generalized from `fixVersion` to a
+source-agnostic **release dimension** (Req 8):
 
 ```graphql
+# A release value, source-agnostic. FIX_VERSION carries id/released/date;
+# CUSTOM_FIELD and LABEL leave those empty (name is the JQL selector value).
+type ReleaseRef {
+  id:          String!
+  name:        String!
+  released:    Boolean!
+  releaseDate: String
+}
+
+# An available grouping dimension for a project: built-in fixVersion, or a
+# custom field configured during JIRA field-mapping (Req 8).
+type ReleaseDimension {
+  id:         String!    # "fixVersion" | JIRA field id e.g. "customfield_10042"
+  label:      String!    # "Fix Version" | admin label e.g. "Release"
+  kind:       String!    # FIX_VERSION | CUSTOM_FIELD | LABEL
+  enumerable: Boolean!   # projectReleases can list values
+  isDefault:  Boolean!
+}
+
 type EpicCoverageSummary {
   issue:        JiraIssueSummary!   # the Epic itself
-  coveredCount: Int!                 # children with ≥1 matching test run
-  totalCount:   Int!                 # total direct children
-  passingCount: Int!                 # children whose any test run passed
+  coveredCount: Int!                 # work items (epic + children) with ≥1 matching test run
+  totalCount:   Int!                 # 1 (the epic) + its direct children
+  passingCount: Int!                 # work items where every matching run passed
 }
 
 type ReleaseCoverage {
-  fixVersion:        JiraVersion!
+  dimension:         ReleaseDimension!   # which dimension this rollup used
+  release:           ReleaseRef!         # was fixVersion: JiraVersion!
   totalEpics:        Int!
-  coveredEpics:      Int!            # epics with ≥1 covered child
-  fullyCoveredEpics: Int!            # epics with every child covered
+  coveredEpics:      Int!            # epic groups with ≥1 covered work item
+  fullyCoveredEpics: Int!            # epic groups where every work item is covered
   totalChildren:     Int!
   coveredChildren:   Int!
   epics:             [EpicCoverageSummary!]!   # lightweight; UI drills via #29
@@ -294,15 +319,17 @@ type ReleaseCoverage {
 ```graphql
 extend type Query {
   # #29 — cwrm56's branch
-  jiraFixVersions(projectId: ID!): [JiraVersion!]!
+  jiraFixVersions(projectId: ID!): [JiraVersion!]!   # == projectReleases(id, "fixVersion"); retained for back-compat
   requirementCoverage(projectId: ID!, epicKey: String!): RequirementCoverageTree!
 
   # #30 — this spec
-  releaseCoverage(projectId: ID!, fixVersionName: String!): ReleaseCoverage!
+  projectReleaseDimensions(projectId: ID!): [ReleaseDimension!]!
+  projectReleases(projectId: ID!, dimensionId: String!): [ReleaseRef!]!
+  releaseCoverage(projectId: ID!, dimensionId: String!, release: String!): ReleaseCoverage!
 }
 ```
 
-`jiraFixVersions` is used by **both** views — #30's picker fetches it; #29 doesn't display the picker but the query exists in the surface from cwrm56's branch.
+`projectReleases(projectId, "fixVersion")` subsumes cwrm56's `jiraFixVersions`; the latter stays as a thin alias for back-compat until #29 adopts the dimension-aware query.
 
 ### Errors
 
@@ -338,13 +365,20 @@ extend type Query {
    }
 ```
 
-### `releaseCoverage(projectId, fixVersionName)` (#30, owner: bsekar)
+### `releaseCoverage(projectId, dimensionId, release)` (#30, owner: bsekar)
 
 ```
+ 0. Resolve the release dimension by id:
+      - "fixVersion" → built-in FIX_VERSION dimension
+      - else → look up the configured custom dimension (Req 8); 404 if unknown
+    The dimension yields a selector(value) → JQL predicate.
  1. Authorize: authorizeProjectManagement(ctx, projectId)
  2. Load jiraConnection
  3. Build JQL #1: `project = <projectKey> AND issuetype = Epic
-                  AND fixVersion = "<fixVersionName>"`
+                  AND <dimension.selector(release)>`
+      FIX_VERSION → fixVersion = "<release>"
+      CUSTOM_FIELD → cf[<id>] = "<release>"
+      LABEL → labels = "<release>"
     fields: key, summary, status, issuetype
  4. Execute (paginated) → list of Epics in the release
     If empty → return ReleaseCoverage with totalEpics=0 and empty epics[]
@@ -352,26 +386,32 @@ extend type Query {
     Paginated (100 per page). Fields: key, summary, status, issuetype, parent
  6. Execute → child issues mapped to their parent Epic
  7. Build the full child-key set (lowercased, deduped)
- 8. Call repo.GetJiraTagCoverageByProject(projectID, allChildKeys)
-    → ONE map covering every child in the release. This is critical:
+ 8. Call repo.GetJiraTagCoverageByProject(projectID)
+    → ONE map covering every jira:<KEY> in the project. This is critical:
       do NOT call the repo per-Epic — one query per release.
- 9. Aggregate per Epic:
-      - For each Epic, iterate its children, count covered/total/passing
+ 9. Aggregate per Epic (work item = epic + its children):
+      - count covered / total / passing across the epic and its children
       - Build EpicCoverageSummary
 10. Aggregate at release level:
       - totalEpics = len(epics)
-      - coveredEpics = count(epic where any child covered)
-      - fullyCoveredEpics = count(epic where every child covered)
-      - totalChildren = sum across epics
-      - coveredChildren = sum across epics
-11. Return ReleaseCoverage
+      - coveredEpics = count(epic group with any covered work item)
+      - fullyCoveredEpics = count(epic group where every work item covered)
+      - totalChildren = sum of children across epics
+      - coveredChildren = covered children across epics
+11. Return ReleaseCoverage { dimension, release, ... }
 ```
 
-The single SQL call in step 8 — covering all children in the release — keeps #30 within budget even at PALISADES scale (827 issues). Per-Epic SQL queries would be O(n) round-trips and break the latency budget.
+The single SQL call in step 8 — covering the whole project — keeps #30 within budget even at PALISADES scale (827 issues). Per-Epic SQL queries would be O(n) round-trips and break the latency budget.
 
-### `jiraFixVersions(projectId)` (used by #30 picker)
+### `projectReleaseDimensions(projectId)` and `projectReleases(projectId, dimensionId)` (#30 picker)
 
-Defined and implemented on cwrm56's branch. Returns the full list of fix versions for the project's JIRA. Picker filters client-side.
+`projectReleaseDimensions` returns the built-in `fixVersion` dimension plus any
+custom dimensions configured for the project (Req 8). `projectReleases` enumerates
+values for a chosen dimension:
+
+- `fixVersion` → `JiraClient.GetVersions` (the path cwrm56's `jiraFixVersions` already uses; that resolver becomes an alias).
+- `CUSTOM_FIELD` of select-list type → the field's allowed values.
+- non-enumerable → empty list; the UI accepts a manually-typed release value.
 
 ### Drill-down
 
@@ -439,9 +479,13 @@ Documented in `reviews/jira-sync-persistence-analysis/SUMMARY.md` (Option A). Re
 
 Changing `domain.NewTag()` to preserve case for `jira:` tags would touch shared infrastructure used by other tag categories. Cheaper and safer to case-fold at query time, where only the coverage resolvers care.
 
-### Decision 4: JIRA `fixVersion` (standard field), not custom-field mapping
+### Decision 4: Configurable release dimensions — `fixVersion` built-in, custom fields opt-in (supersedes the earlier "fixVersion only" decision)
 
-For OSS portability, the MVP uses standard `fixVersion`. The #26 field-mapping infrastructure is parked; it becomes load-bearing again when scenario-level coverage returns (then it maps to `Description` and other custom fields) or when pod-level rollups are added.
+**Superseded:** an earlier draft fixed the release grouping to the standard `fixVersion` field. That doesn't fit OSS reality — many teams group releases by a custom field (a roadmap "Release" field), and a PM may want to switch between `fixVersion` and that field at view time.
+
+**Now:** the top hierarchy layer is a **release dimension** (Req 8). `fixVersion` is a built-in, zero-config dimension; additional dimensions (custom field / label) are configured per project during JIRA field-mapping configuration (#26 infrastructure — now load-bearing again, not parked). The dimension only changes the Epic-selector JQL predicate and how values enumerate; the leaf→epic→release hierarchy and the coverage join are unchanged. This keeps OSS portability (works with stock JIRA out of the box) while serving teams whose release concept lives in a custom field.
+
+The `#26` field-mapping infrastructure is reused for storing the custom-dimension config; it is no longer "parked" for this purpose. Proprietary external-tool field *names* are never embedded — config references JIRA field ids only.
 
 ### Decision 5: Errors over partial render under JIRA outage
 

@@ -880,8 +880,10 @@ func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]
 }
 
 // JiraFixVersions is the resolver for the jiraFixVersions field.
+// Back-compat alias for projectReleases(projectId, "fixVersion") — see the
+// schema comment. Delegates so the documented equality is actually true.
 func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error) {
-	panic(fmt.Errorf("not implemented: JiraFixVersions - jiraFixVersions"))
+	return r.ProjectReleases_domain(ctx, projectID, integrations.BuiltinFixVersionDimension().ID)
 }
 
 // RequirementCoverage is the resolver for the requirementCoverage field.
@@ -889,11 +891,23 @@ func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID strin
 	panic(fmt.Errorf("not implemented: RequirementCoverage - requirementCoverage"))
 }
 
+// ProjectReleaseDimensions is the resolver for the projectReleaseDimensions field.
+// Implementation lives in release_coverage_resolver.go (the _domain pattern keeps
+// it through gqlgen regen).
+func (r *queryResolver) ProjectReleaseDimensions(ctx context.Context, projectID string) ([]*model.ReleaseDimension, error) {
+	return r.ProjectReleaseDimensions_domain(ctx, projectID)
+}
+
+// ProjectReleases is the resolver for the projectReleases field.
+func (r *queryResolver) ProjectReleases(ctx context.Context, projectID string, dimensionID string) ([]*model.JiraRelease, error) {
+	return r.ProjectReleases_domain(ctx, projectID, dimensionID)
+}
+
 // ReleaseCoverage is the resolver for the releaseCoverage field.
 // Implementation lives in release_coverage_resolver.go (ReleaseCoverage_domain)
 // so it survives gqlgen regeneration. See the JiraFieldMapping pattern.
-func (r *queryResolver) ReleaseCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.ReleaseCoverage, error) {
-	return r.ReleaseCoverage_domain(ctx, projectID, fixVersionName)
+func (r *queryResolver) ReleaseCoverage(ctx context.Context, projectID string, dimensionID string, release string) (*model.ReleaseCoverage, error) {
+	return r.ReleaseCoverage_domain(ctx, projectID, dimensionID, release)
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.

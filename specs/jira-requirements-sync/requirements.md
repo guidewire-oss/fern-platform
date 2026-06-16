@@ -15,9 +15,34 @@ Two user-facing views, split by scope and owner:
 | View | Owner | Resolver | Scope |
 |---|---|---|---|
 | **#29 — Per-Epic** | cwrm56 (in flight on `feature/29-jira-coverage-hierarchy`) | `requirementCoverage(projectId, epicKey)` | Given an Epic key, render its direct children (stories/tasks/bugs) with per-child coverage |
-| **#30 — Per-Release** | bsekar (this spec author) | `releaseCoverage(projectId, fixVersionName)` | Given a JIRA fix version, render all Epics in the release with per-Epic rollups; click on an Epic drills into #29 |
+| **#30 — Per-Release** | bsekar (this spec author) | `releaseCoverage(projectId, release)` | Given a **release** (see "Release dimension" below), render all Epics in the release with per-Epic rollups; click on an Epic drills into #29 |
 
 Each view is independently shippable. #30 depends on #29 only at the drill-down hop — the release view itself renders without needing #29 to be live (Epic cards show counts, link to a placeholder if #29 isn't ready).
+
+### The fixed 3-layer hierarchy
+
+Coverage rolls up through exactly three layers. Depth is fixed; only the **top** layer's source is configurable.
+
+| Layer | JIRA object | How tests touch it |
+|---|---|---|
+| **L1 — leaf** | Story / Bug / Task | tagged `jira:<KEY>` by tests |
+| **L2 — mid** | Epic (the "master feature" / initiative) | `parent` of L1 |
+| **L3 — top** | **Release** | a configurable grouping of L2 (see below) |
+
+### The "release dimension" is configurable, and there can be more than one
+
+There is no single JIRA field that all teams use for "release." Some use the native `fixVersion`; others use a custom field (e.g. a select-list synced from an external roadmap tool), a label, etc. Fern-platform is OSS, so the top layer MUST NOT hardcode `fixVersion` — but it also should not *force a single choice*: the same PM may want to view a release by `fixVersion` one moment and by a custom "Release" field the next.
+
+So the model is **multiple release dimensions per project, chosen at view time**:
+
+- **`fixVersion` is always available** — a built-in dimension, zero config, matching native JIRA.
+- **Zero or more custom dimensions** are added during **JIRA field-mapping configuration** (#26 infrastructure) — each a named field (display label + JIRA field id + kind).
+- **At the dashboard, the PM picks which dimension to group by**, then picks a release value within it.
+
+The unit of correlation stays JIRA-issue-level; only **how an Epic is bound to a release** varies per dimension. Two operations depend on the chosen dimension:
+
+- **Select** ("which Epics are in release R, by this dimension?") — a JQL predicate; **field-agnostic** (`fixVersion = R`, `cf[10042] = R`, `labels = R` are all equally simple).
+- **Enumerate** ("what release values exist for this dimension?") — fills the picker; **field-type-specific** (native `fixVersion` and custom select-lists are enumerable; free-text fields are not, and degrade to manual entry).
 
 ---
 
@@ -77,22 +102,25 @@ Each view is independently shippable. #30 depends on #29 only at the drill-down 
 
 ### Req 3 — Per-Release test coverage dashboard (#30 — owner: this spec author)
 
-**User story:** As a manager, I want to see test coverage for all Epics in a release (filtered by JIRA Fix Version) so I can assess release readiness, and drill into any Epic for detail.
+**User story:** As a manager, I want to see test coverage for all Epics in a release — grouped by whichever release dimension I choose (Req 8) — so I can assess release readiness, and drill into any Epic for detail.
 
-1. WHEN a user opens the Release Coverage view for a project THE SYSTEM SHALL fetch the project's JIRA fix versions via `GET /rest/api/3/project/{projectKey}/versions` and render a searchable picker (unreleased versions first sorted alphabetically; released versions below sorted newest-release-date first).
-2. WHEN a user selects a fix version THE SYSTEM SHALL request `releaseCoverage(projectId, fixVersionName)` which SHALL:
-   1. Issue ONE JIRA JQL query: `project = <projectKey> AND issuetype = Epic AND fixVersion = "<releaseName>"` (paginated if epics > 100)
-   2. For each Epic, compute a coverage rollup by calling — or reusing the same code path as — `requirementCoverage` per Epic (cached within the request)
-   3. Return release-level totals (epic count, covered-epic count, covered-children count) + per-Epic rollup cards
-3. THE SYSTEM SHALL render Epic cards as drill links to the Per-Epic view (#29) for the same Epic.
-4. WHEN a project has no active JIRA connection THE SYSTEM SHALL surface a clear message prompting the user to configure one.
-5. WHEN JIRA is unreachable THE SYSTEM SHALL return a `JIRA_UNAVAILABLE` error and the UI SHALL surface it; no partial / cached render.
+1. WHEN a user opens the Release Coverage view THE SYSTEM SHALL list the project's available release dimensions via `projectReleaseDimensions(projectId)` (always includes built-in `fixVersion`; plus any configured per Req 8) and let the user pick one. The default selection is `fixVersion` unless the project sets a different default.
+2. WHEN a user picks a dimension THE SYSTEM SHALL enumerate its values via `projectReleases(projectId, dimensionId)` and render a searchable picker. WHEN the dimension is not enumerable (free-text custom field) THE SYSTEM SHALL accept a manually-typed release value instead.
+3. WHEN a user selects (or types) a release value THE SYSTEM SHALL request `releaseCoverage(projectId, dimensionId, release)` which SHALL:
+   1. Issue ONE JIRA JQL query selecting Epics in the release using the chosen dimension's **selector predicate** (Req 8.3): `project = <projectKey> AND issuetype = Epic AND <release-selector>` (paginated if epics > 100)
+   2. Issue ONE JIRA JQL query for those Epics' direct children: `parent in (<epic-keys>)` (paginated / chunked)
+   3. Compute coverage by joining the JIRA issue tree against the local UNION-of-junctions coverage (Req 1.3, Req 4)
+   4. Return release-level totals (epic count, covered-epic count, covered-children count) + per-Epic rollup cards
+4. THE SYSTEM SHALL render Epic cards as drill links to the Per-Epic view (#29) for the same Epic.
+5. WHEN a project has no active JIRA connection THE SYSTEM SHALL surface a clear message prompting the user to configure one.
+6. WHEN JIRA is unreachable THE SYSTEM SHALL return a `JIRA_UNAVAILABLE` error and the UI SHALL surface it; no partial / cached render.
 
-**Implementation note:** #30 reuses cwrm56's `RequirementCoverageTree` types where applicable. The release-level shape is a thin wrapper that aggregates per-Epic counts:
+**Implementation note:** The release-level shape is a thin wrapper aggregating per-Epic counts. Vocabulary is generalized from `fixVersion` to `release`, and both `releaseCoverage` and `projectReleases` take a `dimensionId`:
 
 ```graphql
 type ReleaseCoverage {
-  fixVersion: JiraVersion!
+  dimension: ReleaseDimension!   # which dimension this rollup was grouped by
+  release: ReleaseRef!           # was fixVersion: JiraVersion!
   totalEpics: Int!
   coveredEpics: Int!
   fullyCoveredEpics: Int!
@@ -101,12 +129,50 @@ type ReleaseCoverage {
   epics: [EpicCoverageSummary!]!  # lightweight — drill calls requirementCoverage
 }
 
+# A release value, source-agnostic. For FIX_VERSION it carries the version id +
+# released flag; for CUSTOM_FIELD/LABEL those may be empty.
+type ReleaseRef {
+  id: String!          # version id for FIX_VERSION; the value itself otherwise
+  name: String!        # display + JQL selector value
+  released: Boolean!   # FIX_VERSION only; false otherwise
+  releaseDate: String  # FIX_VERSION only; null otherwise
+}
+
 type EpicCoverageSummary {
   issue: JiraIssueSummary!
-  coveredCount: Int!
-  totalCount: Int!
+  coveredCount: Int!   # work items (epic + children) with >=1 matching test run
+  totalCount: Int!     # 1 (the epic) + its direct children
+  passingCount: Int!   # work items where every matching run passed
 }
 ```
+
+### Req 8 — Configurable release dimensions (#30 — owner: this spec author)
+
+**User story:** As a project admin, I want `fixVersion` available out of the box AND the ability to add a custom field (e.g. a roadmap "Release" field) as an alternative grouping, so PMs can switch between them at view time.
+
+1. THE SYSTEM SHALL always expose a built-in `fixVersion` dimension (id `"fixVersion"`, kind `FIX_VERSION`), with no configuration required.
+2. THE SYSTEM SHALL let a project admin configure **zero or more additional** release dimensions during JIRA field-mapping configuration (#26 infrastructure). Each carries: a display `label`, `kind ∈ {CUSTOM_FIELD, LABEL}`, and the JIRA field id (e.g. `customfield_10042`) for `CUSTOM_FIELD`. A project MAY mark one dimension as its default. Stored alongside the existing per-project JIRA config; no new subsystem.
+3. THE SYSTEM SHALL derive each dimension's Epic **selector predicate** from its kind:
+   - `FIX_VERSION` → `fixVersion = "<value>"`
+   - `CUSTOM_FIELD` → `cf[<id>] = "<value>"`
+   - `LABEL` → `labels = "<value>"`
+4. THE SYSTEM SHALL enumerate a dimension's values per `projectReleases(projectId, dimensionId)`:
+   - `FIX_VERSION` → `GET /rest/api/3/project/{projectKey}/versions` (unreleased first alphabetical; released below newest-first)
+   - `CUSTOM_FIELD` of select-list type → the field's allowed values
+   - otherwise (free-text custom field, label) → return empty; the UI accepts a manually-typed value
+5. THE SYSTEM SHALL expose available dimensions via `projectReleaseDimensions(projectId): [ReleaseDimension!]!` where:
+   ```graphql
+   type ReleaseDimension {
+     id: String!          # "fixVersion" for built-in; JIRA field id for custom
+     label: String!       # "Fix Version" | admin-chosen label e.g. "Release"
+     kind: String!        # FIX_VERSION | CUSTOM_FIELD | LABEL
+     enumerable: Boolean! # true if projectReleases can list values
+     isDefault: Boolean!
+   }
+   ```
+6. THE SYSTEM SHALL NOT leak any proprietary external-tool field names in OSS artifacts; config references JIRA field ids/keys only (admin-chosen labels are the project's own responsibility).
+
+**Priority:** the built-in `FIX_VERSION` is the zero-config default; the configurable `CUSTOM_FIELD` path is the primary verification target for this MVP (the common case for the maintaining teams).
 
 ### Req 4 — Resolver case-folding
 

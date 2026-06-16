@@ -250,46 +250,57 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		CurrentUser             func(childComplexity int) int
-		DashboardSummary        func(childComplexity int) int
-		FlakyTest               func(childComplexity int, id string) int
-		FlakyTestStats          func(childComplexity int, projectID *string) int
-		FlakyTests              func(childComplexity int, filter *model.FlakyTestFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
-		Health                  func(childComplexity int) int
-		JiraConnection          func(childComplexity int, id string) int
-		JiraConnections         func(childComplexity int, projectID string) int
-		JiraFieldMapping        func(childComplexity int, projectID string) int
-		JiraFields              func(childComplexity int, connectionID string) int
-		JiraFixVersions         func(childComplexity int, projectID string) int
-		PopularTags             func(childComplexity int, limit *int) int
-		Project                 func(childComplexity int, id string) int
-		ProjectByProjectID      func(childComplexity int, projectID string) int
-		Projects                func(childComplexity int, filter *model.ProjectFilter, first *int, after *string) int
-		RecentTestRuns          func(childComplexity int, projectID *string, limit *int) int
-		RecentlyAddedFlakyTests func(childComplexity int, projectID *string, days *int, limit *int) int
-		ReleaseCoverage         func(childComplexity int, projectID string, fixVersionName string) int
-		RequirementCoverage     func(childComplexity int, projectID string, fixVersionName string) int
-		SystemConfig            func(childComplexity int) int
-		Tag                     func(childComplexity int, id string) int
-		TagByName               func(childComplexity int, name string) int
-		TagUsageStats           func(childComplexity int) int
-		Tags                    func(childComplexity int, filter *model.TagFilter, first *int, after *string) int
-		TestRun                 func(childComplexity int, id string) int
-		TestRunByRunID          func(childComplexity int, runID string) int
-		TestRunStats            func(childComplexity int, projectID *string, days *int) int
-		TestRuns                func(childComplexity int, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
-		TreemapData             func(childComplexity int, projectID *string, days *int) int
-		UserPreferences         func(childComplexity int) int
+		CurrentUser              func(childComplexity int) int
+		DashboardSummary         func(childComplexity int) int
+		FlakyTest                func(childComplexity int, id string) int
+		FlakyTestStats           func(childComplexity int, projectID *string) int
+		FlakyTests               func(childComplexity int, filter *model.FlakyTestFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
+		Health                   func(childComplexity int) int
+		JiraConnection           func(childComplexity int, id string) int
+		JiraConnections          func(childComplexity int, projectID string) int
+		JiraFieldMapping         func(childComplexity int, projectID string) int
+		JiraFields               func(childComplexity int, connectionID string) int
+		JiraFixVersions          func(childComplexity int, projectID string) int
+		PopularTags              func(childComplexity int, limit *int) int
+		Project                  func(childComplexity int, id string) int
+		ProjectByProjectID       func(childComplexity int, projectID string) int
+		ProjectReleaseDimensions func(childComplexity int, projectID string) int
+		ProjectReleases          func(childComplexity int, projectID string, dimensionID string) int
+		Projects                 func(childComplexity int, filter *model.ProjectFilter, first *int, after *string) int
+		RecentTestRuns           func(childComplexity int, projectID *string, limit *int) int
+		RecentlyAddedFlakyTests  func(childComplexity int, projectID *string, days *int, limit *int) int
+		ReleaseCoverage          func(childComplexity int, projectID string, dimensionID string, release string) int
+		RequirementCoverage      func(childComplexity int, projectID string, fixVersionName string) int
+		SystemConfig             func(childComplexity int) int
+		Tag                      func(childComplexity int, id string) int
+		TagByName                func(childComplexity int, name string) int
+		TagUsageStats            func(childComplexity int) int
+		Tags                     func(childComplexity int, filter *model.TagFilter, first *int, after *string) int
+		TestRun                  func(childComplexity int, id string) int
+		TestRunByRunID           func(childComplexity int, runID string) int
+		TestRunStats             func(childComplexity int, projectID *string, days *int) int
+		TestRuns                 func(childComplexity int, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
+		TreemapData              func(childComplexity int, projectID *string, days *int) int
+		UserPreferences          func(childComplexity int) int
 	}
 
 	ReleaseCoverage struct {
 		CoveredChildren   func(childComplexity int) int
 		CoveredEpics      func(childComplexity int) int
+		Dimension         func(childComplexity int) int
 		Epics             func(childComplexity int) int
-		FixVersion        func(childComplexity int) int
 		FullyCoveredEpics func(childComplexity int) int
+		Release           func(childComplexity int) int
 		TotalChildren     func(childComplexity int) int
 		TotalEpics        func(childComplexity int) int
+	}
+
+	ReleaseDimension struct {
+		Enumerable func(childComplexity int) int
+		ID         func(childComplexity int) int
+		IsDefault  func(childComplexity int) int
+		Kind       func(childComplexity int) int
+		Label      func(childComplexity int) int
 	}
 
 	RequirementCoverageTree struct {
@@ -553,7 +564,9 @@ type QueryResolver interface {
 	JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error)
 	JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error)
 	RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error)
-	ReleaseCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.ReleaseCoverage, error)
+	ProjectReleaseDimensions(ctx context.Context, projectID string) ([]*model.ReleaseDimension, error)
+	ProjectReleases(ctx context.Context, projectID string, dimensionID string) ([]*model.JiraRelease, error)
+	ReleaseCoverage(ctx context.Context, projectID string, dimensionID string, release string) (*model.ReleaseCoverage, error)
 }
 type SubscriptionResolver interface {
 	TestRunCreated(ctx context.Context, projectID *string) (<-chan *model.TestRun, error)
@@ -1793,6 +1806,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Query.ProjectByProjectID(childComplexity, args["projectId"].(string)), true
 
+	case "Query.projectReleaseDimensions":
+		if e.complexity.Query.ProjectReleaseDimensions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectReleaseDimensions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectReleaseDimensions(childComplexity, args["projectId"].(string)), true
+
+	case "Query.projectReleases":
+		if e.complexity.Query.ProjectReleases == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectReleases_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectReleases(childComplexity, args["projectId"].(string), args["dimensionId"].(string)), true
+
 	case "Query.projects":
 		if e.complexity.Query.Projects == nil {
 			break
@@ -1839,7 +1876,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.ReleaseCoverage(childComplexity, args["projectId"].(string), args["fixVersionName"].(string)), true
+		return e.complexity.Query.ReleaseCoverage(childComplexity, args["projectId"].(string), args["dimensionId"].(string), args["release"].(string)), true
 
 	case "Query.requirementCoverage":
 		if e.complexity.Query.RequirementCoverage == nil {
@@ -1984,6 +2021,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ReleaseCoverage.CoveredEpics(childComplexity), true
 
+	case "ReleaseCoverage.dimension":
+		if e.complexity.ReleaseCoverage.Dimension == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.Dimension(childComplexity), true
+
 	case "ReleaseCoverage.epics":
 		if e.complexity.ReleaseCoverage.Epics == nil {
 			break
@@ -1991,19 +2035,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ReleaseCoverage.Epics(childComplexity), true
 
-	case "ReleaseCoverage.fixVersion":
-		if e.complexity.ReleaseCoverage.FixVersion == nil {
-			break
-		}
-
-		return e.complexity.ReleaseCoverage.FixVersion(childComplexity), true
-
 	case "ReleaseCoverage.fullyCoveredEpics":
 		if e.complexity.ReleaseCoverage.FullyCoveredEpics == nil {
 			break
 		}
 
 		return e.complexity.ReleaseCoverage.FullyCoveredEpics(childComplexity), true
+
+	case "ReleaseCoverage.release":
+		if e.complexity.ReleaseCoverage.Release == nil {
+			break
+		}
+
+		return e.complexity.ReleaseCoverage.Release(childComplexity), true
 
 	case "ReleaseCoverage.totalChildren":
 		if e.complexity.ReleaseCoverage.TotalChildren == nil {
@@ -2018,6 +2062,41 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ReleaseCoverage.TotalEpics(childComplexity), true
+
+	case "ReleaseDimension.enumerable":
+		if e.complexity.ReleaseDimension.Enumerable == nil {
+			break
+		}
+
+		return e.complexity.ReleaseDimension.Enumerable(childComplexity), true
+
+	case "ReleaseDimension.id":
+		if e.complexity.ReleaseDimension.ID == nil {
+			break
+		}
+
+		return e.complexity.ReleaseDimension.ID(childComplexity), true
+
+	case "ReleaseDimension.isDefault":
+		if e.complexity.ReleaseDimension.IsDefault == nil {
+			break
+		}
+
+		return e.complexity.ReleaseDimension.IsDefault(childComplexity), true
+
+	case "ReleaseDimension.kind":
+		if e.complexity.ReleaseDimension.Kind == nil {
+			break
+		}
+
+		return e.complexity.ReleaseDimension.Kind(childComplexity), true
+
+	case "ReleaseDimension.label":
+		if e.complexity.ReleaseDimension.Label == nil {
+			break
+		}
+
+		return e.complexity.ReleaseDimension.Label(childComplexity), true
 
 	case "RequirementCoverageTree.epics":
 		if e.complexity.RequirementCoverageTree.Epics == nil {
@@ -3569,8 +3648,22 @@ type EpicCoverageSummary {
   passingCount: Int!               # work items where every matching test run passed
 }
 
+# A grouping a project can view release coverage by. fixVersion is always
+# available (built-in); custom dimensions are configured per project (#30 Req 8).
+# Reuses the JiraRelease shape for release values: for FIX_VERSION it carries the
+# version id/released/releaseDate; for CUSTOM_FIELD/LABEL those are empty and
+# ` + "`" + `name` + "`" + ` is both the display value and the JQL selector value.
+type ReleaseDimension {
+  id:         String!   # "fixVersion" for built-in; JIRA field id for custom
+  label:      String!   # "Fix Version" | admin-chosen label e.g. "Release"
+  kind:       String!   # FIX_VERSION | CUSTOM_FIELD | LABEL
+  enumerable: Boolean!  # true if projectReleases can list values; else manual entry
+  isDefault:  Boolean!
+}
+
 type ReleaseCoverage {
-  fixVersion:        JiraRelease!
+  dimension:         ReleaseDimension!  # which dimension this rollup was grouped by
+  release:           JiraRelease!       # the release value (was fixVersion)
   totalEpics:        Int!
   coveredEpics:      Int!          # epic groups with >=1 covered work item (epic itself or any child)
   fullyCoveredEpics: Int!          # epic groups where every work item (epic + all children) is covered
@@ -3702,9 +3795,13 @@ type Query {
   jiraFields(connectionId: ID!): [JiraFieldGQL!]!
 
   # JIRA Requirements Coverage
-  jiraFixVersions(projectId: ID!): [JiraRelease!]!
+  jiraFixVersions(projectId: ID!): [JiraRelease!]!   # == projectReleases(id, "fixVersion"); retained for back-compat (#29)
   requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
-  releaseCoverage(projectId: ID!, fixVersionName: String!): ReleaseCoverage!
+
+  # #30 — Per-Release coverage by a configurable release dimension
+  projectReleaseDimensions(projectId: ID!): [ReleaseDimension!]!
+  projectReleases(projectId: ID!, dimensionId: String!): [JiraRelease!]!
+  releaseCoverage(projectId: ID!, dimensionId: String!, release: String!): ReleaseCoverage!
 }
 
 # Mutation Root
@@ -4198,6 +4295,33 @@ func (ec *executionContext) field_Query_projectByProjectId_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_projectReleaseDimensions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectReleases_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "dimensionId", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["dimensionId"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_project_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4275,11 +4399,16 @@ func (ec *executionContext) field_Query_releaseCoverage_args(ctx context.Context
 		return nil, err
 	}
 	args["projectId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixVersionName", ec.unmarshalNString2string)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "dimensionId", ec.unmarshalNString2string)
 	if err != nil {
 		return nil, err
 	}
-	args["fixVersionName"] = arg1
+	args["dimensionId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "release", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["release"] = arg2
 	return args, nil
 }
 
@@ -13350,6 +13479,138 @@ func (ec *executionContext) fieldContext_Query_requirementCoverage(ctx context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_projectReleaseDimensions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_projectReleaseDimensions(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().ProjectReleaseDimensions(rctx, fc.Args["projectId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.ReleaseDimension)
+	fc.Result = res
+	return ec.marshalNReleaseDimension2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseDimensionᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_projectReleaseDimensions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ReleaseDimension_id(ctx, field)
+			case "label":
+				return ec.fieldContext_ReleaseDimension_label(ctx, field)
+			case "kind":
+				return ec.fieldContext_ReleaseDimension_kind(ctx, field)
+			case "enumerable":
+				return ec.fieldContext_ReleaseDimension_enumerable(ctx, field)
+			case "isDefault":
+				return ec.fieldContext_ReleaseDimension_isDefault(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReleaseDimension", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectReleaseDimensions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectReleases(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_projectReleases(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().ProjectReleases(rctx, fc.Args["projectId"].(string), fc.Args["dimensionId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*model.JiraRelease)
+	fc.Result = res
+	return ec.marshalNJiraRelease2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraReleaseᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_projectReleases(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_JiraRelease_id(ctx, field)
+			case "name":
+				return ec.fieldContext_JiraRelease_name(ctx, field)
+			case "released":
+				return ec.fieldContext_JiraRelease_released(ctx, field)
+			case "releaseDate":
+				return ec.fieldContext_JiraRelease_releaseDate(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JiraRelease", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectReleases_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_releaseCoverage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Query_releaseCoverage(ctx, field)
 	if err != nil {
@@ -13364,7 +13625,7 @@ func (ec *executionContext) _Query_releaseCoverage(ctx context.Context, field gr
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().ReleaseCoverage(rctx, fc.Args["projectId"].(string), fc.Args["fixVersionName"].(string))
+		return ec.resolvers.Query().ReleaseCoverage(rctx, fc.Args["projectId"].(string), fc.Args["dimensionId"].(string), fc.Args["release"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -13389,8 +13650,10 @@ func (ec *executionContext) fieldContext_Query_releaseCoverage(ctx context.Conte
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "fixVersion":
-				return ec.fieldContext_ReleaseCoverage_fixVersion(ctx, field)
+			case "dimension":
+				return ec.fieldContext_ReleaseCoverage_dimension(ctx, field)
+			case "release":
+				return ec.fieldContext_ReleaseCoverage_release(ctx, field)
 			case "totalEpics":
 				return ec.fieldContext_ReleaseCoverage_totalEpics(ctx, field)
 			case "coveredEpics":
@@ -13552,8 +13815,8 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _ReleaseCoverage_fixVersion(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_ReleaseCoverage_fixVersion(ctx, field)
+func (ec *executionContext) _ReleaseCoverage_dimension(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_dimension(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -13566,7 +13829,63 @@ func (ec *executionContext) _ReleaseCoverage_fixVersion(ctx context.Context, fie
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.FixVersion, nil
+		return obj.Dimension, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*model.ReleaseDimension)
+	fc.Result = res
+	return ec.marshalNReleaseDimension2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseDimension(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseCoverage_dimension(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseCoverage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ReleaseDimension_id(ctx, field)
+			case "label":
+				return ec.fieldContext_ReleaseDimension_label(ctx, field)
+			case "kind":
+				return ec.fieldContext_ReleaseDimension_kind(ctx, field)
+			case "enumerable":
+				return ec.fieldContext_ReleaseDimension_enumerable(ctx, field)
+			case "isDefault":
+				return ec.fieldContext_ReleaseDimension_isDefault(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReleaseDimension", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseCoverage_release(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseCoverage) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseCoverage_release(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Release, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -13583,7 +13902,7 @@ func (ec *executionContext) _ReleaseCoverage_fixVersion(ctx context.Context, fie
 	return ec.marshalNJiraRelease2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐJiraRelease(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_ReleaseCoverage_fixVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_ReleaseCoverage_release(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ReleaseCoverage",
 		Field:      field,
@@ -13875,6 +14194,226 @@ func (ec *executionContext) fieldContext_ReleaseCoverage_epics(_ context.Context
 				return ec.fieldContext_EpicCoverageSummary_passingCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type EpicCoverageSummary", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseDimension_id(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseDimension) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseDimension_id(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseDimension_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseDimension",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseDimension_label(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseDimension) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseDimension_label(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Label, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseDimension_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseDimension",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseDimension_kind(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseDimension) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseDimension_kind(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Kind, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseDimension_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseDimension",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseDimension_enumerable(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseDimension) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseDimension_enumerable(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Enumerable, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseDimension_enumerable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseDimension",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReleaseDimension_isDefault(ctx context.Context, field graphql.CollectedField, obj *model.ReleaseDimension) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_ReleaseDimension_isDefault(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.IsDefault, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_ReleaseDimension_isDefault(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReleaseDimension",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -25017,6 +25556,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectReleaseDimensions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectReleaseDimensions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectReleases":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectReleases(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "releaseCoverage":
 			field := field
 
@@ -25081,8 +25664,13 @@ func (ec *executionContext) _ReleaseCoverage(ctx context.Context, sel ast.Select
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("ReleaseCoverage")
-		case "fixVersion":
-			out.Values[i] = ec._ReleaseCoverage_fixVersion(ctx, field, obj)
+		case "dimension":
+			out.Values[i] = ec._ReleaseCoverage_dimension(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "release":
+			out.Values[i] = ec._ReleaseCoverage_release(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -25113,6 +25701,65 @@ func (ec *executionContext) _ReleaseCoverage(ctx context.Context, sel ast.Select
 			}
 		case "epics":
 			out.Values[i] = ec._ReleaseCoverage_epics(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var releaseDimensionImplementors = []string{"ReleaseDimension"}
+
+func (ec *executionContext) _ReleaseDimension(ctx context.Context, sel ast.SelectionSet, obj *model.ReleaseDimension) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, releaseDimensionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReleaseDimension")
+		case "id":
+			out.Values[i] = ec._ReleaseDimension_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._ReleaseDimension_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._ReleaseDimension_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "enumerable":
+			out.Values[i] = ec._ReleaseDimension_enumerable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isDefault":
+			out.Values[i] = ec._ReleaseDimension_isDefault(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -27697,6 +28344,60 @@ func (ec *executionContext) marshalNReleaseCoverage2ᚖgithubᚗcomᚋguidewire�
 		return graphql.Null
 	}
 	return ec._ReleaseCoverage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNReleaseDimension2ᚕᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseDimensionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.ReleaseDimension) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNReleaseDimension2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseDimension(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNReleaseDimension2ᚖgithubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐReleaseDimension(ctx context.Context, sel ast.SelectionSet, v *model.ReleaseDimension) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReleaseDimension(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRequirementCoverageTree2githubᚗcomᚋguidewireᚑossᚋfernᚑplatformᚋinternalᚋreporterᚋgraphqlᚋmodelᚐRequirementCoverageTree(ctx context.Context, sel ast.SelectionSet, v model.RequirementCoverageTree) graphql.Marshaler {

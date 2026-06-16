@@ -10,7 +10,11 @@ import (
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	tagsdomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
+	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 )
+
+// fixVersionDim is the built-in dimension id used throughout these tests.
+const fixVersionDim = "fixVersion"
 
 // fakeCoverageJiraClient implements integrations.CoverageJiraClient.
 //
@@ -82,7 +86,7 @@ func newReleaseCoverageResolver(t *testing.T, projectID string, client integrati
 // children, mixed coverage, returns aggregate counts plus a per-epic breakdown.
 func Test_ReleaseCoverage_HappyPath(t *testing.T) {
 	const projectID = "proj-1"
-	const fixVersionName = "2026.Bolinas"
+	const release = "2026.Bolinas"
 
 	coverClient := &fakeCoverageJiraClient{
 		versions: []integrations.JiraVersion{
@@ -112,14 +116,20 @@ func Test_ReleaseCoverage_HappyPath(t *testing.T) {
 	}}
 
 	q := newReleaseCoverageResolver(t, projectID, coverClient, tagRepo)
-	got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+	got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	require.NotNil(t, got.FixVersion)
-	assert.Equal(t, "v1", got.FixVersion.ID)
-	assert.Equal(t, "2026.Bolinas", got.FixVersion.Name)
-	assert.False(t, got.FixVersion.Released)
+	// Dimension echo: the built-in fixVersion dimension.
+	require.NotNil(t, got.Dimension)
+	assert.Equal(t, "fixVersion", got.Dimension.ID)
+	assert.Equal(t, string(integrations.ReleaseDimensionFixVersion), got.Dimension.Kind)
+
+	// Release echo: enriched from GetVersions (id/released) for fixVersion.
+	require.NotNil(t, got.Release)
+	assert.Equal(t, "v1", got.Release.ID)
+	assert.Equal(t, "2026.Bolinas", got.Release.Name)
+	assert.False(t, got.Release.Released)
 
 	assert.Equal(t, 2, got.TotalEpics, "totalEpics")
 	assert.Equal(t, 2, got.CoveredEpics, "coveredEpics (epic group has any covered work item)")
@@ -142,8 +152,9 @@ func Test_ReleaseCoverage_HappyPath(t *testing.T) {
 	require.Contains(t, epicsByKey, "GWCP-200")
 	assert.Equal(t, epicAssert{covered: 1, total: 2, passing: 0}, *epicsByKey["GWCP-200"])
 
-	// Exactly two JQLs fired: epics, then children.
-	require.Len(t, coverClient.gotJQL, 2)
+	// The epic JQL used the fixVersion selector.
+	require.NotEmpty(t, coverClient.gotJQL)
+	assert.Contains(t, coverClient.gotJQL[0], `fixVersion = "2026.Bolinas"`)
 }
 
 // ---------------------------------------------------------------------------
@@ -157,47 +168,59 @@ func Test_ReleaseCoverage_GuardBranches(t *testing.T) {
 
 	t.Run("unauthenticated caller", func(t *testing.T) {
 		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
-		_, err := q.ReleaseCoverage(context.Background(), projectID, "R")
+		_, err := q.ReleaseCoverage(context.Background(), projectID, fixVersionDim, "R")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unauthorized")
 	})
 
 	t.Run("empty projectID", func(t *testing.T) {
 		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), "", "R")
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), "", fixVersionDim, "R")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "projectID is required")
 	})
 
-	t.Run("empty fixVersionName", func(t *testing.T) {
+	t.Run("empty dimensionId", func(t *testing.T) {
 		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, "")
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, "", "R")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "fixVersionName is required")
+		assert.Contains(t, err.Error(), "dimensionId is required")
+	})
+
+	t.Run("empty release value", func(t *testing.T) {
+		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "release is required")
+	})
+
+	t.Run("unknown dimension", func(t *testing.T) {
+		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, "customfield_99999", "R")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
 	})
 
 	t.Run("nil coverage dependencies", func(t *testing.T) {
-		// Wire a resolver but leave the coverage deps nil.
 		q := newReleaseCoverageResolver(t, projectID, okClient, okRepo)
 		q.jiraCoverageClient = nil
 		q.tagCoverageRepo = nil
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, "R")
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, "R")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
 	})
 }
 
 // ---------------------------------------------------------------------------
-// Resolver error propagation
+// Resolver error propagation + generalized behaviors
 // ---------------------------------------------------------------------------
 
 func Test_ReleaseCoverage_ErrorPaths(t *testing.T) {
 	const projectID = "proj-1"
-	const fixVersionName = "2026.Bolinas"
+	const release = "2026.Bolinas"
 	sentinel := func(msg string) error { return &stringError{msg} }
 
 	t.Run("no active JIRA connection", func(t *testing.T) {
-		// Empty connection repo -> GetActiveConnectionWithCredential returns nil.
 		connRepo := &fakeConnRepo{}
 		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
 		r := newTestResolverWithJiraMapping(t, nil, connSvc)
@@ -205,34 +228,15 @@ func Test_ReleaseCoverage_ErrorPaths(t *testing.T) {
 		r.tagCoverageRepo = &fakeCoverageTagRepo{}
 		q := &queryResolver{r}
 
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no active JIRA connection")
 	})
 
-	t.Run("GetVersions error", func(t *testing.T) {
-		client := &fakeCoverageJiraClient{versErr: sentinel("jira down")}
-		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "jira down")
-	})
-
-	t.Run("fixVersion not found", func(t *testing.T) {
-		client := &fakeCoverageJiraClient{versions: []integrations.JiraVersion{{ID: "v9", Name: "Other"}}}
-		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
-	})
-
 	t.Run("epic search error", func(t *testing.T) {
-		client := &fakeCoverageJiraClient{
-			versions: []integrations.JiraVersion{{ID: "v1", Name: fixVersionName}},
-			epicErr:  sentinel("epic boom"),
-		}
+		client := &fakeCoverageJiraClient{epicErr: sentinel("epic boom")}
 		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to fetch epics")
 	})
@@ -241,51 +245,128 @@ func Test_ReleaseCoverage_ErrorPaths(t *testing.T) {
 		// Per-call injection: epics return fine, children query fails. Only
 		// reachable because the fake routes the two queries separately.
 		client := &fakeCoverageJiraClient{
-			versions:   []integrations.JiraVersion{{ID: "v1", Name: fixVersionName}},
 			epicIssues: []integrations.JiraIssue{{Key: "GWCP-100", IssueType: "Epic"}},
 			childErr:   sentinel("child boom"),
 		}
 		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to fetch epic children")
 	})
 
 	t.Run("tag coverage error", func(t *testing.T) {
 		client := &fakeCoverageJiraClient{
-			versions:   []integrations.JiraVersion{{ID: "v1", Name: fixVersionName}},
 			epicIssues: []integrations.JiraIssue{{Key: "GWCP-100", IssueType: "Epic"}},
 		}
 		tagRepo := &fakeCoverageTagRepo{err: sentinel("db boom")}
 		q := newReleaseCoverageResolver(t, projectID, client, tagRepo)
-		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+		_, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to load JIRA tag coverage")
 	})
+
+	t.Run("unknown release returns zero epics, not an error", func(t *testing.T) {
+		// Generalized behavior: the selector drives the epic query, so a release
+		// value with no matching epics is simply an empty release. The release
+		// echo is synthesized from the name when the version can't be resolved.
+		client := &fakeCoverageJiraClient{versions: []integrations.JiraVersion{{ID: "v9", Name: "Other"}}}
+		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
+		got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, 0, got.TotalEpics)
+		require.NotNil(t, got.Release)
+		assert.Equal(t, release, got.Release.Name, "synthesized echo carries the requested name")
+	})
+
+	t.Run("GetVersions failure is non-fatal (echo synthesized)", func(t *testing.T) {
+		// GetVersions is only used to enrich the fixVersion echo; its failure
+		// must not fail the whole coverage query.
+		client := &fakeCoverageJiraClient{
+			versErr:    sentinel("versions boom"),
+			epicIssues: []integrations.JiraIssue{{Key: "GWCP-100", IssueType: "Epic"}},
+		}
+		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
+		got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, 1, got.TotalEpics)
+		assert.Equal(t, release, got.Release.Name)
+	})
 }
 
-// Test_ReleaseCoverage_EmptyRelease: a fixVersion with zero epics fires only the
+// Test_ReleaseCoverage_EmptyRelease: a release with zero epics fires only the
 // epic query (no children query) and returns a well-formed zero result.
 func Test_ReleaseCoverage_EmptyRelease(t *testing.T) {
 	const projectID = "proj-1"
-	const fixVersionName = "2026.Empty"
+	const release = "2026.Empty"
 
 	client := &fakeCoverageJiraClient{
-		versions:   []integrations.JiraVersion{{ID: "v1", Name: fixVersionName}},
+		versions:   []integrations.JiraVersion{{ID: "v1", Name: release}},
 		epicIssues: nil, // no epics in this release
 	}
 	q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
 
-	got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionName)
+	got, err := q.ReleaseCoverage(managerCtxForMapping(), projectID, fixVersionDim, release)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, 0, got.TotalEpics)
 	assert.Equal(t, 0, got.CoveredEpics)
 	assert.Equal(t, 0, got.TotalChildren)
 	assert.Empty(t, got.Epics)
-	// Only the epic query should have fired -- no `parent in ()` query.
-	require.Len(t, client.gotJQL, 1)
-	assert.Contains(t, client.gotJQL[0], "issuetype = Epic")
+	// The epic query fired; no `parent in (...)` query (no epics to expand).
+	for _, jql := range client.gotJQL {
+		assert.NotContains(t, jql, "parent in")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// projectReleaseDimensions / projectReleases
+// ---------------------------------------------------------------------------
+
+func Test_ProjectReleaseDimensions(t *testing.T) {
+	const projectID = "proj-1"
+	q := newReleaseCoverageResolver(t, projectID, &fakeCoverageJiraClient{}, &fakeCoverageTagRepo{})
+
+	dims, err := q.ProjectReleaseDimensions(managerCtxForMapping(), projectID)
+	require.NoError(t, err)
+	require.Len(t, dims, 1, "MVP exposes the built-in fixVersion dimension")
+	assert.Equal(t, "fixVersion", dims[0].ID)
+	assert.True(t, dims[0].IsDefault)
+	assert.True(t, dims[0].Enumerable)
+}
+
+func Test_ProjectReleases(t *testing.T) {
+	const projectID = "proj-1"
+
+	t.Run("fixVersion dimension enumerates versions", func(t *testing.T) {
+		client := &fakeCoverageJiraClient{versions: []integrations.JiraVersion{
+			{ID: "v1", Name: "2026.Bolinas", Released: false},
+			{ID: "v2", Name: "2025.Aptos", Released: true, ReleaseDate: "2025-12-01"},
+		}}
+		q := newReleaseCoverageResolver(t, projectID, client, &fakeCoverageTagRepo{})
+		got, err := q.ProjectReleases(managerCtxForMapping(), projectID, fixVersionDim)
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		assert.Equal(t, "2026.Bolinas", got[0].Name)
+		assert.Equal(t, "2025.Aptos", got[1].Name)
+		require.NotNil(t, got[1].ReleaseDate)
+		assert.Equal(t, "2025-12-01", *got[1].ReleaseDate)
+	})
+
+	t.Run("unauthenticated", func(t *testing.T) {
+		q := newReleaseCoverageResolver(t, projectID, &fakeCoverageJiraClient{}, &fakeCoverageTagRepo{})
+		_, err := q.ProjectReleases(context.Background(), projectID, fixVersionDim)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unauthorized")
+	})
+
+	t.Run("unknown dimension errors", func(t *testing.T) {
+		q := newReleaseCoverageResolver(t, projectID, &fakeCoverageJiraClient{}, &fakeCoverageTagRepo{})
+		_, err := q.ProjectReleases(managerCtxForMapping(), projectID, "customfield_99999")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +374,8 @@ func Test_ReleaseCoverage_EmptyRelease(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func Test_aggregateReleaseCoverage(t *testing.T) {
-	version := integrations.JiraVersion{ID: "v1", Name: "R", Released: true, ReleaseDate: "2026-06-30"}
+	dim := toModelDimension(integrations.BuiltinFixVersionDimension())
+	rel := func(name string) *model.JiraRelease { return &model.JiraRelease{ID: name, Name: name} }
 	epic := func(key string) integrations.JiraIssue {
 		return integrations.JiraIssue{Key: key, IssueType: "Epic"}
 	}
@@ -304,20 +386,19 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 		return tagsdomain.CoverageCount{Total: total, Passed: passed, Failed: total - passed}
 	}
 
-	t.Run("no epics yields zero rollup but echoes fixVersion", func(t *testing.T) {
-		got := aggregateReleaseCoverage(version, nil, nil, nil)
+	t.Run("no epics yields zero rollup but echoes dimension + release", func(t *testing.T) {
+		got := aggregateReleaseCoverage(dim, rel("R"), nil, nil, nil)
 		require.NotNil(t, got)
-		require.NotNil(t, got.FixVersion)
-		assert.Equal(t, "v1", got.FixVersion.ID)
-		assert.True(t, got.FixVersion.Released)
-		require.NotNil(t, got.FixVersion.ReleaseDate)
-		assert.Equal(t, "2026-06-30", *got.FixVersion.ReleaseDate)
+		require.NotNil(t, got.Dimension)
+		assert.Equal(t, "fixVersion", got.Dimension.ID)
+		require.NotNil(t, got.Release)
+		assert.Equal(t, "R", got.Release.Name)
 		assert.Equal(t, 0, got.TotalEpics)
 		assert.Empty(t, got.Epics)
 	})
 
 	t.Run("epic with no children, epic itself covered -> fully covered", func(t *testing.T) {
-		got := aggregateReleaseCoverage(version,
+		got := aggregateReleaseCoverage(dim, rel("R"),
 			[]integrations.JiraIssue{epic("E-1")}, nil,
 			map[string]tagsdomain.CoverageCount{"e-1": cov(2, 2)})
 		assert.Equal(t, 1, got.TotalEpics)
@@ -330,7 +411,7 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 	})
 
 	t.Run("fully covered requires epic AND every child covered", func(t *testing.T) {
-		got := aggregateReleaseCoverage(version,
+		got := aggregateReleaseCoverage(dim, rel("R"),
 			[]integrations.JiraIssue{epic("E-1")},
 			[]integrations.JiraIssue{child("C-1", "E-1"), child("C-2", "E-1")},
 			map[string]tagsdomain.CoverageCount{
@@ -346,7 +427,7 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 	})
 
 	t.Run("coverage entry with Total==0 counts as not covered", func(t *testing.T) {
-		got := aggregateReleaseCoverage(version,
+		got := aggregateReleaseCoverage(dim, rel("R"),
 			[]integrations.JiraIssue{epic("E-1")}, nil,
 			map[string]tagsdomain.CoverageCount{"e-1": cov(0, 0)})
 		assert.Equal(t, 0, got.CoveredEpics, "Total==0 must not count as covered")
@@ -354,8 +435,7 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 	})
 
 	t.Run("mixed-case JIRA key matches lowercased coverage key", func(t *testing.T) {
-		// JIRA returns canonical uppercase; coverage map is keyed lowercase.
-		got := aggregateReleaseCoverage(version,
+		got := aggregateReleaseCoverage(dim, rel("R"),
 			[]integrations.JiraIssue{epic("GWCP-500")}, nil,
 			map[string]tagsdomain.CoverageCount{"gwcp-500": cov(1, 1)})
 		require.Len(t, got.Epics, 1)
@@ -363,7 +443,7 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 	})
 
 	t.Run("orphan and nil-parent children are excluded from totals", func(t *testing.T) {
-		got := aggregateReleaseCoverage(version,
+		got := aggregateReleaseCoverage(dim, rel("R"),
 			[]integrations.JiraIssue{epic("E-1")},
 			[]integrations.JiraIssue{
 				child("C-1", "E-1"),                           // real child
@@ -371,7 +451,6 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 				{Key: "C-0", IssueType: "Story", Parent: nil}, // nil parent
 			},
 			map[string]tagsdomain.CoverageCount{"c-1": cov(1, 1), "c-9": cov(1, 1)})
-		// Only C-1 attaches to E-1; orphan/nil-parent are dropped, not counted.
 		assert.Equal(t, 1, got.TotalChildren, "only the real child counts")
 		assert.Equal(t, 1, got.CoveredChildren)
 		require.Len(t, got.Epics, 1)
@@ -379,10 +458,11 @@ func Test_aggregateReleaseCoverage(t *testing.T) {
 	})
 }
 
-// Test_buildEpicJQL pins the exact JQL the resolver emits for epics so a
-// formatting change is a deliberate, visible edit rather than a silent shift.
+// Test_buildEpicJQL pins the composed epic query: project + escaped selector.
 func Test_buildEpicJQL(t *testing.T) {
-	got := buildEpicJQL("PROJ", "2026.Bolinas")
+	sel, err := integrations.BuiltinFixVersionDimension().SelectorJQL("2026.Bolinas")
+	require.NoError(t, err)
+	got := buildEpicJQL("PROJ", sel)
 	assert.Equal(t, `project = "PROJ" AND issuetype = Epic AND fixVersion = "2026.Bolinas"`, got)
 }
 

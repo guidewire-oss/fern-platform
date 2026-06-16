@@ -244,13 +244,22 @@ type Query struct {
 }
 
 type ReleaseCoverage struct {
-	FixVersion        *JiraRelease           `json:"fixVersion"`
+	Dimension         *ReleaseDimension      `json:"dimension"`
+	Release           *JiraRelease           `json:"release"`
 	TotalEpics        int                    `json:"totalEpics"`
 	CoveredEpics      int                    `json:"coveredEpics"`
 	FullyCoveredEpics int                    `json:"fullyCoveredEpics"`
 	TotalChildren     int                    `json:"totalChildren"`
 	CoveredChildren   int                    `json:"coveredChildren"`
 	Epics             []*EpicCoverageSummary `json:"epics"`
+}
+
+type ReleaseDimension struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Kind       string `json:"kind"`
+	Enumerable bool   `json:"enumerable"`
+	IsDefault  bool   `json:"isDefault"`
 }
 
 type RequirementCoverageTree struct {
