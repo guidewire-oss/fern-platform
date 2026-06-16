@@ -151,7 +151,9 @@ type JiraIssue struct {
 
 // CoverageJiraClient is the narrow JIRA client interface required by the coverage service.
 type CoverageJiraClient interface {
-	GetVersions(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType) ([]JiraVersion, error)
+	// GetEpicReleases returns distinct non-empty values of the custom release field
+	// (e.g. cf[10077]) across all Epics in the project, sorted alphabetically.
+	GetEpicReleases(ctx context.Context, baseURL, projectKey, releaseFieldID, username, credential string, authType AuthenticationType) ([]string, error)
 	SearchIssues(ctx context.Context, baseURL, username, credential string, authType AuthenticationType, jql string, fields []string) ([]JiraIssue, error)
 }
 
@@ -162,7 +164,7 @@ type CoverageTagRepository interface {
 
 // CoverageTree is the assembled result of a requirementCoverage query.
 type CoverageTree struct {
-	FixVersion JiraVersion
+	Release    string
 	Epics      []EpicNode
 	Unassigned []StoryNode
 }

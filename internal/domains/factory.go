@@ -289,7 +289,7 @@ func (f *DomainFactory) initIntegrationsDomain() {
 
 	// Create coverage service (reuses the same connection repo, JIRA client, and encryption key)
 	tagRepo := tagsInfra.NewGormTagRepository(f.db)
-	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, encryptionKey)
+	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, f.jiraFieldMappingService, encryptionKey)
 }
 
 // GetJiraConnectionService returns the JIRA connection service

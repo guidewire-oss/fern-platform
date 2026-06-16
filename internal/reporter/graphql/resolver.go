@@ -20,8 +20,8 @@ import (
 
 // coverageServicer is the narrow interface the coverage resolvers depend on.
 type coverageServicer interface {
-	GetVersionsForProject(ctx context.Context, projectID string) ([]integrations.JiraVersion, error)
-	Build(ctx context.Context, projectID, fixVersionName string) (*integrations.CoverageTree, error)
+	GetReleasesForProject(ctx context.Context, projectID string) ([]string, error)
+	Build(ctx context.Context, projectID, releaseValue string) (*integrations.CoverageTree, error)
 }
 
 // Resolver is the root GraphQL resolver

@@ -7,10 +7,107 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// GetEpicReleases returns distinct non-empty values of a custom release field across all Epics
+// in the project, sorted alphabetically. jiraFieldID is the full custom field ID
+// (e.g. "customfield_10077"); the numeric part is extracted internally for JQL.
+func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projectKey, jiraFieldID, username, credential string, authType AuthenticationType) ([]string, error) {
+	const pageSize = 100
+
+	numericID := extractNumericFieldID(jiraFieldID)
+	jql := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] is not EMPTY ORDER BY cf[%s] ASC`, projectKey, numericID, numericID)
+	fieldParam := jiraFieldID // e.g. "customfield_10077" for the fields parameter
+
+	seen := make(map[string]bool)
+	nextPageToken := ""
+	pageNum := 0
+	start := time.Now()
+	log.Printf("[CoverageJiraClient] GetEpicReleases: url=%s project=%s field=%s", baseURL, projectKey, jiraFieldID)
+
+	for {
+		pageNum++
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/rest/api/3/search/jql", baseURL), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		q := req.URL.Query()
+		q.Set("jql", jql)
+		q.Set("fields", fieldParam)
+		q.Set("maxResults", strconv.Itoa(pageSize))
+		if nextPageToken != "" {
+			q.Set("nextPageToken", nextPageToken)
+		}
+		req.URL.RawQuery = q.Encode()
+		c.setAuthHeader(req, username, credential, authType)
+
+		const maxAttempts = 3
+		var resp *http.Response
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			resp, err = c.httpClient.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch epic releases: %w", err)
+			}
+			if resp.StatusCode != http.StatusTooManyRequests {
+				break
+			}
+			resp.Body.Close()
+			if attempt+1 < maxAttempts {
+				delay := time.Duration(1<<uint(attempt)) * time.Second
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(delay):
+				}
+			}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			return nil, fmt.Errorf("JIRA epic releases request failed: status %d body=%s", resp.StatusCode, string(body))
+		}
+
+		var page struct {
+			NextPageToken string `json:"nextPageToken"`
+			Issues        []struct {
+				Fields map[string]json.RawMessage `json:"fields"`
+			} `json:"issues"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+			return nil, fmt.Errorf("failed to decode epic releases response: %w", err)
+		}
+
+		for _, issue := range page.Issues {
+			raw, ok := issue.Fields[fieldParam]
+			if !ok || string(raw) == "null" {
+				continue
+			}
+			var val string
+			if err := json.Unmarshal(raw, &val); err != nil || val == "" {
+				continue
+			}
+			seen[val] = true
+		}
+
+		if page.NextPageToken == "" || len(page.Issues) == 0 {
+			break
+		}
+		nextPageToken = page.NextPageToken
+	}
+
+	releases := make([]string, 0, len(seen))
+	for v := range seen {
+		releases = append(releases, v)
+	}
+	sort.Strings(releases)
+	log.Printf("[CoverageJiraClient] GetEpicReleases: found %d distinct releases project=%s duration=%dms", len(releases), projectKey, time.Since(start).Milliseconds())
+	return releases, nil
+}
 
 // GetVersions fetches all fix versions for a JIRA project.
 func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType) ([]JiraVersion, error) {

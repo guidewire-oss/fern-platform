@@ -11,17 +11,23 @@ import (
 )
 
 // jiraKeyPattern matches standard JIRA issue keys (e.g. PROJ-123, CLOUD-4567).
-// Used to validate Phase 2 keys before embedding them in JQL.
 var jiraKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]+-\d+$`)
 
 const jiraAPITimeout = 30 * time.Second
 
-// CoverageService builds a RequirementCoverageTree for a project + fix version.
+// fieldMappingLookup is the narrow interface CoverageService needs from JiraFieldMappingService.
+// Defined here so tests can provide a simple mock without wiring up the full service.
+type fieldMappingLookup interface {
+	Get(ctx context.Context, projectID string) (*JiraFieldMappingSnapshot, error)
+}
+
+// CoverageService builds a RequirementCoverageTree for a project + release value.
 type CoverageService struct {
-	connRepo      JiraConnectionRepository
-	jiraClient    CoverageJiraClient
-	tagRepo       CoverageTagRepository
-	encryptionKey []byte
+	connRepo       JiraConnectionRepository
+	jiraClient     CoverageJiraClient
+	tagRepo        CoverageTagRepository
+	mappingService fieldMappingLookup
+	encryptionKey  []byte
 }
 
 // NewCoverageService wires up a CoverageService with its dependencies.
@@ -29,164 +35,186 @@ func NewCoverageService(
 	connRepo JiraConnectionRepository,
 	jiraClient CoverageJiraClient,
 	tagRepo CoverageTagRepository,
+	mappingService fieldMappingLookup,
 	encryptionKey []byte,
 ) *CoverageService {
 	return &CoverageService{
-		connRepo:      connRepo,
-		jiraClient:    jiraClient,
-		tagRepo:       tagRepo,
-		encryptionKey: encryptionKey,
+		connRepo:       connRepo,
+		jiraClient:     jiraClient,
+		tagRepo:        tagRepo,
+		mappingService: mappingService,
+		encryptionKey:  encryptionKey,
 	}
 }
 
-// GetVersionsForProject returns all JIRA fix versions for the project's active connection.
-func (s *CoverageService) GetVersionsForProject(ctx context.Context, projectID string) ([]JiraVersion, error) {
+// GetReleasesForProject returns distinct non-empty release values from Epics in the project's JIRA.
+// The values come from the custom field configured via the field mapping (FernFieldReleaseVersion).
+func (s *CoverageService) GetReleasesForProject(ctx context.Context, projectID string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, jiraAPITimeout)
 	defer cancel()
 
-	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
+	conn, credential, err := s.resolveConnection(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("coverage: failed to find JIRA connection: %w", err)
+		return nil, err
 	}
-	if len(conns) == 0 {
-		return nil, fmt.Errorf("coverage: no active JIRA connection for project %q", projectID)
-	}
-	conn := conns[0]
-
-	credential, err := DecryptCredential(conn.GetEncryptedCredentialDirect(), s.encryptionKey)
+	releaseFieldID, err := s.getReleaseFieldID(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("coverage: failed to decrypt credential: %w", err)
+		return nil, err
 	}
-
-	return s.jiraClient.GetVersions(ctx, conn.JiraURL(), conn.ProjectKey(), conn.Username(), credential, conn.AuthenticationType())
+	return s.jiraClient.GetEpicReleases(ctx, conn.JiraURL(), conn.ProjectKey(), releaseFieldID, conn.Username(), credential, conn.AuthenticationType())
 }
 
-// Build fetches JIRA issues for the given fix version, cross-references them with
-// Fern test-run coverage, and returns the assembled tree.
-func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName string) (*CoverageTree, error) {
+// Build fetches the Epic-first three-phase hierarchy for the given release value and
+// cross-references it with Fern test-run coverage.
+func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue string) (*CoverageTree, error) {
 	ctx, cancel := context.WithTimeout(ctx, jiraAPITimeout)
 	defer cancel()
 
-	// Resolve the active JIRA connection for this project.
-	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
+	conn, credential, err := s.resolveConnection(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("coverage: failed to find JIRA connection: %w", err)
+		return nil, err
 	}
-	if len(conns) == 0 {
-		return nil, fmt.Errorf("coverage: no active JIRA connection for project %q", projectID)
-	}
-	conn := conns[0]
-
-	credential, err := DecryptCredential(conn.GetEncryptedCredentialDirect(), s.encryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("coverage: failed to decrypt credential: %w", err)
-	}
-
-	baseURL := conn.JiraURL()
-	username := conn.Username()
-	authType := conn.AuthenticationType()
-	projectKey := conn.ProjectKey()
-
-	// Validate fixVersionName before embedding in JQL.
-	if strings.ContainsRune(fixVersionName, ';') {
-		return nil, fmt.Errorf("coverage: fix version name contains invalid character ';'")
-	}
-
-	// Resolve the JiraVersion object for the requested name.
-	fixVersion, err := s.resolveVersion(ctx, baseURL, projectKey, username, credential, authType, fixVersionName)
+	releaseFieldID, err := s.getReleaseFieldID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Phase 1: fetch all issues for the fix version.
-	// Use fixVersion.Name (validated against JIRA's own version list) rather than
-	// the raw user-supplied fixVersionName.
-	phase1JQL := fmt.Sprintf(`fixVersion = %q ORDER BY issuetype`, fixVersion.Name)
+	// JQL uses cf[numericID]; the fields parameter uses the full customfield_NNNNN form.
+	numericFieldID := extractNumericFieldID(releaseFieldID)
+
+	baseURL := conn.JiraURL()
+	username := conn.Username()
+	authType := conn.AuthenticationType()
 	fields := []string{"summary", "status", "issuetype", "parent"}
-	phase1Issues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase1JQL, fields)
+
+	// Phase 1 — Epics matching the release custom field value.
+	phase1JQL := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] = %q ORDER BY key`, conn.ProjectKey(), numericFieldID, releaseValue)
+	epicIssues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase1JQL, fields)
 	if err != nil {
-		return nil, fmt.Errorf("coverage: Phase 1 search failed: %w", err)
+		return nil, fmt.Errorf("coverage: Phase 1 (Epics) search failed: %w", err)
 	}
 
-	// Separate epics, stories, and sub-tasks from the Phase 1 results.
-	// Sub-task detection uses the JIRA issuetype.subtask boolean flag so it works
-	// regardless of how the sub-task issue type is named in the project.
-	epicsByKey := make(map[string]JiraIssue)
-	var stories, subTasks []JiraIssue
-	for _, issue := range phase1Issues {
-		switch {
-		case issue.IssueType == "Epic":
-			epicsByKey[issue.Key] = issue
-		case issue.Subtask:
-			subTasks = append(subTasks, issue)
-		default:
-			stories = append(stories, issue)
-		}
+	epicsByKey := make(map[string]JiraIssue, len(epicIssues))
+	epicKeys := make([]string, 0, len(epicIssues))
+	for _, e := range epicIssues {
+		epicsByKey[e.Key] = e
+		epicKeys = append(epicKeys, e.Key)
 	}
 
-	// Only look at stories (not sub-tasks) for missing parent epics.
-	missingEpicKeys := s.collectMissingEpicKeys(stories, epicsByKey)
-
-	// Phase 2: fetch any parent epics not returned by Phase 1.
-	if len(missingEpicKeys) > 0 {
-		for _, key := range missingEpicKeys {
+	// Phase 2 — Stories whose parent is one of the Epics, chunked ≤50 keys per request.
+	var stories []JiraIssue
+	for _, chunk := range chunkKeys(epicKeys, 50) {
+		for _, key := range chunk {
 			if !jiraKeyPattern.MatchString(key) {
 				return nil, fmt.Errorf("coverage: invalid JIRA issue key %q in Phase 2 batch", key)
 			}
 		}
-		phase2JQL := fmt.Sprintf("issueKey IN (%s)", strings.Join(missingEpicKeys, ","))
-		phase2Issues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase2JQL, fields)
+		jql := fmt.Sprintf("parent IN (%s) ORDER BY key", strings.Join(chunk, ","))
+		got, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, jql, fields)
 		if err != nil {
-			return nil, fmt.Errorf("coverage: Phase 2 search failed: %w", err)
+			return nil, fmt.Errorf("coverage: Phase 2 (Stories) search failed: %w", err)
 		}
-		for _, issue := range phase2Issues {
-			epicsByKey[issue.Key] = issue
-		}
+		stories = append(stories, got...)
 	}
 
-	// Fetch Fern test-run coverage for the project.
+	// Separate actual stories from sub-tasks that may have been returned.
+	var nonSubTasks, subTasksFromPhase2 []JiraIssue
+	for _, s := range stories {
+		if s.Subtask {
+			subTasksFromPhase2 = append(subTasksFromPhase2, s)
+		} else {
+			nonSubTasks = append(nonSubTasks, s)
+		}
+	}
+	stories = nonSubTasks
+
+	// Phase 3 — Sub-tasks whose parent is one of the Stories, chunked ≤50 keys per request.
+	storyKeys := make([]string, 0, len(stories))
+	for _, st := range stories {
+		storyKeys = append(storyKeys, st.Key)
+	}
+	var subTasks []JiraIssue
+	subTasks = append(subTasks, subTasksFromPhase2...)
+	for _, chunk := range chunkKeys(storyKeys, 50) {
+		jql := fmt.Sprintf("parent IN (%s) ORDER BY key", strings.Join(chunk, ","))
+		got, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, jql, fields)
+		if err != nil {
+			return nil, fmt.Errorf("coverage: Phase 3 (Sub-tasks) search failed: %w", err)
+		}
+		subTasks = append(subTasks, got...)
+	}
+
 	coverageMap, err := s.tagRepo.GetJiraTagCoverageByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("coverage: failed to fetch tag coverage: %w", err)
 	}
 
-	return assembleTree(fixVersion, epicsByKey, stories, subTasks, coverageMap), nil
+	return assembleTree(releaseValue, epicsByKey, stories, subTasks, coverageMap), nil
 }
 
-// resolveVersion finds the JiraVersion matching fixVersionName for the project.
-func (s *CoverageService) resolveVersion(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType, fixVersionName string) (JiraVersion, error) {
-	versions, err := s.jiraClient.GetVersions(ctx, baseURL, projectKey, username, credential, authType)
+// resolveConnection fetches the active JIRA connection and decrypts its credential.
+func (s *CoverageService) resolveConnection(ctx context.Context, projectID string) (*JiraConnection, string, error) {
+	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
 	if err != nil {
-		return JiraVersion{}, fmt.Errorf("coverage: failed to fetch versions: %w", err)
+		return nil, "", fmt.Errorf("coverage: failed to find JIRA connection: %w", err)
 	}
-	for _, v := range versions {
-		if v.Name == fixVersionName {
-			return v, nil
-		}
+	if len(conns) == 0 {
+		return nil, "", fmt.Errorf("coverage: no active JIRA connection for project %q", projectID)
 	}
-	return JiraVersion{}, fmt.Errorf("coverage: fix version %q not found in project %q", fixVersionName, projectKey)
+	conn := conns[0]
+	credential, err := DecryptCredential(conn.GetEncryptedCredentialDirect(), s.encryptionKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("coverage: failed to decrypt credential: %w", err)
+	}
+	return conn, credential, nil
 }
 
-// collectMissingEpicKeys returns parent epic keys that are referenced by nonEpics but absent from epicsByKey.
-func (s *CoverageService) collectMissingEpicKeys(nonEpics []JiraIssue, epicsByKey map[string]JiraIssue) []string {
-	seen := make(map[string]bool)
-	var missing []string
-	for _, issue := range nonEpics {
-		if issue.Parent == nil {
-			continue
-		}
-		key := issue.Parent.Key
-		if _, exists := epicsByKey[key]; !exists && !seen[key] {
-			seen[key] = true
-			missing = append(missing, key)
+// getReleaseFieldID reads the JIRA field ID (e.g. "customfield_10077") mapped to
+// FernFieldReleaseVersion from the project's field mapping.
+func (s *CoverageService) getReleaseFieldID(ctx context.Context, projectID string) (string, error) {
+	snapshot, err := s.mappingService.Get(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("coverage: failed to get field mapping: %w", err)
+	}
+	for _, entry := range snapshot.Entries {
+		if entry.FernField == FernFieldReleaseVersion {
+			return entry.JiraFieldID, nil
 		}
 	}
-	return missing
+	return "", fmt.Errorf("coverage: release_version field not mapped for project %q; configure it in the field mapping settings", projectID)
+}
+
+// extractNumericFieldID converts a JIRA field ID to the numeric form used in JQL (cf[N]).
+// Accepts: "customfield_10077" → "10077", "cf[10077]" → "10077", "10077" → "10077".
+func extractNumericFieldID(jiraFieldID string) string {
+	if strings.HasPrefix(jiraFieldID, "customfield_") {
+		return strings.TrimPrefix(jiraFieldID, "customfield_")
+	}
+	if strings.HasPrefix(jiraFieldID, "cf[") && strings.HasSuffix(jiraFieldID, "]") {
+		return jiraFieldID[3 : len(jiraFieldID)-1]
+	}
+	return jiraFieldID
+}
+
+// chunkKeys splits keys into slices of at most size elements.
+func chunkKeys(keys []string, size int) [][]string {
+	if len(keys) == 0 {
+		return nil
+	}
+	var chunks [][]string
+	for len(keys) > 0 {
+		n := size
+		if len(keys) < n {
+			n = len(keys)
+		}
+		chunks = append(chunks, keys[:n])
+		keys = keys[n:]
+	}
+	return chunks
 }
 
 // assembleTree builds the CoverageTree from the fetched issues and tag coverage map.
-func assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
-	// Build story nodes indexed by key so sub-tasks can be attached.
+func assembleTree(releaseValue string, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
 	storyNodesByKey := make(map[string]*StoryNode, len(stories))
 	for i := range stories {
 		node := buildStoryNode(stories[i], coverageMap)
@@ -237,7 +265,7 @@ func assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, stori
 
 	unassigned = append(unassigned, unassignedSubTasks...)
 	return &CoverageTree{
-		FixVersion: fixVersion,
+		Release:    releaseValue,
 		Epics:      epicNodes,
 		Unassigned: unassigned,
 	}

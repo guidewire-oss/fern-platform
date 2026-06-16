@@ -254,12 +254,7 @@ func (r *Resolver) convertJiraConnectionToModel(conn *integrations.JiraConnectio
 }
 
 func mapCoverageTree(tree *integrations.CoverageTree) *model.RequirementCoverageTree {
-	fv := tree.FixVersion
-	rel := &model.JiraRelease{ID: fv.ID, Name: fv.Name, Released: fv.Released}
-	if fv.ReleaseDate != "" {
-		rd := fv.ReleaseDate
-		rel.ReleaseDate = &rd
-	}
+	rel := &model.JiraRelease{Name: tree.Release}
 
 	epics := make([]*model.EpicCoverageNode, len(tree.Epics))
 	for i, e := range tree.Epics {

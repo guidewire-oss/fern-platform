@@ -893,18 +893,13 @@ func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) (
 	if r.coverageService == nil {
 		return nil, fmt.Errorf("coverage service not configured")
 	}
-	versions, err := r.coverageService.GetVersionsForProject(ctx, projectID)
+	releases, err := r.coverageService.GetReleasesForProject(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*model.JiraRelease, len(versions))
-	for i, v := range versions {
-		rel := &model.JiraRelease{ID: v.ID, Name: v.Name, Released: v.Released}
-		if v.ReleaseDate != "" {
-			rd := v.ReleaseDate
-			rel.ReleaseDate = &rd
-		}
-		result[i] = rel
+	result := make([]*model.JiraRelease, len(releases))
+	for i, v := range releases {
+		result[i] = &model.JiraRelease{Name: v}
 	}
 	return result, nil
 }

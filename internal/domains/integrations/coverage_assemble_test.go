@@ -7,7 +7,7 @@ import (
 )
 
 func TestAssembleTree(t *testing.T) {
-	ver := JiraVersion{ID: "1", Name: "v1.0"}
+	const releaseValue = "v1.0"
 
 	epic := func(key string) JiraIssue {
 		return JiraIssue{Key: key, Summary: key + " epic", IssueType: "Epic"}
@@ -34,12 +34,12 @@ func TestAssembleTree(t *testing.T) {
 	noCoverage := map[string]tagsdomain.CoverageCount{}
 
 	t.Run("empty version returns empty tree", func(t *testing.T) {
-		tree := assembleTree(ver, nil, nil, nil, noCoverage)
+		tree := assembleTree(releaseValue, nil, nil, nil, noCoverage)
 		if tree == nil {
 			t.Fatal("expected non-nil tree")
 		}
-		if tree.FixVersion.Name != "v1.0" {
-			t.Errorf("unexpected version: %q", tree.FixVersion.Name)
+		if tree.Release != "v1.0" {
+			t.Errorf("unexpected release: %q", tree.Release)
 		}
 		if len(tree.Epics) != 0 {
 			t.Errorf("expected 0 epics, got %d", len(tree.Epics))
@@ -51,7 +51,7 @@ func TestAssembleTree(t *testing.T) {
 
 	t.Run("story without epic parent goes to Unassigned", func(t *testing.T) {
 		orphanStory := story("PROJ-2", "")
-		tree := assembleTree(ver, nil, []JiraIssue{orphanStory}, nil, noCoverage)
+		tree := assembleTree(releaseValue, nil, []JiraIssue{orphanStory}, nil, noCoverage)
 		if len(tree.Unassigned) != 1 {
 			t.Fatalf("expected 1 unassigned story, got %d", len(tree.Unassigned))
 		}
@@ -62,7 +62,7 @@ func TestAssembleTree(t *testing.T) {
 
 	t.Run("orphaned sub-task whose parent story is absent goes to Unassigned", func(t *testing.T) {
 		orphan := subtask("PROJ-10", "PROJ-99") // PROJ-99 is not in stories
-		tree := assembleTree(ver, nil, nil, []JiraIssue{orphan}, noCoverage)
+		tree := assembleTree(releaseValue, nil, nil, []JiraIssue{orphan}, noCoverage)
 		if len(tree.Unassigned) != 1 {
 			t.Fatalf("expected 1 unassigned sub-task, got %d", len(tree.Unassigned))
 		}
@@ -75,7 +75,7 @@ func TestAssembleTree(t *testing.T) {
 		s := story("PROJ-2", "PROJ-1")
 		st := subtask("PROJ-3", "PROJ-2")
 		epics := map[string]JiraIssue{"PROJ-1": epic("PROJ-1")}
-		tree := assembleTree(ver, epics, []JiraIssue{s}, []JiraIssue{st}, noCoverage)
+		tree := assembleTree(releaseValue, epics, []JiraIssue{s}, []JiraIssue{st}, noCoverage)
 		if len(tree.Epics) != 1 {
 			t.Fatalf("expected 1 epic, got %d", len(tree.Epics))
 		}
@@ -98,7 +98,7 @@ func TestAssembleTree(t *testing.T) {
 		epics := map[string]JiraIssue{"PROJ-1": epic("PROJ-1")}
 		// only PROJ-2 has coverage
 		cov := covered("PROJ-2")
-		tree := assembleTree(ver, epics, []JiraIssue{s1, s2}, nil, cov)
+		tree := assembleTree(releaseValue, epics, []JiraIssue{s1, s2}, nil, cov)
 		if len(tree.Epics) != 1 {
 			t.Fatalf("expected 1 epic, got %d", len(tree.Epics))
 		}

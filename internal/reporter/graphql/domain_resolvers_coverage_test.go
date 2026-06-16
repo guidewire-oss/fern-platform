@@ -15,13 +15,13 @@ import (
 // --- fake coverage service ---
 
 type fakeCoverageService struct {
-	versions []integrations.JiraVersion
+	releases []string
 	tree     *integrations.CoverageTree
 	err      error
 }
 
-func (f *fakeCoverageService) GetVersionsForProject(_ context.Context, _ string) ([]integrations.JiraVersion, error) {
-	return f.versions, f.err
+func (f *fakeCoverageService) GetReleasesForProject(_ context.Context, _ string) ([]string, error) {
+	return f.releases, f.err
 }
 
 func (f *fakeCoverageService) Build(_ context.Context, _, _ string) (*integrations.CoverageTree, error) {
@@ -42,10 +42,7 @@ func newCoverageResolver(t *testing.T, svc coverageServicer) *queryResolver {
 func TestJiraFixVersionsResolver(t *testing.T) {
 	t.Run("returns mapped JiraRelease list on success", func(t *testing.T) {
 		svc := &fakeCoverageService{
-			versions: []integrations.JiraVersion{
-				{ID: "10001", Name: "v1.0", Released: true, ReleaseDate: "2025-01-15"},
-				{ID: "10002", Name: "v2.0", Released: false},
-			},
+			releases: []string{"OLOS (2025.06M)", "PALISADES (2025.10M)"},
 		}
 		qr := newCoverageResolver(t, svc)
 
@@ -53,18 +50,12 @@ func TestJiraFixVersionsResolver(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, result, 2)
-		assert.Equal(t, "10001", result[0].ID)
-		assert.Equal(t, "v1.0", result[0].Name)
-		assert.True(t, result[0].Released)
-		assert.NotNil(t, result[0].ReleaseDate)
-		assert.Equal(t, "2025-01-15", *result[0].ReleaseDate)
-		assert.Equal(t, "10002", result[1].ID)
-		assert.False(t, result[1].Released)
-		assert.Nil(t, result[1].ReleaseDate)
+		assert.Equal(t, "OLOS (2025.06M)", result[0].Name)
+		assert.Equal(t, "PALISADES (2025.10M)", result[1].Name)
 	})
 
-	t.Run("returns empty list when project has no versions", func(t *testing.T) {
-		svc := &fakeCoverageService{versions: []integrations.JiraVersion{}}
+	t.Run("returns empty list when project has no releases", func(t *testing.T) {
+		svc := &fakeCoverageService{releases: []string{}}
 		qr := newCoverageResolver(t, svc)
 
 		result, err := qr.JiraFixVersions(adminCtxForMapping(), "proj-1")
@@ -100,7 +91,7 @@ func TestRequirementCoverageResolver(t *testing.T) {
 
 	t.Run("maps CoverageTree to RequirementCoverageTree model", func(t *testing.T) {
 		tree := &integrations.CoverageTree{
-			FixVersion: integrations.JiraVersion{ID: "10001", Name: "v1.0", Released: false},
+			Release: "OLOS (2025.06M)",
 			Epics: []integrations.EpicNode{
 				{
 					Issue:        integrations.JiraIssue{Key: "PROJ-1", Summary: "Epic one", IssueType: "Epic"},
@@ -126,15 +117,13 @@ func TestRequirementCoverageResolver(t *testing.T) {
 		svc := &fakeCoverageService{tree: tree}
 		qr := newCoverageResolver(t, svc)
 
-		result, err := qr.RequirementCoverage(adminCtxForMapping(), "proj-1", "v1.0")
+		result, err := qr.RequirementCoverage(adminCtxForMapping(), "proj-1", "OLOS (2025.06M)")
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// fix version
-		assert.Equal(t, "10001", result.FixVersion.ID)
-		assert.Equal(t, "v1.0", result.FixVersion.Name)
-		assert.False(t, result.FixVersion.Released)
+		// release
+		assert.Equal(t, "OLOS (2025.06M)", result.FixVersion.Name)
 
 		// epics
 		require.Len(t, result.Epics, 1)
@@ -187,9 +176,9 @@ func TestRequirementCoverageResolver(t *testing.T) {
 
 func TestCoverageResolversAuthorization(t *testing.T) {
 	svc := &fakeCoverageService{
-		versions: []integrations.JiraVersion{{ID: "1", Name: "v1.0"}},
+		releases: []string{"v1.0"},
 		tree: &integrations.CoverageTree{
-			FixVersion: integrations.JiraVersion{ID: "1", Name: "v1.0"},
+			Release: "v1.0",
 		},
 	}
 
