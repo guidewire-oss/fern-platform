@@ -239,20 +239,9 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 	return result, nil
 }
 
-// CoveredSpecRun holds the denormalised fields needed by the coverage drill-down.
-type CoveredSpecRun struct {
-	SpecName  string
-	Status    string
-	SuiteName string
-	TestRunID string
-	Branch    string
-	StartTime time.Time
-	Duration  int64
-}
-
 // GetSpecRunsByJiraTag returns spec runs tagged with the given JIRA issue key within a project.
-func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]CoveredSpecRun, error) {
-	var rows []CoveredSpecRun
+func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]domain.CoveredSpecRun, error) {
+	var rows []domain.CoveredSpecRun
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT sr.spec_name  AS spec_name,
 		       sr.status     AS status,

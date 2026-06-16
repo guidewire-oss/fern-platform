@@ -10,3 +10,14 @@ type CoverageCount struct {
 	Skipped   int
 	LastRunAt *time.Time
 }
+
+// CoveredSpecRun holds the denormalised fields needed by the coverage drill-down.
+type CoveredSpecRun struct {
+	SpecName  string
+	Status    string
+	SuiteName string
+	TestRunID string
+	Branch    string
+	StartTime time.Time
+	Duration  int64
+}

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -335,7 +337,37 @@ func ReconstructJiraConnection(
 	}
 }
 
-// Helper function to validate JIRA URL
-func isValidJiraURL(url string) bool {
-	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+// isValidJiraURL checks that the URL is a valid http/https URL and does not target
+// loopback, link-local, or private network addresses (SSRF prevention).
+func isValidJiraURL(rawURL string) bool {
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	hostname := parsed.Hostname()
+	if hostname == "" {
+		return false
+	}
+	// Reject bare IP addresses in private/loopback/link-local ranges.
+	if ip := net.ParseIP(hostname); ip != nil {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || isPrivateIP(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPrivateIP reports whether ip falls in RFC-1918 / RFC-4193 private ranges.
+func isPrivateIP(ip net.IP) bool {
+	private := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "169.254.0.0/16"}
+	for _, cidr := range private {
+		_, block, _ := net.ParseCIDR(cidr)
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

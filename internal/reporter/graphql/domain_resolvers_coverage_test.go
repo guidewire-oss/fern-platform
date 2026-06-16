@@ -28,6 +28,10 @@ func (f *fakeCoverageService) Build(_ context.Context, _, _ string) (*integratio
 	return f.tree, f.err
 }
 
+func (f *fakeCoverageService) GetSpecRunsByJiraTag(_ context.Context, _, _ string) ([]tagsdomain.CoveredSpecRun, error) {
+	return nil, f.err
+}
+
 // --- helper ---
 
 func newCoverageResolver(t *testing.T, svc coverageServicer) *queryResolver {

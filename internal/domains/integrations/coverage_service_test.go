@@ -35,6 +35,10 @@ func (m *mockCoverageTagRepo) GetJiraTagCoverageByProject(_ context.Context, _ s
 	return m.data, nil
 }
 
+func (m *mockCoverageTagRepo) GetSpecRunsByJiraTag(_ context.Context, _, _ string) ([]tagsdomain.CoveredSpecRun, error) {
+	return nil, nil
+}
+
 // mockFieldMappingService implements fieldMappingLookup for tests.
 type mockFieldMappingService struct {
 	entries []integrations.FieldMappingEntry

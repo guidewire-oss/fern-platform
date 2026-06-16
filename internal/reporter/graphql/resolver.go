@@ -7,6 +7,7 @@ import (
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
+	tagsdomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	testingApp "github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/dataloader"
@@ -22,6 +23,7 @@ import (
 type coverageServicer interface {
 	GetReleasesForProject(ctx context.Context, projectID string) ([]string, error)
 	Build(ctx context.Context, projectID, releaseValue string) (*integrations.CoverageTree, error)
+	GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]tagsdomain.CoveredSpecRun, error)
 }
 
 // Resolver is the root GraphQL resolver

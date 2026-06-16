@@ -65,10 +65,10 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 				}
 			}
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
 			return nil, fmt.Errorf("JIRA epic releases request failed: status %d body=%s", resp.StatusCode, string(body))
 		}
 
@@ -78,8 +78,10 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 				Fields map[string]json.RawMessage `json:"fields"`
 			} `json:"issues"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-			return nil, fmt.Errorf("failed to decode epic releases response: %w", err)
+		decodeErr := json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode epic releases response: %w", decodeErr)
 		}
 
 		for _, issue := range page.Issues {
@@ -107,48 +109,6 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 	sort.Strings(releases)
 	log.Printf("[CoverageJiraClient] GetEpicReleases: found %d distinct releases project=%s duration=%dms", len(releases), projectKey, time.Since(start).Milliseconds())
 	return releases, nil
-}
-
-// GetVersions fetches all fix versions for a JIRA project.
-func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType) ([]JiraVersion, error) {
-	endpoint := fmt.Sprintf("%s/rest/api/3/project/%s/versions", baseURL, projectKey)
-	start := time.Now()
-	log.Printf("[CoverageJiraClient] GetVersions: url=%s project=%s", baseURL, projectKey)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setAuthHeader(req, username, credential, authType)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		log.Printf("[CoverageJiraClient] GetVersions: request failed url=%s err=%v", baseURL, err)
-		return nil, fmt.Errorf("failed to fetch versions: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("[CoverageJiraClient] GetVersions: non-200 status=%d url=%s", resp.StatusCode, baseURL)
-		return nil, fmt.Errorf("JIRA versions request failed: status %d", resp.StatusCode)
-	}
-
-	var raw []struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Released    bool   `json:"released"`
-		ReleaseDate string `json:"releaseDate,omitempty"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("failed to decode versions response: %w", err)
-	}
-
-	versions := make([]JiraVersion, len(raw))
-	for i, v := range raw {
-		versions[i] = JiraVersion{ID: v.ID, Name: v.Name, Released: v.Released, ReleaseDate: v.ReleaseDate}
-	}
-	log.Printf("[CoverageJiraClient] GetVersions: returned %d versions project=%s duration=%dms", len(versions), projectKey, time.Since(start).Milliseconds())
-	return versions, nil
 }
 
 // SearchIssues executes a JQL query against JIRA and returns all matching issues, paginating as needed.
@@ -203,10 +163,10 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 				}
 			}
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
 			return nil, fmt.Errorf("JIRA search request failed: status %d url=%s body=%s", resp.StatusCode, req.URL.String(), string(errBody))
 		}
 
@@ -234,8 +194,10 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 				} `json:"fields"`
 			} `json:"issues"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-			return nil, fmt.Errorf("failed to decode search response: %w", err)
+		decodeErr := json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("failed to decode search response: %w", decodeErr)
 		}
 
 		log.Printf("[CoverageJiraClient] SearchIssues: page=%d count=%d status=%d duration=%dms", pageNum, len(page.Issues), resp.StatusCode, time.Since(pageStart).Milliseconds())

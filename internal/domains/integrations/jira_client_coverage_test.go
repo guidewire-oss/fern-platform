@@ -12,14 +12,6 @@ import (
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 )
 
-// jiraVersionsResponse matches the JIRA REST API /rest/api/3/project/{key}/versions response.
-type jiraVersionsResponse []struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Released    bool   `json:"released"`
-	ReleaseDate string `json:"releaseDate,omitempty"`
-}
-
 // jiraSearchResponse matches the JIRA REST API GET /rest/api/3/search/jql response.
 type jiraSearchResponse struct {
 	NextPageToken string            `json:"nextPageToken,omitempty"`
@@ -47,93 +39,6 @@ type jiraIssueType struct {
 	Subtask bool   `json:"subtask,omitempty"`
 }
 
-func TestDefaultJiraClient_GetVersions(t *testing.T) {
-	ctx := context.Background()
-	client := integrations.NewDefaultJiraClient()
-
-	t.Run("returns parsed released and unreleased versions", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			versions := jiraVersionsResponse{
-				{ID: "10001", Name: "1.0.0", Released: true, ReleaseDate: "2024-01-15"},
-				{ID: "10002", Name: "2.0.0", Released: false},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(versions)
-		}))
-		defer srv.Close()
-
-		result, err := client.GetVersions(ctx, srv.URL, "PROJ", "user@example.com", "token", integrations.AuthTypeAPIToken)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(result) != 2 {
-			t.Fatalf("expected 2 versions, got %d", len(result))
-		}
-
-		var v1, v2 integrations.JiraVersion
-		for _, v := range result {
-			switch v.Name {
-			case "1.0.0":
-				v1 = v
-			case "2.0.0":
-				v2 = v
-			}
-		}
-		if v1.ID != "10001" || !v1.Released || v1.ReleaseDate != "2024-01-15" {
-			t.Errorf("unexpected v1: %+v", v1)
-		}
-		if v2.ID != "10002" || v2.Released || v2.ReleaseDate != "" {
-			t.Errorf("unexpected v2: %+v", v2)
-		}
-	})
-
-	t.Run("requests the correct path for the given project key", func(t *testing.T) {
-		var capturedPath string
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			capturedPath = r.URL.Path
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(jiraVersionsResponse{})
-		}))
-		defer srv.Close()
-
-		_, err := client.GetVersions(ctx, srv.URL, "MYPROJECT", "u", "t", integrations.AuthTypeAPIToken)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		expected := "/rest/api/3/project/MYPROJECT/versions"
-		if capturedPath != expected {
-			t.Errorf("expected path %q, got %q", expected, capturedPath)
-		}
-	})
-
-	t.Run("returns error on non-200 status", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		}))
-		defer srv.Close()
-
-		_, err := client.GetVersions(ctx, srv.URL, "PROJ", "u", "bad", integrations.AuthTypeAPIToken)
-		if err == nil {
-			t.Error("expected error for HTTP 401, got nil")
-		}
-	})
-
-	t.Run("returns empty slice when project has no versions", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(jiraVersionsResponse{})
-		}))
-		defer srv.Close()
-
-		result, err := client.GetVersions(ctx, srv.URL, "PROJ", "u", "t", integrations.AuthTypeAPIToken)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(result) != 0 {
-			t.Errorf("expected empty slice, got %d items", len(result))
-		}
-	})
-}
 
 func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 	ctx := context.Background()

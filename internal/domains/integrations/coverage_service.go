@@ -101,6 +101,10 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 		epicKeys = append(epicKeys, e.Key)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("coverage: context cancelled after Phase 1: %w", err)
+	}
+
 	// Phase 2 — Stories whose parent is one of the Epics, chunked ≤50 keys per request.
 	var stories []JiraIssue
 	for _, chunk := range chunkKeys(epicKeys, 50) {
@@ -128,6 +132,10 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 	}
 	stories = nonSubTasks
 
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("coverage: context cancelled after Phase 2: %w", err)
+	}
+
 	// Phase 3 — Sub-tasks whose parent is one of the Stories, chunked ≤50 keys per request.
 	storyKeys := make([]string, 0, len(stories))
 	for _, st := range stories {
@@ -149,7 +157,12 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 		return nil, fmt.Errorf("coverage: failed to fetch tag coverage: %w", err)
 	}
 
-	return assembleTree(releaseValue, epicsByKey, stories, subTasks, coverageMap), nil
+	return assembleTree(releaseValue, epicKeys, epicsByKey, stories, subTasks, coverageMap), nil
+}
+
+// GetSpecRunsByJiraTag returns spec runs tagged with the given JIRA issue key.
+func (s *CoverageService) GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]tagsdomain.CoveredSpecRun, error) {
+	return s.tagRepo.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
 }
 
 // resolveConnection fetches the active JIRA connection and decrypts its credential.
@@ -214,7 +227,8 @@ func chunkKeys(keys []string, size int) [][]string {
 }
 
 // assembleTree builds the CoverageTree from the fetched issues and tag coverage map.
-func assembleTree(releaseValue string, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
+// epicKeys preserves the fetch order so epics appear deterministically.
+func assembleTree(releaseValue string, epicKeys []string, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
 	storyNodesByKey := make(map[string]*StoryNode, len(stories))
 	for i := range stories {
 		node := buildStoryNode(stories[i], coverageMap)
@@ -247,7 +261,8 @@ func assembleTree(releaseValue string, epicsByKey map[string]JiraIssue, stories,
 	}
 
 	var epicNodes []EpicNode
-	for epicKey, epicIssue := range epicsByKey {
+	for _, epicKey := range epicKeys {
+		epicIssue := epicsByKey[epicKey]
 		epicStories := storiesByEpic[epicKey]
 		covered := 0
 		for _, sn := range epicStories {

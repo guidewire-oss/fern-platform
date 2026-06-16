@@ -125,14 +125,6 @@ func (r ReductionStrategy) IsValid() bool {
 	return false
 }
 
-// JiraVersion represents a JIRA release (fix version).
-type JiraVersion struct {
-	ID          string
-	Name        string
-	Released    bool
-	ReleaseDate string // ISO date string; empty if not yet released
-}
-
 // JiraParent is the parent reference on a JIRA issue (populated when requesting the "parent" field).
 type JiraParent struct {
 	Key       string
@@ -160,6 +152,7 @@ type CoverageJiraClient interface {
 // CoverageTagRepository is the narrow tag-repository interface required by the coverage service.
 type CoverageTagRepository interface {
 	GetJiraTagCoverageByProject(ctx context.Context, projectID string) (map[string]tagsdomain.CoverageCount, error)
+	GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]tagsdomain.CoveredSpecRun, error)
 }
 
 // CoverageTree is the assembled result of a requirementCoverage query.

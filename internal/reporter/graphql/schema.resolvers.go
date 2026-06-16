@@ -15,7 +15,6 @@ import (
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
-	taginfra "github.com/guidewire-oss/fern-platform/internal/domains/tags/infrastructure"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/generated"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
@@ -924,8 +923,7 @@ func (r *queryResolver) SpecRunsByJiraTag(ctx context.Context, projectID string,
 	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
 		return nil, err
 	}
-	repo := taginfra.NewGormTagRepository(r.db)
-	rows, err := repo.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
+	rows, err := r.coverageService.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
 	if err != nil {
 		return nil, err
 	}
