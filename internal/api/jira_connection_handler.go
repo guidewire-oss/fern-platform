@@ -1,7 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +12,34 @@ import (
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 )
+
+// versionFilterPrefixPattern allows alphanumeric characters, spaces, and hyphens.
+var versionFilterPrefixPattern = regexp.MustCompile(`^[A-Za-z0-9 \-]+$`)
+
+// validateVersionFilter returns an error if the comma-separated version filter
+// string violates format constraints (max 50 prefixes, each 1-100 chars, alphanumeric + space + hyphen).
+func validateVersionFilter(filter string) error {
+	if filter == "" {
+		return nil
+	}
+	parts := strings.Split(filter, ",")
+	if len(parts) > 50 {
+		return fmt.Errorf("versionFilter: too many prefixes (max 50, got %d)", len(parts))
+	}
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		if len(p) == 0 {
+			return fmt.Errorf("versionFilter: empty prefix after trimming whitespace")
+		}
+		if len(p) > 100 {
+			return fmt.Errorf("versionFilter: prefix too long (max 100 chars): %q", p)
+		}
+		if !versionFilterPrefixPattern.MatchString(p) {
+			return fmt.Errorf("versionFilter: prefix contains invalid characters (only alphanumeric, space, hyphen allowed): %q", p)
+		}
+	}
+	return nil
+}
 
 // JiraConnectionHandler handles JIRA connection HTTP requests
 type JiraConnectionHandler struct {
@@ -234,6 +265,11 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 
 	var req UpdateJiraConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		h.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := validateVersionFilter(req.VersionFilter); err != nil {
 		h.ErrorResponse(c, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -97,21 +97,30 @@ real teams. Logged for a follow-up; not yet implemented.
    result set; it does not fetch a story's children. In practice teams set the
    fix version on the story (and let sub-tasks inherit context), so sub-tasks
    carry no `fixVersion` and never appear — even though their parent story does.
-   **Follow-up:** add a downward fetch (e.g. `parent IN (<in-version story keys>)`)
-   so a sub-task surfaces via its parent without needing its own fix version —
-   mirroring how missing parent epics are already auto-fetched in Phase 2.
+   This is a JIRA project configuration reality: the `fixVersion` field is often
+   excluded from the sub-task issue type screen entirely, making it impossible
+   for users to set it even if they wanted to. Requiring sub-tasks to carry their
+   own `fixVersion` is therefore the wrong model.
+
+   **Planned fix (Phase 3):** after Phase 1 returns the in-scope stories/bugs,
+   collect their issue keys and run a downward fetch:
+   ```
+   parent IN (STORY-1, STORY-2, ...) ORDER BY issuetype
+   ```
+   This surfaces sub-tasks via their parent relationship with no `fixVersion`
+   required — mirroring how Phase 2 already auto-fetches missing parent epics
+   upward. Keys must be chunked (≤50 per request) to stay within URL length
+   limits. The results are merged into the sub-tasks list before `assembleTree`.
 
 2. **Sub-task detection matches the literal issue-type name `"Sub-task"`.**
-   `coverage_service.go` classifies via `case "Sub-task"`, so any project whose
-   sub-task type is renamed is misclassified as a story. GWCP's sub-tasks are
-   type **"Dev Task"** (`issuetype.subtask == true`, `hierarchyLevel == -1`), so
-   they would render as stories even if versioned.
-   **Follow-up:** detect sub-tasks by the JIRA `issuetype.subtask` flag
-   (or `hierarchyLevel == -1`) rather than a hard-coded type name.
+   *(Resolved in this branch.)* Classification now uses `issue.Subtask` (the
+   JIRA `issuetype.subtask` boolean flag) rather than a hard-coded type name,
+   so renamed sub-task types such as GWCP's **"Dev Task"** are correctly
+   identified regardless of what the type is called.
 
 > Net effect today: for projects like GWCP the coverage tree is effectively
-> **Epic → Story** (+ Issues-without-an-Epic); the sub-task level is dormant
-> until both follow-ups land.
+> **Epic → Story** (+ Issues-without-an-Epic); the sub-task level remains
+> dormant until Phase 3 (follow-up #1 above) is implemented.
 
 ### Discovered 2026-06-16 — custom-field release mapping
 
@@ -138,3 +147,19 @@ real teams. Logged for a follow-up; not yet implemented.
 
    **Follow-up:** See GitHub issue [#197](https://github.com/guidewire-oss/fern-platform/issues/197) — *Customizable release-scope
    mapping modules (support non-fixVersion release strategies)*.
+
+### Discovered 2026-06-16 — stale coverage after credential rotation
+
+4. **Coverage data may be stale if JIRA connection credentials are changed.**
+   The coverage service decrypts credentials from the active JIRA connection on
+   every request. If an API token is rotated and the old token is invalidated before
+   the new token is saved in Fern, all coverage tree requests will fail with an
+   authentication error until the new credentials are stored.
+
+   There is no background cache to flush — each request goes live to JIRA. However,
+   if a token rotation happens silently (old token invalidated without updating Fern),
+   users will see an error in the coverage UI until an administrator re-enters the
+   credentials on the Integrations settings page.
+
+   **Recommendation:** Operators should update JIRA credentials in Fern *before*
+   revoking the old token to avoid a coverage outage during rotation.

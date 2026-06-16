@@ -244,13 +244,13 @@ are shown as distinct elements so neither is misread as the other. Hierarchy is
 
 **Alternatives Considered:** Request `maxResults=500` — JIRA API silently clamps to 100; would truncate silently.
 
-### Decision 4: POST for issue search
+### Decision 4: GET for issue search
 
-**Choice:** Use `POST /rest/api/3/issue/search` with a JSON body.
+**Choice:** Use `GET /rest/api/3/search/jql` with query parameters.
 
-**Rationale:** JQL strings and `issueKey IN (...)` batches for large epics sets can exceed URL length limits with GET.
+**Rationale:** The JIRA Cloud cursor-based search endpoint (`/rest/api/3/search/jql`) is GET-only. JQL and field lists are passed as query parameters. URL length has not been a practical issue at the observed issue-set sizes (≤500 per fix version). The cursor-based pagination token approach is simpler than `startAt`/`total` arithmetic.
 
-**Alternatives Considered:** GET with URL-encoded JQL — unreliable for batches of 50+ keys.
+**Alternatives Considered:** `POST /rest/api/3/issue/search` with a JSON body — not supported on the Cloud cursor endpoint; requires falling back to the older offset-based pagination API. URL length limit concerns are mitigated because Phase 2 batches are bounded by the number of distinct parent epics referenced by Phase 1 stories, which is small in practice.
 
 ### Decision 5: No caching in v1
 

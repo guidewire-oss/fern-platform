@@ -887,6 +887,9 @@ func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]
 
 // JiraFixVersions is the resolver for the jiraFixVersions field.
 func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
 	if r.coverageService == nil {
 		return nil, fmt.Errorf("coverage service not configured")
 	}
@@ -908,6 +911,9 @@ func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) (
 
 // RequirementCoverage is the resolver for the requirementCoverage field.
 func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
 	if r.coverageService == nil {
 		return nil, fmt.Errorf("coverage service not configured")
 	}
@@ -920,6 +926,9 @@ func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID strin
 
 // SpecRunsByJiraTag is the resolver for the specRunsByJiraTag field.
 func (r *queryResolver) SpecRunsByJiraTag(ctx context.Context, projectID string, issueKey string) ([]*model.CoveredSpecRun, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
 	repo := taginfra.NewGormTagRepository(r.db)
 	rows, err := repo.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
 	if err != nil {

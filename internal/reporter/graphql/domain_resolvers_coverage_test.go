@@ -182,3 +182,48 @@ func TestRequirementCoverageResolver(t *testing.T) {
 		assert.Nil(t, result)
 	})
 }
+
+// --- Authorization tests ---
+
+func TestCoverageResolversAuthorization(t *testing.T) {
+	svc := &fakeCoverageService{
+		versions: []integrations.JiraVersion{{ID: "1", Name: "v1.0"}},
+		tree: &integrations.CoverageTree{
+			FixVersion: integrations.JiraVersion{ID: "1", Name: "v1.0"},
+		},
+	}
+
+	t.Run("JiraFixVersions rejects unauthenticated request", func(t *testing.T) {
+		qr := newCoverageResolver(t, svc)
+		_, err := qr.JiraFixVersions(context.Background(), "proj-1")
+		assert.Error(t, err)
+	})
+
+	t.Run("JiraFixVersions rejects user with no project permissions", func(t *testing.T) {
+		qr := newCoverageResolver(t, svc)
+		_, err := qr.JiraFixVersions(regularUserCtxForMapping(), "proj-1")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "forbidden")
+	})
+
+	t.Run("JiraFixVersions allows admin user", func(t *testing.T) {
+		qr := newCoverageResolver(t, svc)
+		result, err := qr.JiraFixVersions(adminCtxForMapping(), "proj-1")
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("RequirementCoverage rejects user with no project permissions", func(t *testing.T) {
+		qr := newCoverageResolver(t, svc)
+		_, err := qr.RequirementCoverage(regularUserCtxForMapping(), "proj-1", "v1.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "forbidden")
+	})
+
+	t.Run("RequirementCoverage allows manager user", func(t *testing.T) {
+		qr := newCoverageResolver(t, svc)
+		result, err := qr.RequirementCoverage(managerCtxForMapping(), "proj-1", "v1.0")
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+}

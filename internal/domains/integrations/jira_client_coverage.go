@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // GetVersions fetches all fix versions for a JIRA project.
 func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey, username, credential string, authType AuthenticationType) ([]JiraVersion, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/3/project/%s/versions", baseURL, projectKey)
+	start := time.Now()
+	log.Printf("[CoverageJiraClient] GetVersions: url=%s project=%s", baseURL, projectKey)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -22,11 +26,13 @@ func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Printf("[CoverageJiraClient] GetVersions: request failed url=%s err=%v", baseURL, err)
 		return nil, fmt.Errorf("failed to fetch versions: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[CoverageJiraClient] GetVersions: non-200 status=%d url=%s", resp.StatusCode, baseURL)
 		return nil, fmt.Errorf("JIRA versions request failed: status %d", resp.StatusCode)
 	}
 
@@ -44,6 +50,7 @@ func (c *DefaultJiraClient) GetVersions(ctx context.Context, baseURL, projectKey
 	for i, v := range raw {
 		versions[i] = JiraVersion{ID: v.ID, Name: v.Name, Released: v.Released, ReleaseDate: v.ReleaseDate}
 	}
+	log.Printf("[CoverageJiraClient] GetVersions: returned %d versions project=%s duration=%dms", len(versions), projectKey, time.Since(start).Milliseconds())
 	return versions, nil
 }
 
@@ -54,8 +61,17 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 
 	var all []JiraIssue
 	nextPageToken := ""
+	pageNum := 0
+	totalStart := time.Now()
+	jqlSummary := jql
+	if len(jqlSummary) > 80 {
+		jqlSummary = jqlSummary[:80] + "..."
+	}
+	log.Printf("[CoverageJiraClient] SearchIssues: url=%s jql=%q", baseURL, jqlSummary)
 
 	for {
+		pageNum++
+		pageStart := time.Now()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/rest/api/3/search/jql", baseURL), nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
@@ -70,9 +86,25 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 		req.URL.RawQuery = q.Encode()
 		c.setAuthHeader(req, username, credential, authType)
 
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to search issues: %w", err)
+		const maxAttempts = 3
+		var resp *http.Response
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			resp, err = c.httpClient.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to search issues: %w", err)
+			}
+			if resp.StatusCode != http.StatusTooManyRequests {
+				break
+			}
+			resp.Body.Close()
+			if attempt+1 < maxAttempts {
+				delay := time.Duration(1<<uint(attempt)) * time.Second
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(delay):
+				}
+			}
 		}
 		defer resp.Body.Close()
 
@@ -86,13 +118,20 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 			Issues        []struct {
 				Key    string `json:"key"`
 				Fields struct {
-					Summary   string `json:"summary"`
-					Status    struct{ Name string `json:"name"` } `json:"status"`
-					IssueType struct{ Name string `json:"name"` } `json:"issuetype"`
-					Parent    *struct {
+					Summary string `json:"summary"`
+					Status  struct {
+						Name string `json:"name"`
+					} `json:"status"`
+					IssueType struct {
+						Name    string `json:"name"`
+						Subtask bool   `json:"subtask"`
+					} `json:"issuetype"`
+					Parent *struct {
 						Key    string `json:"key"`
 						Fields struct {
-							IssueType struct{ Name string `json:"name"` } `json:"issuetype"`
+							IssueType struct {
+								Name string `json:"name"`
+							} `json:"issuetype"`
 						} `json:"fields"`
 					} `json:"parent"`
 				} `json:"fields"`
@@ -102,12 +141,15 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 			return nil, fmt.Errorf("failed to decode search response: %w", err)
 		}
 
+		log.Printf("[CoverageJiraClient] SearchIssues: page=%d count=%d status=%d duration=%dms", pageNum, len(page.Issues), resp.StatusCode, time.Since(pageStart).Milliseconds())
+
 		for _, raw := range page.Issues {
 			issue := JiraIssue{
 				Key:        raw.Key,
 				Summary:    raw.Fields.Summary,
 				StatusName: raw.Fields.Status.Name,
 				IssueType:  raw.Fields.IssueType.Name,
+				Subtask:    raw.Fields.IssueType.Subtask,
 			}
 			if raw.Fields.Parent != nil {
 				issue.Parent = &JiraParent{
@@ -118,11 +160,12 @@ func (c *DefaultJiraClient) SearchIssues(ctx context.Context, baseURL, username,
 			all = append(all, issue)
 		}
 
-		if page.NextPageToken == "" {
+		if page.NextPageToken == "" || len(page.Issues) == 0 {
 			break
 		}
 		nextPageToken = page.NextPageToken
 	}
 
+	log.Printf("[CoverageJiraClient] SearchIssues: done jql=%q pages=%d total=%d duration=%dms", jqlSummary, pageNum, len(all), time.Since(totalStart).Milliseconds())
 	return all, nil
 }

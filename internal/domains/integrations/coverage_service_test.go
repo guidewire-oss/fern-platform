@@ -100,6 +100,16 @@ func story(key, parentKey string) integrations.JiraIssue {
 	return issue
 }
 
+// subtask builds a JiraIssue with Subtask=true and an arbitrary IssueType name,
+// reflecting real JIRA projects that rename the sub-task type (e.g. "Dev Task").
+func subtaskIssue(key, parentKey, typeName string) integrations.JiraIssue {
+	issue := integrations.JiraIssue{Key: key, IssueType: typeName, Subtask: true}
+	if parentKey != "" {
+		issue.Parent = &integrations.JiraParent{Key: parentKey, IssueType: "Story"}
+	}
+	return issue
+}
+
 // --- tests ---
 
 func TestCoverageService_Build(t *testing.T) {
@@ -347,6 +357,126 @@ func TestCoverageService_Build(t *testing.T) {
 		}
 		if !tree.FixVersion.Released {
 			t.Error("expected FixVersion.Released=true")
+		}
+	})
+
+	t.Run("rejects malformed parent key in Phase 2 to prevent JQL injection", func(t *testing.T) {
+		// JIRA Phase 1 returns a story whose parent key contains a JQL injection payload.
+		injectedKey := `PROJ-1) OR 1=1--`
+		jira := &mockCoverageJiraClient{
+			getVersionsFn: func() ([]integrations.JiraVersion, error) {
+				return []integrations.JiraVersion{version("10001", "v1.0", false)}, nil
+			},
+			searchIssuesFn: func(jql string) ([]integrations.JiraIssue, error) {
+				// Phase 1: return a story with an injected parent key; no epics returned.
+				s := story("PROJ-10", "")
+				s.Parent = &integrations.JiraParent{Key: injectedKey, IssueType: "Epic"}
+				return []integrations.JiraIssue{s}, nil
+			},
+		}
+		tags := &mockCoverageTagRepo{data: map[string]tagsdomain.CoverageCount{}}
+
+		svc := newSvc(jira, tags)
+		_, err := svc.Build(ctx, "proj-id", "v1.0")
+
+		if err == nil {
+			t.Fatal("expected error for malformed Phase 2 key, got nil")
+		}
+		if !strings.Contains(err.Error(), "invalid JIRA issue key") {
+			t.Errorf("expected 'invalid JIRA issue key' in error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects fixVersionName containing semicolon", func(t *testing.T) {
+		jira := &mockCoverageJiraClient{
+			getVersionsFn: func() ([]integrations.JiraVersion, error) {
+				return []integrations.JiraVersion{version("10001", "v1.0", false)}, nil
+			},
+			searchIssuesFn: func(_ string) ([]integrations.JiraIssue, error) {
+				return nil, nil
+			},
+		}
+		tags := &mockCoverageTagRepo{data: map[string]tagsdomain.CoverageCount{}}
+
+		svc := newSvc(jira, tags)
+		_, err := svc.Build(ctx, "proj-id", "v1.0; DROP TABLES")
+
+		if err == nil {
+			t.Fatal("expected error for fixVersionName with ';', got nil")
+		}
+		if !strings.Contains(err.Error(), "invalid character") {
+			t.Errorf("expected 'invalid character' in error, got: %v", err)
+		}
+	})
+
+	t.Run("classifies issues with Subtask=true as sub-tasks regardless of type name", func(t *testing.T) {
+		// GWCP uses "Dev Task" as the sub-task type name. The Subtask bool must drive
+		// classification, not the string name.
+		jira := &mockCoverageJiraClient{
+			getVersionsFn: func() ([]integrations.JiraVersion, error) {
+				return []integrations.JiraVersion{version("10001", "v1.0", false)}, nil
+			},
+			searchIssuesFn: func(jql string) ([]integrations.JiraIssue, error) {
+				if strings.Contains(jql, "fixVersion") {
+					ep := epic("PROJ-1")
+					st := story("PROJ-10", "PROJ-1")
+					dt := subtaskIssue("PROJ-100", "PROJ-10", "Dev Task")
+					return []integrations.JiraIssue{ep, st, dt}, nil
+				}
+				return nil, nil
+			},
+		}
+		tags := &mockCoverageTagRepo{data: map[string]tagsdomain.CoverageCount{}}
+
+		svc := newSvc(jira, tags)
+		tree, err := svc.Build(ctx, "proj-id", "v1.0")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(tree.Epics) != 1 {
+			t.Fatalf("expected 1 epic, got %d", len(tree.Epics))
+		}
+		epic := tree.Epics[0]
+		if len(epic.Stories) != 1 {
+			t.Fatalf("expected 1 story under epic, got %d", len(epic.Stories))
+		}
+		story := epic.Stories[0]
+		if len(story.SubTasks) != 1 {
+			t.Fatalf("expected 1 sub-task on story, got %d (Dev Task not classified as sub-task)", len(story.SubTasks))
+		}
+		if story.SubTasks[0].Issue.Key != "PROJ-100" {
+			t.Errorf("expected sub-task key PROJ-100, got %q", story.SubTasks[0].Issue.Key)
+		}
+		if len(tree.Unassigned) != 0 {
+			t.Errorf("expected 0 unassigned, got %d (Dev Task leaked into unassigned)", len(tree.Unassigned))
+		}
+	})
+
+	t.Run("Phase 2 failure returns error to caller", func(t *testing.T) {
+		jira := &mockCoverageJiraClient{
+			getVersionsFn: func() ([]integrations.JiraVersion, error) {
+				return []integrations.JiraVersion{version("10001", "v1.0", false)}, nil
+			},
+			searchIssuesFn: func(jql string) ([]integrations.JiraIssue, error) {
+				if strings.Contains(jql, "fixVersion") {
+					// Phase 1: story with a missing parent epic
+					return []integrations.JiraIssue{story("PROJ-10", "PROJ-5")}, nil
+				}
+				// Phase 2: JIRA unavailable
+				return nil, errors.New("JIRA rate limited")
+			},
+		}
+		tags := &mockCoverageTagRepo{data: map[string]tagsdomain.CoverageCount{}}
+
+		svc := newSvc(jira, tags)
+		_, err := svc.Build(ctx, "proj-id", "v1.0")
+
+		if err == nil {
+			t.Fatal("expected error when Phase 2 fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "Phase 2 search failed") {
+			t.Errorf("expected 'Phase 2 search failed' in error, got: %v", err)
 		}
 	})
 }

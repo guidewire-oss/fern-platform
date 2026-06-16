@@ -145,6 +145,7 @@ type JiraIssue struct {
 	Summary    string
 	StatusName string
 	IssueType  string
+	Subtask    bool        // true when JIRA's issuetype.subtask flag is set, regardless of type name
 	Parent     *JiraParent // nil when the issue has no parent
 }
 

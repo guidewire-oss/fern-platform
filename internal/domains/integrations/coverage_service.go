@@ -3,10 +3,18 @@ package integrations
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	tagsdomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
 )
+
+// jiraKeyPattern matches standard JIRA issue keys (e.g. PROJ-123, CLOUD-4567).
+// Used to validate Phase 2 keys before embedding them in JQL.
+var jiraKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]+-\d+$`)
+
+const jiraAPITimeout = 30 * time.Second
 
 // CoverageService builds a RequirementCoverageTree for a project + fix version.
 type CoverageService struct {
@@ -33,6 +41,9 @@ func NewCoverageService(
 
 // GetVersionsForProject returns all JIRA fix versions for the project's active connection.
 func (s *CoverageService) GetVersionsForProject(ctx context.Context, projectID string) ([]JiraVersion, error) {
+	ctx, cancel := context.WithTimeout(ctx, jiraAPITimeout)
+	defer cancel()
+
 	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("coverage: failed to find JIRA connection: %w", err)
@@ -53,6 +64,9 @@ func (s *CoverageService) GetVersionsForProject(ctx context.Context, projectID s
 // Build fetches JIRA issues for the given fix version, cross-references them with
 // Fern test-run coverage, and returns the assembled tree.
 func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName string) (*CoverageTree, error) {
+	ctx, cancel := context.WithTimeout(ctx, jiraAPITimeout)
+	defer cancel()
+
 	// Resolve the active JIRA connection for this project.
 	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
 	if err != nil {
@@ -73,6 +87,11 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 	authType := conn.AuthenticationType()
 	projectKey := conn.ProjectKey()
 
+	// Validate fixVersionName before embedding in JQL.
+	if strings.ContainsRune(fixVersionName, ';') {
+		return nil, fmt.Errorf("coverage: fix version name contains invalid character ';'")
+	}
+
 	// Resolve the JiraVersion object for the requested name.
 	fixVersion, err := s.resolveVersion(ctx, baseURL, projectKey, username, credential, authType, fixVersionName)
 	if err != nil {
@@ -80,7 +99,9 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 	}
 
 	// Phase 1: fetch all issues for the fix version.
-	phase1JQL := fmt.Sprintf(`fixVersion = %q ORDER BY issuetype`, fixVersionName)
+	// Use fixVersion.Name (validated against JIRA's own version list) rather than
+	// the raw user-supplied fixVersionName.
+	phase1JQL := fmt.Sprintf(`fixVersion = %q ORDER BY issuetype`, fixVersion.Name)
 	fields := []string{"summary", "status", "issuetype", "parent"}
 	phase1Issues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase1JQL, fields)
 	if err != nil {
@@ -88,13 +109,15 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 	}
 
 	// Separate epics, stories, and sub-tasks from the Phase 1 results.
+	// Sub-task detection uses the JIRA issuetype.subtask boolean flag so it works
+	// regardless of how the sub-task issue type is named in the project.
 	epicsByKey := make(map[string]JiraIssue)
 	var stories, subTasks []JiraIssue
 	for _, issue := range phase1Issues {
-		switch issue.IssueType {
-		case "Epic":
+		switch {
+		case issue.IssueType == "Epic":
 			epicsByKey[issue.Key] = issue
-		case "Sub-task":
+		case issue.Subtask:
 			subTasks = append(subTasks, issue)
 		default:
 			stories = append(stories, issue)
@@ -106,6 +129,11 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 
 	// Phase 2: fetch any parent epics not returned by Phase 1.
 	if len(missingEpicKeys) > 0 {
+		for _, key := range missingEpicKeys {
+			if !jiraKeyPattern.MatchString(key) {
+				return nil, fmt.Errorf("coverage: invalid JIRA issue key %q in Phase 2 batch", key)
+			}
+		}
 		phase2JQL := fmt.Sprintf("issueKey IN (%s)", strings.Join(missingEpicKeys, ","))
 		phase2Issues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase2JQL, fields)
 		if err != nil {
@@ -122,7 +150,7 @@ func (s *CoverageService) Build(ctx context.Context, projectID, fixVersionName s
 		return nil, fmt.Errorf("coverage: failed to fetch tag coverage: %w", err)
 	}
 
-	return s.assembleTree(fixVersion, epicsByKey, stories, subTasks, coverageMap), nil
+	return assembleTree(fixVersion, epicsByKey, stories, subTasks, coverageMap), nil
 }
 
 // resolveVersion finds the JiraVersion matching fixVersionName for the project.
@@ -157,18 +185,18 @@ func (s *CoverageService) collectMissingEpicKeys(nonEpics []JiraIssue, epicsByKe
 }
 
 // assembleTree builds the CoverageTree from the fetched issues and tag coverage map.
-func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
+func assembleTree(fixVersion JiraVersion, epicsByKey map[string]JiraIssue, stories, subTasks []JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) *CoverageTree {
 	// Build story nodes indexed by key so sub-tasks can be attached.
 	storyNodesByKey := make(map[string]*StoryNode, len(stories))
 	for i := range stories {
-		node := s.buildStoryNode(stories[i], coverageMap)
+		node := buildStoryNode(stories[i], coverageMap)
 		storyNodesByKey[stories[i].Key] = &node
 	}
 
 	// Attach sub-tasks to their parent story; orphans go to Unassigned.
 	var unassignedSubTasks []StoryNode
 	for _, st := range subTasks {
-		node := s.buildStoryNode(st, coverageMap)
+		node := buildStoryNode(st, coverageMap)
 		if st.Parent != nil && st.Parent.Key != "" {
 			if parent, ok := storyNodesByKey[st.Parent.Key]; ok {
 				parent.SubTasks = append(parent.SubTasks, node)
@@ -194,8 +222,8 @@ func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[st
 	for epicKey, epicIssue := range epicsByKey {
 		epicStories := storiesByEpic[epicKey]
 		covered := 0
-		for _, s := range epicStories {
-			if s.Covered {
+		for _, sn := range epicStories {
+			if sn.Covered {
 				covered++
 			}
 		}
@@ -215,7 +243,7 @@ func (s *CoverageService) assembleTree(fixVersion JiraVersion, epicsByKey map[st
 	}
 }
 
-func (s *CoverageService) buildStoryNode(issue JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) StoryNode {
+func buildStoryNode(issue JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) StoryNode {
 	node := StoryNode{Issue: issue}
 	if count, ok := coverageMap[issue.Key]; ok && count.Total > 0 {
 		node.Covered = true

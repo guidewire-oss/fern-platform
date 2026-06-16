@@ -43,7 +43,8 @@ type jiraStatus struct {
 }
 
 type jiraIssueType struct {
-	Name string `json:"name"`
+	Name    string `json:"name"`
+	Subtask bool   `json:"subtask,omitempty"`
 }
 
 func TestDefaultJiraClient_GetVersions(t *testing.T) {
@@ -285,6 +286,51 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 		_, err := client.SearchIssues(ctx, srv.URL, "u", "t", integrations.AuthTypeAPIToken, `fixVersion = "1.0"`, []string{"summary"})
 		if err == nil {
 			t.Error("expected error for HTTP 503, got nil")
+		}
+	})
+
+	t.Run("parses issuetype.subtask boolean flag", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resp := jiraSearchResponse{
+				Issues: []jiraSearchIssue{
+					{
+						Key: "PROJ-100",
+						Fields: jiraIssueFields{
+							Summary:   "A Dev Task (sub-task with custom name)",
+							Status:    jiraStatus{Name: "In Progress"},
+							IssueType: jiraIssueType{Name: "Dev Task", Subtask: true},
+						},
+					},
+					{
+						Key: "PROJ-101",
+						Fields: jiraIssueFields{
+							Summary:   "A regular story",
+							Status:    jiraStatus{Name: "To Do"},
+							IssueType: jiraIssueType{Name: "Story", Subtask: false},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		}))
+		defer srv.Close()
+
+		result, err := client.SearchIssues(ctx, srv.URL, "u", "t", integrations.AuthTypeAPIToken, `fixVersion = "v1.0"`, []string{"summary", "issuetype"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 2 {
+			t.Fatalf("expected 2 issues, got %d", len(result))
+		}
+		if !result[0].Subtask {
+			t.Errorf("expected PROJ-100 (Dev Task) to have Subtask=true, got false")
+		}
+		if result[0].IssueType != "Dev Task" {
+			t.Errorf("expected IssueType 'Dev Task', got %q", result[0].IssueType)
+		}
+		if result[1].Subtask {
+			t.Errorf("expected PROJ-101 (Story) to have Subtask=false, got true")
 		}
 	})
 }

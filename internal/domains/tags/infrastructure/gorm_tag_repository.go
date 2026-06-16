@@ -211,6 +211,7 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 		) tagged ON tagged.tag_id = t.id
 		WHERE t.category = 'jira'
 		GROUP BY t.value
+		LIMIT 1000
 	`, projectID, projectID).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query jira tag coverage: %w", err)
