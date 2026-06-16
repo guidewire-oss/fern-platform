@@ -89,7 +89,7 @@ func (c *DefaultJiraClient) GetProject(ctx context.Context, url, projectKey, use
 	return &project, nil
 }
 
-// ListFields retrieves the list of standard (non-custom) JIRA fields
+// ListFields retrieves all JIRA fields for a connection, including custom fields.
 func (c *DefaultJiraClient) ListFields(ctx context.Context, baseURL, username, credential string, authType AuthenticationType) ([]JiraField, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", baseURL)
 
@@ -129,9 +129,6 @@ func (c *DefaultJiraClient) ListFields(ctx context.Context, baseURL, username, c
 
 	var fields []JiraField
 	for _, f := range raw {
-		if f.Custom {
-			continue
-		}
 		fields = append(fields, JiraField{
 			ID:         f.ID,
 			Name:       f.Name,

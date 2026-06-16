@@ -7067,32 +7067,10 @@
 
         // Semver-aware comparator: extracts numbers from a version name and compares numerically.
         // e.g. "Atmos v9.10" > "Atmos v9.3" (string sort would reverse this).
-        function semverCmp(a, b) {
-            const nums = s => (s.name.match(/\d+/g) || []).map(Number);
-            const an = nums(a), bn = nums(b);
-            for (let i = 0; i < Math.max(an.length, bn.length); i++) {
-                const d = (an[i] || 0) - (bn[i] || 0);
-                if (d !== 0) return d;
-            }
-            return 0;
-        }
-
         function sortVersions(vs) {
-            // Tier 0: unreleased (future/in-progress) — always first
-            // Tier 1: released with a known date — sorted newest first
-            // Tier 2: released but no date recorded — sorted to bottom by semver desc
-            const tier = v => !v.released ? 0 : v.releaseDate ? 1 : 2;
-            return [...vs].sort((a, b) => {
-                const ta = tier(a), tb = tier(b);
-                if (ta !== tb) return ta - tb;
-                const aDate = a.releaseDate ? new Date(a.releaseDate) : null;
-                const bDate = b.releaseDate ? new Date(b.releaseDate) : null;
-                if (!aDate && !bDate) return semverCmp(b, a);
-                if (!aDate) return 1;
-                if (!bDate) return -1;
-                const d = bDate - aDate;
-                return d !== 0 ? d : semverCmp(b, a);
-            });
+            return [...vs].sort((a, b) =>
+                b.name.toLowerCase().localeCompare(a.name.toLowerCase())
+            );
         }
 
         function CoverageSection({ projectId }) {
@@ -7100,6 +7078,7 @@
             const [jiraUrl, setJiraUrl] = React.useState('');
             const [versionFilter, setVersionFilter] = React.useState('');
             const [versions, setVersions] = React.useState([]);
+            const [versionsLoading, setVersionsLoading] = React.useState(false);
             const [versionsError, setVersionsError] = React.useState(null);
             const [filterText, setFilterText] = React.useState('');
             const [showOldVersions, setShowOldVersions] = React.useState(false);
@@ -7129,12 +7108,15 @@
                 };
                 const loadVersions = async (outerCancelled) => {
                     setVersionsError(null);
+                    setVersionsLoading(true);
                     try {
                         const data = await graphqlClient.query(GRAPHQL_QUERIES.JIRA_FIX_VERSIONS, { projectId });
                         if (outerCancelled) return;
                         setVersions(sortVersions(data.jiraFixVersions || []));
                     } catch (err) {
                         if (!outerCancelled) setVersionsError(err.message || 'Failed to load release versions');
+                    } finally {
+                        if (!outerCancelled) setVersionsLoading(false);
                     }
                 };
                 init();
@@ -7174,7 +7156,7 @@
                 groups = prefixes.map(p => {
                     const pl = p.toLowerCase();
                     const vs = versions.filter(v => v.name.toLowerCase().startsWith(pl));
-                    vs.forEach(v => assigned.add(v.id));
+                    vs.forEach(v => assigned.add(v.name));
                     const hidden = vs.filter(v => !ageOk(v));
                     hiddenCount += hidden.length;
                     // Strip trailing " v" or "v" from the prefix to get a clean group label
@@ -7182,7 +7164,7 @@
                     return { label, versions: vs.filter(v => ageOk(v) && textOk(v)) };
                 }).filter(g => g.versions.length > 0);
                 // Anything not matched by a prefix
-                const rest = versions.filter(v => !assigned.has(v.id) && ageOk(v) && textOk(v));
+                const rest = versions.filter(v => !assigned.has(v.name) && ageOk(v) && textOk(v));
                 if (rest.length > 0) groups.push({ label: 'Other', versions: rest });
             } else {
                 const visible = versions.filter(v => ageOk(v) && textOk(v));
@@ -7218,15 +7200,14 @@
                                     id="coverage-version-picker"
                                     value={selectedVersion}
                                     onChange={handleVersionChange}
-                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '220px' }}
+                                    disabled={versionsLoading}
+                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '220px', opacity: versionsLoading ? 0.6 : 1 }}
                                 >
-                                    <option value="">— Select release version —</option>
+                                    <option value="">{versionsLoading ? '⏳ Loading releases…' : '— Select release version —'}</option>
                                     {groups.map(g => g.label
                                         ? <optgroup key={g.label} label={g.label}>
                                             {g.versions.map(v => (
-                                                <option key={v.id} value={v.name}>
-                                                    {v.name}{v.released ? (v.releaseDate ? ` (${v.releaseDate})` : ' (released)') : ' (unreleased)'}
-                                                </option>
+                                                <option key={v.name} value={v.name}>{v.name}</option>
                                             ))}
                                           </optgroup>
                                         : g.versions.map(v => (

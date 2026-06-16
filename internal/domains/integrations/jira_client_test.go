@@ -28,7 +28,7 @@ func TestDefaultJiraClient_ListFields(t *testing.T) {
 	ctx := context.Background()
 	client := integrations.NewDefaultJiraClient()
 
-	t.Run("filters out custom fields and sorts by name ascending", func(t *testing.T) {
+	t.Run("includes custom fields and sorts by name ascending", func(t *testing.T) {
 		fields := []jiraAPIField{
 			{ID: "summary", Name: "Summary", Custom: false, Schema: jiraAPIFieldSchema{Type: "string"}},
 			{ID: "labels", Name: "Labels", Custom: false, Schema: jiraAPIFieldSchema{Type: "array", Items: "string"}},
@@ -49,12 +49,16 @@ func TestDefaultJiraClient_ListFields(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(result) != 3 {
-			t.Fatalf("expected 3 standard fields, got %d", len(result))
+		if len(result) != 5 {
+			t.Fatalf("expected 5 fields (including custom), got %d", len(result))
 		}
-		// Sorted: Description, Labels, Summary
-		if result[0].Name != "Description" || result[1].Name != "Labels" || result[2].Name != "Summary" {
-			t.Errorf("unexpected sort order: %v", []string{result[0].Name, result[1].Name, result[2].Name})
+		// Sorted: Description, Epic Link, Labels, Story Points, Summary
+		names := []string{result[0].Name, result[1].Name, result[2].Name, result[3].Name, result[4].Name}
+		expected := []string{"Description", "Epic Link", "Labels", "Story Points", "Summary"}
+		for i, n := range expected {
+			if names[i] != n {
+				t.Errorf("position %d: expected %q got %q", i, n, names[i])
+			}
 		}
 	})
 
