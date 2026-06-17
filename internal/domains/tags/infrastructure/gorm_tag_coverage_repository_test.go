@@ -283,6 +283,27 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 			Expect(rows[0].Status).To(Equal("passed"))
 		})
 
+		It("matches case-insensitively: an uppercase JIRA key finds a lowercase-stored tag", func() {
+			// Tags are lowercased on ingest, JIRA keys are uppercase. The drill-down must
+			// match the same way the coverage count does, or covered issues show empty detail.
+			jiraTag := &database.Tag{Name: "jira:gwcp-89274", Category: "jira", Value: "gwcp-89274"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-lc", Branch: "main", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+			sr := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "passed", StartTime: time.Now(), Duration: 1}
+			Expect(db.Create(sr).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			rows, err := repo.GetSpecRunsByJiraTag(ctx, "proj-a", "GWCP-89274")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(HaveLen(1))
+			Expect(rows[0].SpecName).To(Equal("spec-1"))
+		})
+
 		// Regression for the count/drill-down mismatch: GetJiraTagCoverageByProject counts
 		// test-run-level tags, so the drill-down must surface them too (previously empty).
 		It("returns test-run-level tagged runs even though they have no spec/suite", func() {

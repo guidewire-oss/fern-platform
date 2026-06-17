@@ -378,8 +378,12 @@ the reference implementation for a future `ReleaseDimension` pluggable module in
 ### Decision 9: Case-insensitive coverage matching (canonical uppercase key)
 
 **Choice:** Coverage is matched between Fern tags and JIRA issue keys on the **canonical
-uppercase** key. `GetJiraTagCoverageByProject` keys its map on `UPPER(t.value)`, and
-`buildStoryNode` looks up `coverageMap[strings.ToUpper(issue.Key)]`.
+uppercase** key, everywhere a tag value meets a JIRA key:
+- `GetJiraTagCoverageByProject` keys its map on `UPPER(t.value)`, and `buildStoryNode` looks up
+  `coverageMap[strings.ToUpper(issue.Key)]`.
+- `GetSpecRunsByJiraTag` (the drill-down) matches `UPPER(t.value) = UPPER(?)` on both UNION
+  branches — otherwise a covered issue (counted via the uppercase map) would open an **empty**
+  detail list, because the passed-in JIRA key is uppercase but the stored value is lowercase.
 
 **Rationale:** Fern's tag domain normalizes tag names/values to lowercase on ingest
 (`tags/domain/tag.go`, `gorm_tag_repository.go`) — tags are case-insensitive by design. A test
@@ -436,6 +440,8 @@ matched the uppercase hierarchy keys. Regression test added in
 - `GetJiraTagCoverageByProject` returns correct counts per issue key
 - `GetJiraTagCoverageByProject` upper-cases the key: a lowercase-stored `jira:gwcp-…` tag value
   is returned under the uppercase `GWCP-…` key (Decision 9)
+- `GetSpecRunsByJiraTag` matches case-insensitively: an uppercase `GWCP-…` lookup returns the
+  runs for a lowercase-stored tag value (drill-down parity with the count, Decision 9)
 - Rows with `category != 'jira'` excluded
 
 ### Acceptance Tests (Ginkgo, mock JIRA server)

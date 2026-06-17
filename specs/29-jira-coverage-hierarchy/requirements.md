@@ -22,7 +22,7 @@ Release scope is determined by a **custom JIRA field on Epics** (e.g. "Aha Relea
    ```
    The distinct non-null values of that field become the release picker options. The `updated >= -52w` window keeps the picker fast and scoped to currently active releases; releases tied only to Epics untouched for over a year are intentionally excluded (see design Decision 2).
 2. THE SYSTEM SHALL display releases in a searchable picker (placeholder "Filter releases…"). The user narrows the list by typing to filter by name.
-3. WHEN a user selects a release THE SYSTEM SHALL fetch the full hierarchy for that release using the three-phase cascade described in Requirement 2.
+3. WHEN a user selects a release THE SYSTEM SHALL fetch the full hierarchy for that release using the two-phase cascade described in Requirement 2.
 4. IF a project has no active JIRA connection THEN THE SYSTEM SHALL display an appropriate message prompting the user to configure one.
 5. The configured release custom field ID (`releaseFieldId`) SHALL be stored on the project's JIRA connection record. It is required before the coverage view can be used. The JIRA project key is already a required field on the JIRA connection (`JiraConnection.ProjectKey()`) — no schema change is needed for that.
 

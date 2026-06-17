@@ -344,3 +344,14 @@ Requirement 4.2.
   lookup missed and correctly-tagged runs never showed as covered. Found validating real
   ccs-atmos-tests metrics-server runs.
 - Canonicalize both sides to uppercase (JIRA convention). No change needed to test-emitter code.
+
+### Follow-up from cubic-ai review (2026-06-17)
+- [x] 🔴/🟢 **Drill-down case-insensitivity**: `GetSpecRunsByJiraTag` still used case-sensitive
+  `t.value = ?`, so a covered issue (counted via the uppercase map) opened an empty detail list.
+  Fixed both UNION branches to `UPPER(t.value) = UPPER(?)`; regression test added. Decision 9 +
+  test plan updated.
+- [x] **Doc consistency**: Requirement 1 (AC#3) still said "three-phase cascade"; corrected to
+  "two-phase" to match Requirement 2.
+- Dismissed as **invalid (stale)**: cubic flagged the removed sub-task walk in `EpicRow`/
+  `ReleaseSummary` health roll-ups as losing sub-task failures — but sub-tasks are no longer
+  fetched or rendered (Decision 3), so there is nothing to walk. No change.

@@ -262,7 +262,7 @@ func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID,
 		    JOIN   tags        t ON t.id   = srt.tag_id
 		    WHERE  tr.project_id = ?
 		      AND  t.category    = 'jira'
-		      AND  t.value       = ?
+		      AND  UPPER(t.value) = UPPER(?)
 		      AND  sr.deleted_at IS NULL
 		      AND  su.deleted_at IS NULL
 		      AND  tr.deleted_at IS NULL
@@ -281,7 +281,7 @@ func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID,
 		    JOIN   tags       t  ON t.id = trt.tag_id
 		    WHERE  tr.project_id = ?
 		      AND  t.category    = 'jira'
-		      AND  t.value       = ?
+		      AND  UPPER(t.value) = UPPER(?)
 		      AND  tr.deleted_at IS NULL
 		) combined
 		ORDER  BY start_time DESC
