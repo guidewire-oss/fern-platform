@@ -7093,23 +7093,26 @@
                             const conn = conns[0];
                             setJiraUrl(conn.jiraUrl || '');
                             setVersionFilter(conn.versionFilter || '');
-                            loadVersions(cancelled);
+                            loadVersions();
                         }
                     } catch (_) {
                         if (!cancelled) setHasConnection(false);
                     }
                 };
-                const loadVersions = async (outerCancelled) => {
+                // Reads the effect's `cancelled` closure variable directly so the
+                // cleanup (which sets cancelled = true on unmount) actually prevents
+                // any setState after the await resolves.
+                const loadVersions = async () => {
                     setVersionsError(null);
                     setVersionsLoading(true);
                     try {
                         const data = await graphqlClient.query(GRAPHQL_QUERIES.JIRA_FIX_VERSIONS, { projectId });
-                        if (outerCancelled) return;
+                        if (cancelled) return;
                         setVersions(sortVersions(data.jiraFixVersions || []));
                     } catch (err) {
-                        if (!outerCancelled) setVersionsError(err.message || 'Failed to load release versions');
+                        if (!cancelled) setVersionsError(err.message || 'Failed to load release versions');
                     } finally {
-                        if (!outerCancelled) setVersionsLoading(false);
+                        if (!cancelled) setVersionsLoading(false);
                     }
                 };
                 init();
@@ -7820,7 +7823,8 @@
                                 authenticationType: formData.authenticationType,
                                 projectKey: formData.projectKey,
                                 username: formData.username,
-                                credential: formData.credential
+                                credential: formData.credential,
+                                versionFilter: formData.versionFilter
                             }
                         });
                     }

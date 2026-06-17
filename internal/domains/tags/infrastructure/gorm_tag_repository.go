@@ -200,7 +200,7 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 		    JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
 		    JOIN   suite_runs su ON su.id  = sr.suite_run_id
 		    JOIN   test_runs  tr ON tr.id  = su.test_run_id
-		    WHERE  tr.project_id = ? AND sr.deleted_at IS NULL
+		    WHERE  tr.project_id = ? AND sr.deleted_at IS NULL AND su.deleted_at IS NULL AND tr.deleted_at IS NULL
 
 		    UNION ALL
 
@@ -239,30 +239,54 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 	return result, nil
 }
 
-// GetSpecRunsByJiraTag returns spec runs tagged with the given JIRA issue key within a project.
+// GetSpecRunsByJiraTag returns the runs tagged with the given JIRA issue key within a project.
+// It UNIONs spec-run-level tags (spec_run_tags) and test-run-level tags (test_run_tags) so the
+// drill-down detail matches GetJiraTagCoverageByProject, which counts both granularities. A
+// test-run-level tag has no associated spec/suite, so those columns come back empty for it.
 func (r *GormTagRepository) GetSpecRunsByJiraTag(ctx context.Context, projectID, issueKey string) ([]domain.CoveredSpecRun, error) {
 	var rows []domain.CoveredSpecRun
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT sr.spec_name  AS spec_name,
-		       sr.status     AS status,
-		       su.suite_name AS suite_name,
-		       tr.run_id     AS test_run_id,
-		       COALESCE(tr.branch, '') AS branch,
-		       sr.start_time AS start_time,
-		       sr.duration_ms AS duration
-		FROM   spec_run_tags srt
-		JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
-		JOIN   suite_runs su ON su.id  = sr.suite_run_id
-		JOIN   test_runs  tr ON tr.id  = su.test_run_id
-		JOIN   tags        t ON t.id   = srt.tag_id
-		WHERE  tr.project_id = ?
-		  AND  t.category    = 'jira'
-		  AND  t.value       = ?
-		  AND  sr.deleted_at IS NULL
-		  AND  tr.deleted_at IS NULL
-		ORDER  BY sr.start_time DESC
+		SELECT spec_name, status, suite_name, test_run_id, branch, start_time, duration
+		FROM (
+		    SELECT sr.spec_name  AS spec_name,
+		           sr.status     AS status,
+		           su.suite_name AS suite_name,
+		           tr.run_id     AS test_run_id,
+		           COALESCE(tr.branch, '') AS branch,
+		           sr.start_time AS start_time,
+		           sr.duration_ms AS duration
+		    FROM   spec_run_tags srt
+		    JOIN   spec_runs  sr ON sr.id  = srt.spec_run_id
+		    JOIN   suite_runs su ON su.id  = sr.suite_run_id
+		    JOIN   test_runs  tr ON tr.id  = su.test_run_id
+		    JOIN   tags        t ON t.id   = srt.tag_id
+		    WHERE  tr.project_id = ?
+		      AND  t.category    = 'jira'
+		      AND  t.value       = ?
+		      AND  sr.deleted_at IS NULL
+		      AND  su.deleted_at IS NULL
+		      AND  tr.deleted_at IS NULL
+
+		    UNION ALL
+
+		    SELECT ''            AS spec_name,
+		           tr.status     AS status,
+		           ''            AS suite_name,
+		           tr.run_id     AS test_run_id,
+		           COALESCE(tr.branch, '') AS branch,
+		           tr.start_time AS start_time,
+		           tr.duration_ms AS duration
+		    FROM   test_run_tags trt
+		    JOIN   test_runs tr ON tr.id = trt.test_run_id
+		    JOIN   tags       t  ON t.id = trt.tag_id
+		    WHERE  tr.project_id = ?
+		      AND  t.category    = 'jira'
+		      AND  t.value       = ?
+		      AND  tr.deleted_at IS NULL
+		) combined
+		ORDER  BY start_time DESC
 		LIMIT  200
-	`, projectID, issueKey).Scan(&rows).Error
+	`, projectID, issueKey, projectID, issueKey).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query spec runs by jira tag: %w", err)
 	}

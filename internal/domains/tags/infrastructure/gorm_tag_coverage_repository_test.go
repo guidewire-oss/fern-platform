@@ -188,6 +188,37 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 			Expect(result["PROJ-1"].Failed).To(Equal(0))
 		})
 
+		It("excludes spec-run tags whose parent test run is soft-deleted", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			// A live test run with a tagged spec — should be counted.
+			trLive := &database.TestRun{ProjectID: "proj-a", RunID: "run-live", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(trLive).Error).NotTo(HaveOccurred())
+			suLive := &database.SuiteRun{TestRunID: trLive.ID, SuiteName: "suite-live", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(suLive).Error).NotTo(HaveOccurred())
+			srLive := &database.SpecRun{SuiteRunID: suLive.ID, SpecName: "spec-live", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(srLive).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", srLive.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			// A soft-deleted test run with a tagged spec — must NOT be counted.
+			trDel := &database.TestRun{ProjectID: "proj-a", RunID: "run-del", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(trDel).Error).NotTo(HaveOccurred())
+			suDel := &database.SuiteRun{TestRunID: trDel.ID, SuiteName: "suite-del", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(suDel).Error).NotTo(HaveOccurred())
+			srDel := &database.SpecRun{SuiteRunID: suDel.ID, SpecName: "spec-del", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(srDel).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", srDel.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+			Expect(db.Delete(trDel).Error).NotTo(HaveOccurred()) // soft delete
+
+			result, err := repo.GetJiraTagCoverageByProject(ctx, "proj-a")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result["PROJ-1"].Total).To(Equal(1))
+			Expect(result["PROJ-1"].Passed).To(Equal(1))
+			Expect(result["PROJ-1"].Failed).To(Equal(0))
+		})
+
 		It("returns an empty map when no jira tags exist for the project", func() {
 			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Status: "passed", StartTime: time.Now()}
 			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
@@ -206,6 +237,91 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 
 			Expect(err).To(HaveOccurred())
 			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("GetSpecRunsByJiraTag", func() {
+		It("returns spec-run-level tagged runs with spec and suite detail", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Branch: "main", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+			sr := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "passed", StartTime: time.Now(), Duration: 42}
+			Expect(db.Create(sr).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			rows, err := repo.GetSpecRunsByJiraTag(ctx, "proj-a", "PROJ-1")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(HaveLen(1))
+			Expect(rows[0].SpecName).To(Equal("spec-1"))
+			Expect(rows[0].SuiteName).To(Equal("suite-1"))
+			Expect(rows[0].TestRunID).To(Equal("run-1"))
+			Expect(rows[0].Branch).To(Equal("main"))
+			Expect(rows[0].Status).To(Equal("passed"))
+		})
+
+		// Regression for the count/drill-down mismatch: GetJiraTagCoverageByProject counts
+		// test-run-level tags, so the drill-down must surface them too (previously empty).
+		It("returns test-run-level tagged runs even though they have no spec/suite", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Branch: "main", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			Expect(db.Create(&database.TestRunTag{TestRunID: tr.ID, TagID: jiraTag.ID}).Error).NotTo(HaveOccurred())
+
+			rows, err := repo.GetSpecRunsByJiraTag(ctx, "proj-a", "PROJ-1")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(HaveLen(1))
+			Expect(rows[0].TestRunID).To(Equal("run-1"))
+			Expect(rows[0].Status).To(Equal("failed"))
+			Expect(rows[0].SpecName).To(BeEmpty())
+			Expect(rows[0].SuiteName).To(BeEmpty())
+		})
+
+		It("returns both spec-run-level and test-run-level tagged runs for the same issue", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			Expect(db.Create(&database.TestRunTag{TestRunID: tr.ID, TagID: jiraTag.ID}).Error).NotTo(HaveOccurred())
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+			sr := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(sr).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			rows, err := repo.GetSpecRunsByJiraTag(ctx, "proj-a", "PROJ-1")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(HaveLen(2))
+		})
+
+		It("excludes runs whose test run is soft-deleted", func() {
+			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-del", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			Expect(db.Create(&database.TestRunTag{TestRunID: tr.ID, TagID: jiraTag.ID}).Error).NotTo(HaveOccurred())
+			su := &database.SuiteRun{TestRunID: tr.ID, SuiteName: "suite-1", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(su).Error).NotTo(HaveOccurred())
+			sr := &database.SpecRun{SuiteRunID: su.ID, SpecName: "spec-1", Status: "failed", StartTime: time.Now()}
+			Expect(db.Create(sr).Error).NotTo(HaveOccurred())
+			Expect(db.Exec("INSERT INTO spec_run_tags (spec_run_id, tag_id) VALUES (?, ?)", sr.ID, jiraTag.ID).Error).NotTo(HaveOccurred())
+
+			Expect(db.Delete(tr).Error).NotTo(HaveOccurred()) // soft delete
+
+			rows, err := repo.GetSpecRunsByJiraTag(ctx, "proj-a", "PROJ-1")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rows).To(BeEmpty())
 		})
 	})
 })

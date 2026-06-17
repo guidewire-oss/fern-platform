@@ -365,12 +365,15 @@ func (m *MockJiraServer) handleProjectV3(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Expect path: /rest/api/3/project/{key}/versions
+	// After trimming the leading slash and splitting on "/":
+	//   ["rest","api","3","project","{key}","versions"]
+	//      0     1   2     3          4          5
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 5 || parts[4] != "versions" {
+	if len(parts) < 6 || parts[5] != "versions" {
 		http.Error(w, `{"errorMessages":["Not found"]}`, http.StatusNotFound)
 		return
 	}
-	projectKey := parts[3]
+	projectKey := parts[4]
 
 	type versionResponse struct {
 		ID          string `json:"id"`

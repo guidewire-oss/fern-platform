@@ -308,6 +308,10 @@ func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model
 		return nil, fmt.Errorf("forbidden")
 	}
 
+	versionFilter := ""
+	if input.VersionFilter != nil {
+		versionFilter = *input.VersionFilter
+	}
 	connection, err := r.jiraConnectionService.CreateConnection(
 		ctx,
 		input.ProjectID,
@@ -317,6 +321,7 @@ func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model
 		input.ProjectKey,
 		input.Username,
 		input.Credential,
+		versionFilter,
 	)
 	if err != nil {
 		return nil, err

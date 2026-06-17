@@ -69,6 +69,7 @@ type CreateJiraConnectionRequest struct {
 	ProjectKey         string `json:"projectKey" binding:"required"`
 	Username           string `json:"username"`
 	Credential         string `json:"credential" binding:"required"`
+	VersionFilter      string `json:"versionFilter"`
 }
 
 // UpdateJiraConnectionRequest represents the request to update a JIRA connection
@@ -141,6 +142,11 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 		return
 	}
 
+	if err := validateVersionFilter(req.VersionFilter); err != nil {
+		h.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	connection, err := h.jiraService.CreateConnection(
 		c.Request.Context(),
 		projectID,
@@ -150,6 +156,7 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 		req.ProjectKey,
 		req.Username,
 		req.Credential,
+		req.VersionFilter,
 	)
 	if err != nil {
 		h.ErrorResponse(c, http.StatusInternalServerError, err.Error())

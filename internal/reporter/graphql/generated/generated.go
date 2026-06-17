@@ -3446,6 +3446,7 @@ input CreateJiraConnectionInput {
   projectKey: String!
   username: String!
   credential: String!
+  versionFilter: String
 }
 
 input UpdateJiraConnectionInput {
@@ -22168,7 +22169,7 @@ func (ec *executionContext) unmarshalInputCreateJiraConnectionInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "name", "jiraUrl", "authenticationType", "projectKey", "username", "credential"}
+	fieldsInOrder := [...]string{"projectId", "name", "jiraUrl", "authenticationType", "projectKey", "username", "credential", "versionFilter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -22224,6 +22225,13 @@ func (ec *executionContext) unmarshalInputCreateJiraConnectionInput(ctx context.
 				return it, err
 			}
 			it.Credential = data
+		case "versionFilter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("versionFilter"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VersionFilter = data
 		}
 	}
 

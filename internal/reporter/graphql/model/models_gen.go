@@ -21,13 +21,14 @@ type CoveredSpecRun struct {
 }
 
 type CreateJiraConnectionInput struct {
-	ProjectID          string `json:"projectId"`
-	Name               string `json:"name"`
-	JiraURL            string `json:"jiraUrl"`
-	AuthenticationType string `json:"authenticationType"`
-	ProjectKey         string `json:"projectKey"`
-	Username           string `json:"username"`
-	Credential         string `json:"credential"`
+	ProjectID          string  `json:"projectId"`
+	Name               string  `json:"name"`
+	JiraURL            string  `json:"jiraUrl"`
+	AuthenticationType string  `json:"authenticationType"`
+	ProjectKey         string  `json:"projectKey"`
+	Username           string  `json:"username"`
+	Credential         string  `json:"credential"`
+	VersionFilter      *string `json:"versionFilter,omitempty"`
 }
 
 type CreateProjectInput struct {
