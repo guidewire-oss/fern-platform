@@ -273,7 +273,9 @@ func assembleTree(releaseValue string, epicKeys []string, epicsByKey map[string]
 
 func buildStoryNode(issue JiraIssue, coverageMap map[string]tagsdomain.CoverageCount) StoryNode {
 	node := StoryNode{Issue: issue}
-	if count, ok := coverageMap[issue.Key]; ok && count.Total > 0 {
+	// Coverage keys are canonical uppercase (tags are lowercased on ingest, JIRA
+	// keys are uppercase); match case-insensitively against the JIRA issue key.
+	if count, ok := coverageMap[strings.ToUpper(issue.Key)]; ok && count.Total > 0 {
 		node.Covered = true
 		c := count
 		node.TestRunCoverage = &c

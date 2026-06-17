@@ -16,7 +16,7 @@ fern-platform/
 │   │   └── schema.resolvers.go          (modify: jiraReleases, requirementCoverage)
 │   └── domains/tags/
 │       └── infrastructure/
-│           └── gorm_tag_repository.go   (unchanged: GetJiraTagCoverageByProject)
+│           └── gorm_tag_repository.go   (modify: GetJiraTagCoverageByProject — uppercase the JIRA key)
 ├── migrations/
 │   └── 000024_add_release_field_id_to_jira_connections.up.sql  (new)
 └── web/
@@ -69,9 +69,10 @@ Browser                  GraphQL Server             External
    Results merged across chunks. Any issue with `issuetype.subtask = true` is discarded
    (sub-tasks are excluded — see Decision 3); there is no Phase 3 sub-task fetch.
 7. **Fern coverage:** `GetJiraTagCoverageByProject(ctx, projectID)` returns
-   `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`.
+   `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`. The map is keyed by
+   the **uppercase** JIRA key (`UPPER(t.value)`) — see Decision 9 (case-insensitive matching).
 8. **Assemble tree:** stories attached to their parent epic; stories with unresolvable parents
-   go to "Issues without an Epic". Cross-reference all keys against the Fern coverage map.
+   go to "Issues without an Epic". Cross-reference each key (upper-cased) against the coverage map.
 10. Return `RequirementCoverageTree`.
 
 ## 3. Interface Specifications
@@ -374,6 +375,24 @@ the reference implementation for a future `ReleaseDimension` pluggable module in
 (see requirements *Deferred Strategies* section and
 [issue #197](https://github.com/guidewire-oss/fern-platform/issues/197)).
 
+### Decision 9: Case-insensitive coverage matching (canonical uppercase key)
+
+**Choice:** Coverage is matched between Fern tags and JIRA issue keys on the **canonical
+uppercase** key. `GetJiraTagCoverageByProject` keys its map on `UPPER(t.value)`, and
+`buildStoryNode` looks up `coverageMap[strings.ToUpper(issue.Key)]`.
+
+**Rationale:** Fern's tag domain normalizes tag names/values to lowercase on ingest
+(`tags/domain/tag.go`, `gorm_tag_repository.go`) — tags are case-insensitive by design. A test
+tagged `jira:GWCP-89274` is therefore stored as value `gwcp-89274`. JIRA issue keys, however,
+are uppercase (`GWCP-89274`). Without normalization the coverage-map lookup misses entirely, so
+correctly-tagged runs never show as covering their issue. Upper-casing both sides (JIRA keys are
+conventionally uppercase) is the minimal, robust fix.
+
+**Discovered:** 2026-06-17, validating real ccs-atmos-tests runs — the metrics-server suite
+tagged `jira:GWCP-89274`/`jira:GWCP-73310` landed in the DB as `gwcp-…` and would not have
+matched the uppercase hierarchy keys. Regression test added in
+`gorm_tag_coverage_repository_test.go`.
+
 ## 5. Error Handling
 
 | Scenario | Detection | Response |
@@ -415,6 +434,8 @@ the reference implementation for a future `ReleaseDimension` pluggable module in
 
 **tag_repository_test.go (go-sqlmock):**
 - `GetJiraTagCoverageByProject` returns correct counts per issue key
+- `GetJiraTagCoverageByProject` upper-cases the key: a lowercase-stored `jira:gwcp-…` tag value
+  is returned under the uppercase `GWCP-…` key (Decision 9)
 - Rows with `category != 'jira'` excluded
 
 ### Acceptance Tests (Ginkgo, mock JIRA server)

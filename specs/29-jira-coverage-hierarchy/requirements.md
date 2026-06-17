@@ -52,7 +52,7 @@ Release scope is determined by a **custom JIRA field on Epics** (e.g. "Aha Relea
 #### Acceptance Criteria
 
 1. WHEN building the coverage view THE SYSTEM SHALL query Fern's tag data to find all `category="jira"` tags on test runs belonging to the project, at both test-run and spec-run granularity.
-2. A story (or sub-task) SHALL be considered "covered" if at least one tagged test run or spec run in the project carries a tag matching `jira:{issueKey}`.
+2. A story SHALL be considered "covered" if at least one tagged test run or spec run in the project carries a tag matching `jira:{issueKey}`. The match SHALL be **case-insensitive**: Fern lowercases tag names/values on ingest (tags are case-insensitive), whereas JIRA issue keys are uppercase, so coverage is matched on the canonical **uppercase** key on both sides.
 3. WHEN a story is covered THE SYSTEM SHALL show the count of associated runs plus a pass/fail breakdown (total, passed, failed) and the date of the most recent tagged execution.
 4. WHEN a story is not covered THE SYSTEM SHALL show it clearly as uncovered (no test association found).
 5. THE SYSTEM SHALL support a toggle to show only uncovered stories, hiding fully covered ones while maintaining the hierarchical structure and the path from epic to uncovered story.

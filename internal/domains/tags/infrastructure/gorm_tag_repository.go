@@ -187,7 +187,7 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 	// UNION spec-run-level and test-run-level JIRA tags so both tagging
 	// granularities contribute to coverage counts.
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT t.value,
+		SELECT UPPER(t.value)                                              AS value,
 		       COUNT(*)                                                    AS total,
 		       SUM(CASE WHEN tagged.status = 'passed'  THEN 1 ELSE 0 END) AS passed,
 		       SUM(CASE WHEN tagged.status = 'failed'  THEN 1 ELSE 0 END) AS failed,
@@ -210,7 +210,7 @@ func (r *GormTagRepository) GetJiraTagCoverageByProject(ctx context.Context, pro
 		    WHERE  tr.project_id = ? AND tr.deleted_at IS NULL
 		) tagged ON tagged.tag_id = t.id
 		WHERE t.category = 'jira'
-		GROUP BY t.value
+		GROUP BY UPPER(t.value)
 		LIMIT 1000
 	`, projectID, projectID).Scan(&rows).Error
 	if err != nil {

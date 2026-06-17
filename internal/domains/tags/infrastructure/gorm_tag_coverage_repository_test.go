@@ -70,6 +70,25 @@ var _ = Describe("GormTagRepository/GetJiraTagCoverageByProject", Label("integra
 			Expect(result["PROJ-1"].Failed).To(Equal(1))
 		})
 
+		It("upper-cases the JIRA key so lowercase-stored tags match uppercase JIRA issue keys", func() {
+			// Fern normalizes tag names/values to lowercase on ingest (tags are
+			// case-insensitive), but JIRA issue keys are uppercase. The coverage map
+			// must be keyed by the canonical uppercase key so it matches the hierarchy.
+			jiraTag := &database.Tag{Name: "jira:gwcp-89274", Category: "jira", Value: "gwcp-89274"}
+			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())
+
+			tr := &database.TestRun{ProjectID: "proj-a", RunID: "run-lc", Status: "passed", StartTime: time.Now()}
+			Expect(db.Create(tr).Error).NotTo(HaveOccurred())
+			Expect(db.Create(&database.TestRunTag{TestRunID: tr.ID, TagID: jiraTag.ID}).Error).NotTo(HaveOccurred())
+
+			result, err := repo.GetJiraTagCoverageByProject(ctx, "proj-a")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveKey("GWCP-89274"))
+			Expect(result).NotTo(HaveKey("gwcp-89274"))
+			Expect(result["GWCP-89274"].Total).To(Equal(1))
+		})
+
 		It("returns total, passed, and failed counts from spec-run-level tags", func() {
 			jiraTag := &database.Tag{Name: "jira:PROJ-1", Category: "jira", Value: "PROJ-1"}
 			Expect(db.Create(jiraTag).Error).NotTo(HaveOccurred())

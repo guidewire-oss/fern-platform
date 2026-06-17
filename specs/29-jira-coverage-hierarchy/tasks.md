@@ -327,3 +327,20 @@ Requirement 2 (+ Amendment) and design Decision 3. The hierarchy is now Epic →
 - **No coverage-number impact:** sub-tasks never rolled into epic or story counts.
 - Not exercised by automated frontend tests (acceptance suite needs a deployed stack); verify the
   tree renders with no sub-task rows during the next e2e pass.
+
+## Case-insensitive coverage matching (2026-06-17)
+
+Backend fix. **Uncommitted** in the working tree pending review. Adds design Decision 9, updates
+Requirement 4.2.
+
+- [x] 🔴 RED: `gorm_tag_coverage_repository_test.go` — new spec seeds a tag with lowercase value
+  `gwcp-89274` and asserts `GetJiraTagCoverageByProject` returns it under uppercase key
+  `GWCP-89274` (and not the lowercase key). Failed before the fix.
+- [x] 🟢 GREEN: `gorm_tag_repository.go` — `SELECT UPPER(t.value) AS value … GROUP BY UPPER(t.value)`;
+  `coverage_service.go` `buildStoryNode` — look up `coverageMap[strings.ToUpper(issue.Key)]`.
+  tags/infrastructure + integrations packages pass; `go build ./...` clean.
+- **Why:** Fern lowercases tag names/values on ingest (case-insensitive tags), so a run tagged
+  `jira:GWCP-89274` is stored as value `gwcp-89274`; JIRA keys are uppercase, so the coverage-map
+  lookup missed and correctly-tagged runs never showed as covered. Found validating real
+  ccs-atmos-tests metrics-server runs.
+- Canonicalize both sides to uppercase (JIRA convention). No change needed to test-emitter code.
