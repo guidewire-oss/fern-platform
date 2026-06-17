@@ -218,7 +218,7 @@ func TestCoverageService_Build(t *testing.T) {
 		}
 	})
 
-	t.Run("Phase 3 fetches Sub-tasks by parent IN story keys", func(t *testing.T) {
+	t.Run("sub-tasks are not fetched and never attached to stories", func(t *testing.T) {
 		callCount := 0
 		jira := &mockCoverageJiraClient{
 			searchIssuesFn: func(jql string) ([]integrations.JiraIssue, error) {
@@ -228,9 +228,8 @@ func TestCoverageService_Build(t *testing.T) {
 					return []integrations.JiraIssue{epic("PROJ-1")}, nil
 				case 2: // Phase 2: Stories under PROJ-1
 					return []integrations.JiraIssue{story("PROJ-10", "PROJ-1")}, nil
-				case 3: // Phase 3: Sub-tasks under PROJ-10
-					return []integrations.JiraIssue{subtaskIssue("PROJ-100", "PROJ-10", "Sub-task")}, nil
 				}
+				// A third call would mean a sub-task fetch (Phase 3) was issued.
 				return nil, nil
 			},
 		}
@@ -241,14 +240,18 @@ func TestCoverageService_Build(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		// Only Phase 1 (epics) + Phase 2 (stories) should run — no sub-task fetch.
+		if callCount != 2 {
+			t.Errorf("expected exactly 2 SearchIssues calls (no sub-task fetch), got %d", callCount)
+		}
 		if len(tree.Epics) != 1 {
 			t.Fatalf("expected 1 epic, got %d", len(tree.Epics))
 		}
 		if len(tree.Epics[0].Stories) != 1 {
 			t.Fatalf("expected 1 story under epic, got %d", len(tree.Epics[0].Stories))
 		}
-		if len(tree.Epics[0].Stories[0].SubTasks) != 1 {
-			t.Errorf("expected 1 sub-task attached to story, got %d", len(tree.Epics[0].Stories[0].SubTasks))
+		if len(tree.Epics[0].Stories[0].SubTasks) != 0 {
+			t.Errorf("expected no sub-tasks attached to story, got %d", len(tree.Epics[0].Stories[0].SubTasks))
 		}
 	})
 

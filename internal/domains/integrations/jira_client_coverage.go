@@ -20,7 +20,11 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 	const pageSize = 100
 
 	numericID := extractNumericFieldID(jiraFieldID)
-	jql := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] is not EMPTY ORDER BY cf[%s] ASC`, projectKey, numericID, numericID)
+	// Scope to epics touched within the past year. The release field is a free-text
+	// string with no date semantics, so we filter on the epic's `updated` timestamp:
+	// this both shrinks the dropdown to current/active releases and cuts the number of
+	// epics paginated, which is the dominant cost of building the picker.
+	jql := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] is not EMPTY AND updated >= -52w ORDER BY cf[%s] ASC`, projectKey, numericID, numericID)
 	fieldParam := jiraFieldID // e.g. "customfield_10077" for the fields parameter
 
 	seen := make(map[string]bool)

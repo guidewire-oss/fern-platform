@@ -283,3 +283,47 @@ Satisfy Requirement 4 and the terminology updates in requirements.md. All done;
 > `.coverage-story-row`/`.covered` classes (unchanged), not the new colors/labels.
 > Add assertions for Requirement 4 (release pill text, health colors) when the
 > verification pass runs.
+
+## Release picker: past-year window (2026-06-17)
+
+Backend change to `internal/domains/integrations/jira_client_coverage.go`. **Uncommitted**
+in the working tree pending review. Updates Requirement 1 and design Decision 2.
+
+- [x] 🔴 RED: `TestDefaultJiraClient_GetEpicReleases` asserts the outgoing `jql` query param
+  still restricts to `issuetype = Epic` and now contains `updated >= -52w`.
+  (`jira_client_coverage_test.go`.)
+- [x] 🟢 GREEN: Add `AND updated >= -52w` to the `GetEpicReleases` JQL. Package tests pass.
+- **Why:** the picker paginated every release-bearing Epic in the project — slow to build and
+  an unsearchably long dropdown. The clause is pushed into JQL so JIRA returns fewer Epics
+  (fewer pages → faster) and only currently active releases appear.
+- **Subtlety (see design Decision 2):** the release field is a free-text string with no date
+  semantics, so the filter is on the **Epic's `updated`** timestamp, not the release value.
+  `updated` (not `created`) keeps long-lived Epics still being worked visible. Trade-off: a
+  release tied only to Epics untouched for >1 year drops off the picker — intended, but a
+  behaviour change, not pure perf. Window hardcoded at `-52w` (JQL relative date, evaluated
+  server-side by JIRA — no date math or timezone handling in Fern).
+
+## Sub-tasks excluded (2026-06-17)
+
+Backend + frontend change. **Uncommitted** in the working tree pending review. Updates
+Requirement 2 (+ Amendment) and design Decision 3. The hierarchy is now Epic → Story only.
+
+- [x] 🔴 RED: rewrote `coverage_service_test.go` "Phase 3 fetches Sub-tasks…" → "sub-tasks are
+  not fetched and never attached to stories": asserts exactly 2 SearchIssues calls (no Phase 3)
+  and `Stories[0].SubTasks` empty.
+- [x] 🟢 GREEN: `coverage_service.go` — removed the Phase 3 sub-task fetch; Phase 2 now discards
+  `issuetype.subtask` issues instead of supplementing them; `assembleTree` called with nil
+  sub-tasks. Full integrations package + graphql package tests pass; `go build ./...` clean.
+- [x] Frontend (`web/index.html`): removed the sub-task render block under `StoryRow`, dropped the
+  now-unused `indent` param, simplified the `hidden` calc, and removed `subTasks` recursion from
+  the ReleaseSummary and EpicRow health walks.
+- **Why:** teams report on the main task; sub-tasks were noise. Also drops a whole pagination pass.
+- **Decisions taken (minimal scope):**
+  - GraphQL `subTasks` field on `StoryCoverageNode` **retained**, always returns `[]` — no schema
+    change, no codegen, #30 (rebases onto #29) unaffected.
+  - Sub-task-tagged tests **drop from view** (no roll-up to parent story) — matches prior counting.
+  - `assembleTree` keeps its latent sub-task attachment logic + the assemble unit tests for it;
+    production simply never passes sub-tasks. Documented so it isn't mistaken for live behaviour.
+- **No coverage-number impact:** sub-tasks never rolled into epic or story counts.
+- Not exercised by automated frontend tests (acceptance suite needs a deployed stack); verify the
+  tree renders with no sub-task rows during the next e2e pass.

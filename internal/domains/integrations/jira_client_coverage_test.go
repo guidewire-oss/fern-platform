@@ -239,3 +239,29 @@ func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 		}
 	})
 }
+
+func TestDefaultJiraClient_GetEpicReleases(t *testing.T) {
+	ctx := context.Background()
+	client := integrations.NewDefaultJiraClient()
+
+	t.Run("scopes the JQL to epics updated within the past year", func(t *testing.T) {
+		var capturedJQL string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedJQL = r.URL.Query().Get("jql")
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(jiraSearchResponse{Issues: []jiraSearchIssue{}})
+		}))
+		defer srv.Close()
+
+		_, err := client.GetEpicReleases(ctx, srv.URL, "PROJ", "customfield_10077", "u", "t", integrations.AuthTypeAPIToken)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(capturedJQL, "issuetype = Epic") {
+			t.Errorf("expected JQL to still restrict to epics, got %q", capturedJQL)
+		}
+		if !strings.Contains(capturedJQL, "updated >= -52w") {
+			t.Errorf("expected JQL to scope to the past year (updated >= -52w), got %q", capturedJQL)
+		}
+	})
+}

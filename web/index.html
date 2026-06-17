@@ -6841,10 +6841,10 @@
             );
         }
 
-        function StoryRow({ story, jiraUrl, projectId, uncoveredOnly, indent }) {
+        function StoryRow({ story, jiraUrl, projectId, uncoveredOnly }) {
             const [showDrillDown, setShowDrillDown] = React.useState(false);
-            const hidden = uncoveredOnly && story.covered && (!story.subTasks || story.subTasks.every(st => st.covered));
-            const leftPad = indent ? '4rem' : '2.5rem';
+            const hidden = uncoveredOnly && story.covered;
+            const leftPad = '2.5rem';
             const issueLinkStyle = { color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.8125rem' };
             // Badge color reflects RESULTS, not just covered/uncovered:
             //   uncovered = grey, any failure = red, skips-only = amber, all pass = green.
@@ -6910,9 +6910,6 @@
                             onClose={() => setShowDrillDown(false)}
                         />
                     )}
-                    {!indent && story.subTasks && story.subTasks.map(st => (
-                        <StoryRow key={st.issue.key} story={st} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} indent={true} />
-                    ))}
                 </>
             );
         }
@@ -6966,7 +6963,6 @@
             let covered = 0, total = 0, failed = 0, failingIssues = 0;
             const walk = s => {
                 if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
-                (s.subTasks || []).forEach(walk);
             };
             (tree.epics || []).forEach(e => {
                 covered += e.coveredCount; total += e.totalCount;
@@ -7007,14 +7003,12 @@
             const pct = epic.totalCount > 0 ? Math.round(epic.coveredCount / epic.totalCount * 100) : 0;
             // The % is coverage breadth (stories with tests); the COLOR conveys health,
             // so a fully-covered-but-failing epic is red, not green. Count failing
-            // issues from the epic's stories (and their sub-tasks).
+            // issues from the epic's stories.
             const epicAgg = (() => {
                 let failed = 0, failingIssues = 0;
-                const walk = s => {
+                (epic.stories || []).forEach(s => {
                     if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
-                    (s.subTasks || []).forEach(walk);
-                };
-                (epic.stories || []).forEach(walk);
+                });
                 return { failed, failingIssues };
             })();
             const epicState = epicAgg.failed > 0 ? 'failed'

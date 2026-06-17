@@ -121,12 +121,13 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 		stories = append(stories, got...)
 	}
 
-	// Separate actual stories from sub-tasks that may have been returned.
-	var nonSubTasks, subTasksFromPhase2 []JiraIssue
+	// Drop any sub-tasks Phase 2 returned (e.g. projects that rename the sub-task
+	// type). Coverage reports on the main task (Story) level; sub-tasks are excluded
+	// as noise, so we neither keep these nor fetch their siblings. This also avoids a
+	// whole extra pagination pass over story keys.
+	var nonSubTasks []JiraIssue
 	for _, s := range stories {
-		if s.Subtask {
-			subTasksFromPhase2 = append(subTasksFromPhase2, s)
-		} else {
+		if !s.Subtask {
 			nonSubTasks = append(nonSubTasks, s)
 		}
 	}
@@ -136,28 +137,12 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 		return nil, fmt.Errorf("coverage: context cancelled after Phase 2: %w", err)
 	}
 
-	// Phase 3 — Sub-tasks whose parent is one of the Stories, chunked ≤50 keys per request.
-	storyKeys := make([]string, 0, len(stories))
-	for _, st := range stories {
-		storyKeys = append(storyKeys, st.Key)
-	}
-	var subTasks []JiraIssue
-	subTasks = append(subTasks, subTasksFromPhase2...)
-	for _, chunk := range chunkKeys(storyKeys, 50) {
-		jql := fmt.Sprintf("parent IN (%s) ORDER BY key", strings.Join(chunk, ","))
-		got, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, jql, fields)
-		if err != nil {
-			return nil, fmt.Errorf("coverage: Phase 3 (Sub-tasks) search failed: %w", err)
-		}
-		subTasks = append(subTasks, got...)
-	}
-
 	coverageMap, err := s.tagRepo.GetJiraTagCoverageByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("coverage: failed to fetch tag coverage: %w", err)
 	}
 
-	return assembleTree(releaseValue, epicKeys, epicsByKey, stories, subTasks, coverageMap), nil
+	return assembleTree(releaseValue, epicKeys, epicsByKey, stories, nil, coverageMap), nil
 }
 
 // GetSpecRunsByJiraTag returns spec runs tagged with the given JIRA issue key.

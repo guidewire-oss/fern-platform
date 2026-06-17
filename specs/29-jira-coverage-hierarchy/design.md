@@ -9,7 +9,7 @@ fern-platform/
 ├── internal/
 │   ├── domains/integrations/
 │   │   ├── jira_client_coverage.go      (modify: GetEpicReleases, SearchIssues)
-│   │   ├── coverage_service.go          (modify: Epic-first three-phase cascade)
+│   │   ├── coverage_service.go          (modify: Epic-first two-phase cascade)
 │   │   └── types.go                     (modify: JiraIssue, JiraVersion, JiraParent)
 │   ├── reporter/graphql/
 │   │   ├── schema.graphql               (modify: update query signatures)
@@ -49,9 +49,10 @@ Browser                  GraphQL Server             External
 3. Resolver fetches `JiraConnection` for the project, reads `releaseFieldId` and `projectKey`.
 4. `jira_client.GetEpicReleases(ctx, baseURL, projectKey, releaseFieldId, username, credential, authType)` calls:
    ```
-   GET /rest/api/3/search/jql?jql=project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY&fields=cf[{fieldId}]&maxResults=100
+   GET /rest/api/3/search/jql?jql=project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY AND updated >= -52w ORDER BY cf[{fieldId}] ASC&fields=cf[{fieldId}]&maxResults=100
    ```
-   Paginates until all Epics are fetched. Collects distinct non-null values of the custom field.
+   Paginates until all matching Epics are fetched. Collects distinct non-null values of the custom field.
+   The `updated >= -52w` clause scopes the picker to releases active in the past year (see Decision 2).
 5. Distinct release values returned as `[String]` — sorted alphabetically.
 6. Frontend renders the searchable picker.
 
@@ -65,15 +66,12 @@ Browser                  GraphQL Server             External
    fields `key,summary,status,issuetype`, paginated via cursor (`nextPageToken`).
 6. **Phase 2 — Stories:** For each chunk of ≤50 epic keys:
    `parent IN (PROJ-1,...,PROJ-50) ORDER BY key`, fields `key,summary,status,issuetype,parent`.
-   Results merged across chunks.
-7. **Phase 3 — Sub-tasks:** For each chunk of ≤50 story keys:
-   `parent IN (PROJ-51,...,PROJ-100) ORDER BY key`, same fields.
-   Results merged across chunks.
-8. **Fern coverage:** `GetJiraTagCoverageByProject(ctx, projectID)` returns
+   Results merged across chunks. Any issue with `issuetype.subtask = true` is discarded
+   (sub-tasks are excluded — see Decision 3); there is no Phase 3 sub-task fetch.
+7. **Fern coverage:** `GetJiraTagCoverageByProject(ctx, projectID)` returns
    `map[issueKey]CoverageCount{Total, Passed, Failed, Skipped, LastRunAt}`.
-9. **Assemble tree:** stories attached to their parent epic; sub-tasks attached to their parent
-   story. Stories/sub-tasks with unresolvable parents go to "Issues without an Epic".
-   Cross-reference all keys against the Fern coverage map.
+8. **Assemble tree:** stories attached to their parent epic; stories with unresolvable parents
+   go to "Issues without an Epic". Cross-reference all keys against the Fern coverage map.
 10. Return `RequirementCoverageTree`.
 
 ## 3. Interface Specifications
@@ -139,7 +137,7 @@ extend type Query {
 
 | Method | JIRA Endpoint | Notes |
 |--------|--------------|-------|
-| `GetEpicReleases(ctx, baseURL, projectKey, releaseFieldId, username, credential, authType)` | `GET /rest/api/3/search/jql` | JQL: `project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY`; collect distinct non-null field values; paginated |
+| `GetEpicReleases(ctx, baseURL, projectKey, releaseFieldId, username, credential, authType)` | `GET /rest/api/3/search/jql` | JQL: `project={key} AND issuetype=Epic AND cf[{fieldId}] is not EMPTY AND updated >= -52w`; collect distinct non-null field values; paginated. The `updated >= -52w` window bounds the picker to the past year (Decision 2). |
 | `SearchIssues(ctx, baseURL, username, credential, authType, jql, fields)` | `GET /rest/api/3/search/jql` | Cursor-based pagination via `nextPageToken`; `maxResults=100` per page |
 
 ### New/Modified Service Methods
@@ -149,8 +147,8 @@ extend type Query {
 // on Epics for the project's JIRA connection.
 func (s *CoverageService) GetReleasesForProject(ctx context.Context, projectID string) ([]string, error)
 
-// Build fetches the full Epic→Story→Sub-task hierarchy for the release value
-// and cross-references with Fern tag coverage.
+// Build fetches the Epic→Story hierarchy for the release value
+// and cross-references with Fern tag coverage. (Sub-tasks are excluded — see Decision 3.)
 func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue string) (*CoverageTree, error)
 ```
 
@@ -222,7 +220,7 @@ LIMIT  1000
 |---------|----------|-------|
 | "Coverage" tab | Project **Settings** page left-nav | Visible only when project has active JIRA connection with `releaseFieldId` set |
 | Release picker | Top of Coverage panel | Text `<input>` filter + dropdown; options from `jiraReleases` query |
-| Coverage tree | Below picker | Epic rows expand to story rows to sub-task rows |
+| Coverage tree | Below picker | Epic rows expand to story rows |
 | "Show uncovered only" toggle | Above tree | Checkbox; client-side filter |
 | No-connection / not-configured message | Coverage panel | Shown when project has no JIRA connection or `releaseFieldId` not set |
 
@@ -247,7 +245,7 @@ Epic row: the **% and bar width** are coverage breadth (covered/total stories); 
 the selected release value, a health pill (**Release ready** / **✗ N failing** /
 **In progress** / **Not started**), and a labelled coverage figure
 `<covered>/<total> covered · <pct>%` aggregated across all epics + Issues-without-an-Epic.
-Hierarchy is **Release → Epic → Story → Sub-task**.
+Hierarchy is **Release → Epic → Story**.
 
 ## 4. Technical Decisions
 
@@ -273,15 +271,49 @@ is exactly what the picker needs.
 — returns all *possible* values, not just those in use; produces a noisy picker for large field
 option lists.
 
-### Decision 3: Three-phase cascade with chunked batches
+**Refinement — past-year window (`updated >= -52w`):** The picker's cost is dominated by
+paginating every release-bearing Epic in the project, and for long-lived projects the resulting
+dropdown was both slow to build and hard to search. We bound the query with `AND updated >= -52w`,
+pushing the filter into the JQL so JIRA returns fewer Epics (fewer pages → faster) and the
+dropdown only shows currently active releases.
 
-**Choice:** Phase 1 fetches Epics; Phase 2 fetches Stories by `parent IN (epics)`; Phase 3
-fetches Sub-tasks by `parent IN (stories)`. Each phase chunks its key list into ≤50 keys per
-request.
+The subtlety is *what* we filter on. The release custom field is a **free-text string** (e.g.
+`v9.3`) with no date semantics — the client unmarshals it as a `string` — so we cannot filter on
+the release value itself. Instead we filter on the Epic's **`updated`** timestamp as a proxy for
+"recent release":
 
-**Rationale:** The cascade naturally handles the case where sub-tasks and stories do not carry
-the release signal themselves. Chunking at 50 keeps JQL URL lengths well within JIRA's limits
-even for large releases.
+- `updated` (not `created`) is deliberate: an Epic created years ago but still being worked toward
+  an upcoming release has a recent `updated` time and stays visible; using `created` would wrongly
+  drop it.
+- Trade-off: a release attached *only* to Epics untouched in the past year disappears from the
+  picker. For a release picker this is the desired behaviour (you want current releases), but it
+  is a behaviour change, not a pure performance optimization — old releases are no longer listed.
+- The window is **hardcoded** at 52 weeks. If a tunable window is needed later, surface it via
+  `JiraFieldMapping` (feature #26) rather than hardcoding a different constant.
+- `-52w` is JQL relative-date syntax (52 weeks before now), evaluated by JIRA server-side, so no
+  date math happens in Fern and there is no timezone ambiguity on our side.
+
+### Decision 3: Two-phase cascade with chunked batches (sub-tasks excluded)
+
+**Choice:** Phase 1 fetches Epics; Phase 2 fetches Stories by `parent IN (epics)`, chunking the
+key list into ≤50 keys per request. **Sub-tasks are not fetched or displayed** — coverage reports
+at the main-task (Story) level.
+
+**Rationale:** The cascade naturally handles the case where stories do not carry the release
+signal themselves (only their parent Epic does). Chunking at 50 keeps JQL URL lengths well within
+JIRA's limits even for large releases.
+
+**Sub-tasks dropped (2026-06-17):** originally a Phase 3 fetched sub-tasks by
+`parent IN (stories)` and they rendered as indented rows under each story. Teams report on the
+main task, so sub-tasks were noise; removing the phase also drops a whole pagination pass.
+Implementation notes:
+- Phase 2 already separates out `issuetype.subtask = true` issues; those are now simply discarded
+  instead of kept and supplemented by Phase 3.
+- No coverage-number impact: sub-tasks never contributed to epic or story counts.
+- A test tagged directly on a sub-task key no longer appears anywhere (intended).
+- Minimal scope: the GraphQL `subTasks` field on `StoryCoverageNode` is retained and always
+  returns `[]` (no schema change → #30 unaffected); `assembleTree` keeps its latent sub-task
+  attachment logic (still unit-tested) but the service passes it no sub-tasks.
 
 **Alternatives Considered:** Single JQL with `cf[id] in subtaskOf(...)` — not supported by
 JIRA Cloud. Fetching all children recursively per-epic — one request per epic; too many calls.
@@ -360,19 +392,21 @@ the reference implementation for a future `ReleaseDimension` pluggable module in
 ### Unit Tests (Go, standard testing)
 
 **coverage_service_test.go:**
-- Phase 1 returns Epics; Phase 2 fetches Stories; Phase 3 fetches Sub-tasks
-- Phase 2 and 3 are skipped when the respective parent list is empty
+- Phase 1 returns Epics; Phase 2 fetches Stories
+- Sub-tasks are not fetched (no Phase 3) and never attached to stories
+- Phase 2 is skipped when the parent list is empty
 - Key lists are correctly chunked into ≤50 per request
 - Stories correctly grouped under their parent epics
-- Sub-tasks correctly attached to their parent stories
-- Orphaned stories/sub-tasks go to Unassigned
+- Issues with `issuetype.subtask = true` returned by Phase 2 are discarded
+- Orphaned stories go to Unassigned
 - Coverage cross-reference: covered/uncovered correctly computed from tag map
 - Empty release: empty tree returned without error
 - `releaseFieldId` empty: error returned before any JIRA calls
 
 **coverage_assemble_test.go (package integrations):**
-- `assembleTree`: empty version, orphan story, orphan sub-task, sub-task attached to story,
-  epic coverage counts, `buildStoryNode` covered/uncovered flag
+- `assembleTree`: empty version, orphan story, epic coverage counts, `buildStoryNode`
+  covered/uncovered flag. (Retains orphan/attached sub-task cases — the helper keeps its
+  latent sub-task support even though the service no longer feeds it sub-tasks.)
 
 **jira_client_coverage_test.go:**
 - `GetEpicReleases` returns distinct non-null field values; handles pagination
@@ -385,8 +419,8 @@ the reference implementation for a future `ReleaseDimension` pluggable module in
 
 ### Acceptance Tests (Ginkgo, mock JIRA server)
 
-- **Happy path:** mock returns Phase 1 Epics, Phase 2 Stories, Phase 3 Sub-tasks; verify
-  full three-level hierarchy renders correctly
+- **Happy path:** mock returns Phase 1 Epics, Phase 2 Stories; verify the two-level
+  Epic → Story hierarchy renders correctly (no sub-task rows)
 - **No-connection error:** project without JIRA connection shows appropriate message
 - **releaseFieldId not set:** appropriate error shown; no JIRA calls made
 - **JIRA unavailable:** mock returns 503; frontend shows error, no crash
