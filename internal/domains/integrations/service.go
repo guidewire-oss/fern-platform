@@ -23,7 +23,7 @@ func NewJiraConnectionService(repo JiraConnectionRepository, jiraClient JiraClie
 }
 
 // CreateConnection creates a new JIRA connection
-func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID, name, jiraURL string, authType AuthenticationType, projectKey, username, credential string) (*JiraConnection, error) {
+func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID, name, jiraURL string, authType AuthenticationType, projectKey, username, credential, versionFilter string) (*JiraConnection, error) {
 	// Check if a connection already exists for this project
 	existingConnections, err := s.repo.FindByProjectID(ctx, projectID)
 	if err != nil {
@@ -42,6 +42,7 @@ func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID,
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection: %w", err)
 	}
+	conn.versionFilter = versionFilter
 
 	// Encrypt the credential before saving
 	encrypted, err := conn.GetEncryptedCredential(s.encryptionKey)
@@ -59,7 +60,7 @@ func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID,
 }
 
 // UpdateConnection updates an existing JIRA connection
-func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connectionID, name, jiraURL, projectKey string) (*JiraConnection, error) {
+func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connectionID, name, jiraURL, projectKey, versionFilter string) (*JiraConnection, error) {
 	// Retrieve the connection
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
@@ -67,7 +68,7 @@ func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connection
 	}
 
 	// Update connection info
-	if err := conn.UpdateConnectionInfo(name, jiraURL, projectKey); err != nil {
+	if err := conn.UpdateConnectionInfo(name, jiraURL, projectKey, versionFilter); err != nil {
 		return nil, fmt.Errorf("failed to update connection info: %w", err)
 	}
 

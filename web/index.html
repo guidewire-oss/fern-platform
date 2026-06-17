@@ -6068,8 +6068,18 @@
                         <table style={{
                             width: '100%',
                             borderCollapse: 'collapse',
-                            fontSize: '0.875rem'
+                            fontSize: '0.875rem',
+                            tableLayout: 'fixed'
                         }}>
+                            <colgroup>
+                                <col style={{width: '160px'}} />
+                                <col style={{width: '160px'}} />
+                                <col />
+                                <col style={{width: '100px'}} />
+                                <col style={{width: '90px'}} />
+                                <col style={{width: '160px'}} />
+                                <col style={{width: '130px'}} />
+                            </colgroup>
                             <thead>
                                 <tr style={{
                                     background: 'var(--bg-secondary)',
@@ -6165,7 +6175,8 @@
                                                 padding: '1rem',
                                                 fontFamily: 'monospace',
                                                 fontSize: '0.8125rem',
-                                                color: 'var(--text-primary)'
+                                                color: 'var(--text-primary)',
+                                                overflow: 'hidden'
                                             }}>
                                                 <div style={{
                                                     display: 'flex',
@@ -6173,7 +6184,7 @@
                                                     gap: '0.5rem'
                                                 }}>
                                                     <span style={{color: 'var(--primary)'}}>🔑</span>
-                                                    {project.projectId || 'N/A'}
+                                                    <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} title={project.projectId || 'N/A'}>{project.projectId || 'N/A'}</span>
                                                 </div>
                                             </td>
                                             <td style={{
@@ -6761,8 +6772,485 @@
             );
         }
 
+        // --- JIRA Coverage Components ---
+
+        function IssueLink({ issueKey, jiraUrl, style }) {
+            if (jiraUrl) {
+                return (
+                    <a
+                        href={`${jiraUrl.replace(/\/$/, '')}/browse/${issueKey}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: 'none', ...style }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {issueKey}
+                    </a>
+                );
+            }
+            return <span style={style}>{issueKey}</span>;
+        }
+
+        function CoverageSpecRunsModal({ projectId, issueKey, onClose }) {
+            const [runs, setRuns] = React.useState(null);
+            const [error, setError] = React.useState(null);
+
+            React.useEffect(() => {
+                let cancelled = false;
+                graphqlClient.query(GRAPHQL_QUERIES.SPEC_RUNS_BY_JIRA_TAG, { projectId, issueKey })
+                    .then(data => { if (!cancelled) setRuns(data.specRunsByJiraTag || []); })
+                    .catch(err => { if (!cancelled) setError(err.message || 'Failed to load'); });
+                return () => { cancelled = true; };
+            }, [projectId, issueKey]);
+
+            const statusColor = s => s === 'passed' ? '#16a34a' : s === 'failed' ? '#dc2626' : 'var(--text-secondary)';
+
+            return (
+                <div
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={onClose}
+                >
+                    <div
+                        style={{ background: 'var(--bg-primary)', borderRadius: '0.75rem', width: '700px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)' }}>
+                            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>Tests covering {issueKey}</h3>
+                            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: 'var(--text-secondary)', lineHeight: 1 }}>×</button>
+                        </div>
+                        <div style={{ overflowY: 'auto', flex: 1 }}>
+                            {!runs && !error && <div style={{ padding: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading…</div>}
+                            {error && <div style={{ padding: '1.5rem', color: 'var(--error)', fontSize: '0.875rem' }}>{error}</div>}
+                            {runs && runs.length === 0 && <div style={{ padding: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No spec runs found.</div>}
+                            {runs && runs.map((run, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-light)', fontSize: '0.8125rem' }}>
+                                    <span style={{ fontWeight: '600', color: statusColor(run.status), minWidth: '52px' }}>{run.status}</span>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{run.specName}</div>
+                                        <div style={{ color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{run.suiteName}</div>
+                                    </div>
+                                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                        <div>{run.branch || '—'}</div>
+                                        <div>{new Date(run.startTime).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function StoryRow({ story, jiraUrl, projectId, uncoveredOnly }) {
+            const [showDrillDown, setShowDrillDown] = React.useState(false);
+            const hidden = uncoveredOnly && story.covered;
+            const leftPad = '2.5rem';
+            const issueLinkStyle = { color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.8125rem' };
+            // Badge color reflects RESULTS, not just covered/uncovered:
+            //   uncovered = grey, any failure = red, skips-only = amber, all pass = green.
+            const cov = story.testRunCoverage;
+            const covFailed = cov ? cov.failed : 0;
+            const covSkipped = cov ? cov.skipped : 0;
+            const covBreakdown = cov ? `✓${cov.passed} ✗${cov.failed}${covSkipped > 0 ? ` ↺${covSkipped}` : ''}` : '';
+            let badgeBg, badgeColor, badgeText;
+            if (!story.covered) {
+                badgeBg = 'rgba(107,114,128,0.12)'; badgeColor = '#6b7280'; badgeText = 'uncovered';
+            } else if (covFailed > 0) {
+                badgeBg = 'rgba(239,68,68,0.12)'; badgeColor = '#dc2626';
+                badgeText = cov ? `✗ ${cov.total} (${covBreakdown})` : '✗ failing';
+            } else {
+                // covered, no failures — green even if some skips (shown in text)
+                badgeBg = 'rgba(34,197,94,0.12)'; badgeColor = '#16a34a';
+                badgeText = cov ? (covSkipped > 0 ? `✓ ${cov.total} (${covBreakdown})` : `✓ ${cov.total}`) : '✓';
+            }
+            return (
+                <>
+                    <div
+                        className={`coverage-story-row${story.covered ? ' covered' : ' uncovered'}`}
+                        style={{
+                            display: hidden ? 'none' : 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: `0.625rem 1rem 0.625rem ${leftPad}`,
+                            borderBottom: '1px solid var(--border-light)',
+                            fontSize: '0.875rem'
+                        }}
+                    >
+                        <IssueLink issueKey={story.issue.key} jiraUrl={jiraUrl} style={issueLinkStyle} />
+                        <span style={{ flex: 1, color: 'var(--text-primary)' }}>{story.issue.summary}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{story.issue.statusName}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                            <span
+                                onClick={story.covered ? () => setShowDrillDown(true) : undefined}
+                                style={{
+                                    padding: '0.125rem 0.5rem',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '600',
+                                    background: badgeBg,
+                                    color: badgeColor,
+                                    cursor: story.covered ? 'pointer' : 'default',
+                                    textDecoration: story.covered ? 'underline dotted' : 'none',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {badgeText}
+                            </span>
+                            {story.covered && story.testRunCoverage && story.testRunCoverage.lastRunAt && (
+                                <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                    {new Date(story.testRunCoverage.lastRunAt).toLocaleDateString()}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    {showDrillDown && (
+                        <CoverageSpecRunsModal
+                            projectId={projectId}
+                            issueKey={story.issue.key}
+                            onClose={() => setShowDrillDown(false)}
+                        />
+                    )}
+                </>
+            );
+        }
+
+        function UnassignedSection({ stories, jiraUrl, projectId, uncoveredOnly }) {
+            const [sortOrder, setSortOrder] = React.useState('default');
+            const base = uncoveredOnly ? stories.filter(s => !s.covered) : stories;
+            if (base.length === 0) return null;
+            const sorted = sortOrder === 'default' ? base : [...base].sort((a, b) => {
+                const aTotal = a.testRunCoverage ? a.testRunCoverage.total : 0;
+                const bTotal = b.testRunCoverage ? b.testRunCoverage.total : 0;
+                return sortOrder === 'covered-first' ? bTotal - aTotal : aTotal - bTotal;
+            });
+            return (
+                <div className="coverage-unassigned-section">
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.625rem 1rem',
+                        background: 'var(--bg-secondary)',
+                        borderBottom: '1px solid var(--border-color)',
+                        fontWeight: '500',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.875rem'
+                    }}>
+                        <span>Issues without an Epic</span>
+                        <select
+                            value={sortOrder}
+                            onChange={e => setSortOrder(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontSize: '0.75rem', padding: '0.125rem 0.375rem', border: '1px solid var(--border-color)', borderRadius: '0.25rem', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                        >
+                            <option value="default">Sort: default</option>
+                            <option value="covered-first">Covered first</option>
+                            <option value="uncovered-first">Uncovered first</option>
+                        </select>
+                    </div>
+                    {sorted.map(story => (
+                        <StoryRow key={story.issue.key} story={story} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                    ))}
+                </div>
+            );
+        }
+
+        // Top-level release roll-up: coverage breadth across all epics + unassigned
+        // issues, with the same health palette (red if anything fails, etc.).
+        function ReleaseSummary({ tree, versionName }) {
+            // Coverage breadth (issues with tests) and health (failing issues) are
+            // SEPARATE: the % is labelled "covered", the pill quantifies failures.
+            let covered = 0, total = 0, failed = 0, failingIssues = 0;
+            const walk = s => {
+                if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
+            };
+            (tree.epics || []).forEach(e => {
+                covered += e.coveredCount; total += e.totalCount;
+                (e.stories || []).forEach(walk);
+            });
+            (tree.unassigned || []).forEach(s => { total += 1; if (s.covered) covered += 1; walk(s); });
+            const pct = total > 0 ? Math.round(covered / total * 100) : 0;
+            // health: failures block "ready"; skips do not.
+            const state = failed > 0 ? 'failed'
+                : pct === 0 ? 'uncovered'
+                : pct === 100 ? 'ready'
+                : 'partial';
+            const pillColor = { failed: '#dc2626', uncovered: '#6b7280', ready: '#16a34a', partial: 'var(--text-primary)' }[state];
+            const pillBg    = { failed: 'rgba(239,68,68,0.12)', uncovered: 'rgba(107,114,128,0.12)', ready: 'rgba(34,197,94,0.12)', partial: 'rgba(16,185,129,0.10)' }[state];
+            const barColor  = { failed: '#dc2626', uncovered: '#9ca3af', ready: '#16a34a', partial: 'var(--primary)' }[state];
+            const label     = { failed: `✗ ${failingIssues} failing`, uncovered: 'Not started', ready: 'Release ready', partial: 'In progress' }[state];
+            return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem 1rem', background: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', fontWeight: '600' }}>
+                    <span style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Release</span>
+                    <span style={{ flex: 1, fontSize: '1rem', color: 'var(--text-primary)' }}>{versionName}</span>
+                    <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: pillBg, color: pillColor, whiteSpace: 'nowrap' }}>{label}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', minWidth: '140px' }}>
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{covered}/{total} covered · {pct}%</span>
+                        <div style={{ width: '120px', height: '5px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ width: pct + '%', height: '100%', background: barColor, borderRadius: '2px' }} />
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function EpicRow({ epic, jiraUrl, projectId, uncoveredOnly }) {
+            const [expanded, setExpanded] = React.useState(true);
+            const anyVisible = uncoveredOnly
+                ? epic.stories.some(s => !s.covered)
+                : true;
+            if (uncoveredOnly && !anyVisible) return null;
+            const pct = epic.totalCount > 0 ? Math.round(epic.coveredCount / epic.totalCount * 100) : 0;
+            // The % is coverage breadth (stories with tests); the COLOR conveys health,
+            // so a fully-covered-but-failing epic is red, not green. Count failing
+            // issues from the epic's stories.
+            const epicAgg = (() => {
+                let failed = 0, failingIssues = 0;
+                (epic.stories || []).forEach(s => {
+                    if (s.testRunCoverage && s.testRunCoverage.failed > 0) { failed += s.testRunCoverage.failed; failingIssues += 1; }
+                });
+                return { failed, failingIssues };
+            })();
+            const epicState = epicAgg.failed > 0 ? 'failed'
+                : pct === 0 ? 'uncovered'
+                : pct === 100 ? 'passed'
+                : 'partial';
+            const epicTextColor = { failed: '#dc2626', uncovered: '#6b7280', passed: '#16a34a', partial: 'var(--text-secondary)' }[epicState];
+            const epicBarColor  = { failed: '#dc2626', uncovered: '#9ca3af', passed: '#16a34a', partial: 'var(--primary)' }[epicState];
+            const issueLinkStyle = { color: 'var(--primary)', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' };
+            return (
+                <div>
+                    <div
+                        className="coverage-epic-row"
+                        onClick={() => setExpanded(x => !x)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            background: 'var(--bg-secondary)',
+                            borderBottom: '1px solid var(--border-color)',
+                            cursor: 'pointer',
+                            fontWeight: '500',
+                            fontSize: '0.9375rem'
+                        }}
+                    >
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', userSelect: 'none' }}>{expanded ? '▼' : '▶'}</span>
+                        <IssueLink issueKey={epic.issue.key} jiraUrl={jiraUrl} style={issueLinkStyle} />
+                        <span style={{ flex: 1 }}>{epic.issue.summary}</span>
+                        {epicAgg.failingIssues > 0 && (
+                            <span style={{ fontSize: '0.6875rem', fontWeight: '600', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', whiteSpace: 'nowrap' }}>
+                                ✗ {epicAgg.failingIssues} failing
+                            </span>
+                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', minWidth: '120px' }}>
+                            <span style={{ fontSize: '0.8125rem', color: epicTextColor, whiteSpace: 'nowrap' }}>
+                                {pct}% ({epic.coveredCount}/{epic.totalCount})
+                            </span>
+                            <div style={{ width: '100px', height: '4px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{ width: pct + '%', height: '100%', background: epicBarColor, borderRadius: '2px' }} />
+                            </div>
+                        </div>
+                    </div>
+                    {expanded && epic.stories.map(story => (
+                        <StoryRow key={story.issue.key} story={story} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                    ))}
+                </div>
+            );
+        }
+
+        // Sort descending so the most recent release appears first.
+        // Uses numeric collation so "v9.10" sorts above "v9.3".
+        function sortVersions(vs) {
+            return [...vs].sort((a, b) =>
+                b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })
+            );
+        }
+
+        function CoverageSection({ projectId }) {
+            const [hasConnection, setHasConnection] = React.useState(null);
+            const [jiraUrl, setJiraUrl] = React.useState('');
+            const [versionFilter, setVersionFilter] = React.useState('');
+            const [versions, setVersions] = React.useState([]);
+            const [versionsLoading, setVersionsLoading] = React.useState(false);
+            const [versionsError, setVersionsError] = React.useState(null);
+            const [filterText, setFilterText] = React.useState('');
+            const [selectedVersion, setSelectedVersion] = React.useState('');
+            const [tree, setTree] = React.useState(null);
+            const [treeLoading, setTreeLoading] = React.useState(false);
+            const [treeError, setTreeError] = React.useState(null);
+            const [uncoveredOnly, setUncoveredOnly] = React.useState(false);
+
+            React.useEffect(() => {
+                let cancelled = false;
+                const init = async () => {
+                    try {
+                        const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_CONNECTIONS, { projectId });
+                        const conns = data.jiraConnections || [];
+                        if (cancelled) return;
+                        setHasConnection(conns.length > 0);
+                        if (conns.length > 0) {
+                            const conn = conns[0];
+                            setJiraUrl(conn.jiraUrl || '');
+                            setVersionFilter(conn.versionFilter || '');
+                            loadVersions();
+                        }
+                    } catch (_) {
+                        if (!cancelled) setHasConnection(false);
+                    }
+                };
+                // Reads the effect's `cancelled` closure variable directly so the
+                // cleanup (which sets cancelled = true on unmount) actually prevents
+                // any setState after the await resolves.
+                const loadVersions = async () => {
+                    setVersionsError(null);
+                    setVersionsLoading(true);
+                    try {
+                        const data = await graphqlClient.query(GRAPHQL_QUERIES.JIRA_FIX_VERSIONS, { projectId });
+                        if (cancelled) return;
+                        setVersions(sortVersions(data.jiraFixVersions || []));
+                    } catch (err) {
+                        if (!cancelled) setVersionsError(err.message || 'Failed to load release versions');
+                    } finally {
+                        if (!cancelled) setVersionsLoading(false);
+                    }
+                };
+                init();
+                return () => { cancelled = true; };
+            }, [projectId]);
+
+            const handleVersionChange = async (e) => {
+                const name = e.target.value;
+                setSelectedVersion(name);
+                setTree(null);
+                setTreeError(null);
+                if (!name) return;
+                setTreeLoading(true);
+                try {
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.REQUIREMENT_COVERAGE, { projectId, fixVersionName: name });
+                    setTree(data.requirementCoverage);
+                } catch (err) {
+                    setTreeError(err.message || 'Failed to load coverage data');
+                } finally {
+                    setTreeLoading(false);
+                }
+            };
+
+            if (!hasConnection) return null;
+
+            // Build groups from versionFilter prefixes (order in the field controls group order).
+            const prefixes = versionFilter ? versionFilter.split(',').map(p => p.trim()).filter(Boolean) : [];
+            const textOk = v => !filterText || v.name.toLowerCase().includes(filterText.toLowerCase());
+
+            let groups;
+            if (prefixes.length > 0) {
+                const assigned = new Set();
+                groups = prefixes.map(p => {
+                    const pl = p.toLowerCase();
+                    const vs = versions.filter(v => v.name.toLowerCase().startsWith(pl));
+                    vs.forEach(v => assigned.add(v.name));
+                    // Strip trailing " v" or "v" from the prefix to get a clean group label
+                    const label = p.replace(/\s*v$/i, '').trim() || p;
+                    return { label, versions: vs.filter(v => textOk(v)) };
+                }).filter(g => g.versions.length > 0);
+                // Anything not matched by a prefix
+                const rest = versions.filter(v => !assigned.has(v.name) && textOk(v));
+                if (rest.length > 0) groups.push({ label: 'Other', versions: rest });
+            } else {
+                groups = [{ label: null, versions: versions.filter(v => textOk(v)) }];
+            }
+
+            return (
+                <div id="coverage-panel" style={{ padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.25rem', letterSpacing: '-0.01em' }}>
+                        Requirement Coverage
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        Track test coverage for JIRA issues by release version
+                    </p>
+
+                    {versionsError ? (
+                        <div className="coverage-error" role="alert" style={{ color: 'var(--error)', fontSize: '0.875rem', padding: '0.75rem', background: 'rgba(239,68,68,0.06)', borderRadius: '0.375rem', border: '1px solid rgba(239,68,68,0.2)' }}>
+                            {versionsError}
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <input
+                                    id="coverage-version-filter"
+                                    type="text"
+                                    placeholder="Filter releases…"
+                                    value={filterText}
+                                    onChange={e => setFilterText(e.target.value)}
+                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '160px' }}
+                                />
+                                <select
+                                    id="coverage-version-picker"
+                                    value={selectedVersion}
+                                    onChange={handleVersionChange}
+                                    disabled={versionsLoading}
+                                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', fontSize: '0.875rem', minWidth: '220px', opacity: versionsLoading ? 0.6 : 1 }}
+                                >
+                                    <option value="">{versionsLoading ? '⏳ Loading releases…' : '— Select release version —'}</option>
+                                    {groups.map(g => g.label
+                                        ? <optgroup key={g.label} label={g.label}>
+                                            {g.versions.map(v => (
+                                                <option key={v.name} value={v.name}>{v.name}</option>
+                                            ))}
+                                          </optgroup>
+                                        : g.versions.map(v => (
+                                            <option key={v.name} value={v.name}>{v.name}</option>
+                                          ))
+                                    )}
+                                </select>
+                            </div>
+                            {treeError && (
+                                <div className="coverage-error" role="alert" style={{ color: 'var(--error)', fontSize: '0.875rem', padding: '0.75rem', background: 'rgba(239,68,68,0.06)', borderRadius: '0.375rem', border: '1px solid rgba(239,68,68,0.2)', marginBottom: '1rem' }}>
+                                    {treeError}
+                                </div>
+                            )}
+
+                            {treeLoading && (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading coverage…</div>
+                            )}
+
+                            {tree && !treeLoading && (
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="coverage-uncovered-only"
+                                            checked={uncoveredOnly}
+                                            onChange={e => setUncoveredOnly(e.target.checked)}
+                                        />
+                                        <label htmlFor="coverage-uncovered-only" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                            Show uncovered only
+                                        </label>
+                                    </div>
+                                    {tree.epics.length > 0 && tree.epics.every(e => e.totalCount === 0) && (
+                                        <div role="alert" style={{ marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '0.375rem', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                            Epics found but no stories linked. This feature requires a <strong>team-managed (next-gen)</strong> JIRA project. Classic projects use a separate Epic Link field that is not yet supported.
+                                        </div>
+                                    )}
+                                    <div style={{ border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                        <ReleaseSummary tree={tree} versionName={selectedVersion} />
+                                        {tree.epics.map(epic => (
+                                            <EpicRow key={epic.issue.key} epic={epic} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                                        ))}
+                                        {tree.unassigned.length > 0 && (
+                                            <UnassignedSection stories={tree.unassigned} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
+            );
+        }
+
         // JIRA Connection Management Component
-        function JiraConnectionManager({ projectId }) {
+        function JiraConnectionManager({ projectId, onConnectionChange }) {
             const [connections, setConnections] = useState([]);
             const [loading, setLoading] = useState(true);
             const [showAddModal, setShowAddModal] = useState(false);
@@ -7222,6 +7710,7 @@
                                 setShowAddModal(false);
                                 setEditingConnection(null);
                                 fetchConnections();
+                                if (onConnectionChange) onConnectionChange();
                             }}
                         />
                     )}
@@ -7251,7 +7740,8 @@
                 authenticationType: connection?.authenticationType || 'api_token',
                 projectKey: connection?.projectKey || '',
                 username: connection?.username || '',
-                credential: ''
+                credential: '',
+                versionFilter: connection?.versionFilter || ''
             });
             const [loading, setLoading] = useState(false);
             const [errors, setErrors] = useState({});
@@ -7307,7 +7797,8 @@
                             input: {
                                 name: formData.name,
                                 jiraUrl: formData.jiraUrl,
-                                projectKey: formData.projectKey
+                                projectKey: formData.projectKey,
+                                versionFilter: formData.versionFilter
                             }
                         });
                         
@@ -7332,7 +7823,8 @@
                                 authenticationType: formData.authenticationType,
                                 projectKey: formData.projectKey,
                                 username: formData.username,
-                                credential: formData.credential
+                                credential: formData.credential,
+                                versionFilter: formData.versionFilter
                             }
                         });
                     }
@@ -7500,6 +7992,29 @@
                                         {errors.projectKey}
                                     </p>
                                 )}
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                                    Coverage Version Filter
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.versionFilter}
+                                    onChange={(e) => setFormData({ ...formData, versionFilter: e.target.value })}
+                                    placeholder="e.g. Atmos, Atmos NG"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        background: 'var(--bg-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                                <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                    Comma-separated prefixes to show in the Coverage picker (empty = show all)
+                                </p>
                             </div>
 
                             <div style={{ marginBottom: '1.5rem' }}>
@@ -8586,6 +9101,7 @@
             const [project, setProject] = useState(null);
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('general');
+            const [coverageRefreshKey, setCoverageRefreshKey] = useState(0);
 
             // Extract project ID from route (format: /project/:projectId/settings)
             const projectId = route.split('/')[2];
@@ -8635,6 +9151,7 @@
             const tabs = [
                 { id: 'general', label: 'General', emoji: '⚙️' },
                 { id: 'integrations', label: 'Integrations', emoji: '🔗' },
+                { id: 'coverage', label: 'Coverage', emoji: '📊' },
                 { id: 'team', label: 'Team', emoji: '👥' },
                 { id: 'notifications', label: 'Notifications', emoji: '🔔' }
             ];
@@ -8780,23 +9297,27 @@
                                         padding: '2rem',
                                         borderBottom: '1px solid var(--border-color)'
                                     }}>
-                                        <h2 style={{ 
-                                            margin: 0, 
+                                        <h2 style={{
+                                            margin: 0,
                                             marginBottom: '0.5rem',
                                             fontSize: '1.5rem',
                                             fontWeight: '600',
                                             letterSpacing: '-0.02em'
                                         }}>Integrations</h2>
-                                        <p style={{ 
-                                            margin: 0, 
+                                        <p style={{
+                                            margin: 0,
                                             color: 'var(--text-secondary)',
                                             fontSize: '0.9375rem'
                                         }}>
                                             Connect external tools and services to enhance your testing workflow
                                         </p>
                                     </div>
-                                    <JiraConnectionManager projectId={projectId} />
+                                    <JiraConnectionManager projectId={projectId} onConnectionChange={() => setCoverageRefreshKey(k => k + 1)} />
                                 </div>
+                            )}
+
+                            {activeTab === 'coverage' && (
+                                <CoverageSection key={coverageRefreshKey} projectId={projectId} />
                             )}
 
                             {activeTab === 'team' && (

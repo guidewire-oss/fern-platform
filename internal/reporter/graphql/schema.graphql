@@ -333,6 +333,7 @@ type JiraConnection {
   username: String!
   status: String!
   isActive: Boolean!
+  versionFilter: String!
   lastTestedAt: Time
   createdAt: Time!
   updatedAt: Time!
@@ -346,12 +347,14 @@ input CreateJiraConnectionInput {
   projectKey: String!
   username: String!
   credential: String!
+  versionFilter: String
 }
 
 input UpdateJiraConnectionInput {
   name: String!
   jiraUrl: String!
   projectKey: String!
+  versionFilter: String
 }
 
 input UpdateJiraCredentialsInput {
@@ -410,6 +413,60 @@ input FieldMappingEntryInput {
 input SaveJiraFieldMappingInput {
   projectId: String!
   entries: [FieldMappingEntryInput!]!
+}
+
+# JIRA Requirements Coverage Types
+
+type JiraRelease {
+  id:          String!
+  name:        String!
+  released:    Boolean!
+  releaseDate: String
+}
+
+type JiraIssueSummary {
+  key:        String!
+  summary:    String!
+  statusName: String!
+  issueType:  String!
+}
+
+type TestRunCoverage {
+  total:     Int!
+  passed:    Int!
+  failed:    Int!
+  skipped:   Int!
+  lastRunAt: Time
+}
+
+type StoryCoverageNode {
+  issue:           JiraIssueSummary!
+  covered:         Boolean!
+  testRunCoverage: TestRunCoverage
+  subTasks:        [StoryCoverageNode!]!
+}
+
+type EpicCoverageNode {
+  issue:        JiraIssueSummary!
+  stories:      [StoryCoverageNode!]!
+  coveredCount: Int!
+  totalCount:   Int!
+}
+
+type RequirementCoverageTree {
+  fixVersion: JiraRelease!
+  epics:      [EpicCoverageNode!]!
+  unassigned: [StoryCoverageNode!]!
+}
+
+type CoveredSpecRun {
+  specName:  String!
+  status:    String!
+  suiteName: String!
+  testRunId: String!
+  branch:    String!
+  startTime: Time!
+  duration:  Int!
 }
 
 # Health Status Type
@@ -533,6 +590,11 @@ type Query {
   # JIRA Field Mapping
   jiraFieldMapping(projectId: String!): JiraFieldMapping!
   jiraFields(connectionId: ID!): [JiraFieldGQL!]!
+
+  # JIRA Requirements Coverage
+  jiraFixVersions(projectId: ID!): [JiraRelease!]!
+  requirementCoverage(projectId: ID!, fixVersionName: String!): RequirementCoverageTree!
+  specRunsByJiraTag(projectId: String!, issueKey: String!): [CoveredSpecRun!]!
 }
 
 # Mutation Root

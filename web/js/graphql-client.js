@@ -438,13 +438,14 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt
             }
         }
     `,
-    
+
     CREATE_JIRA_CONNECTION: `
         mutation CreateJiraConnection($input: CreateJiraConnectionInput!) {
             createJiraConnection(input: $input) {
@@ -457,13 +458,14 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt
             }
         }
     `,
-    
+
     UPDATE_JIRA_CONNECTION: `
         mutation UpdateJiraConnection($id: ID!, $input: UpdateJiraConnectionInput!) {
             updateJiraConnection(id: $id, input: $input) {
@@ -476,6 +478,7 @@ const QUERIES = {
                 username
                 status
                 isActive
+                versionFilter
                 lastTestedAt
                 createdAt
                 updatedAt
@@ -570,6 +573,60 @@ const QUERIES = {
                 }
                 updatedBy
                 updatedAt
+            }
+        }
+    `,
+
+    // JIRA Coverage queries
+    JIRA_FIX_VERSIONS: `
+        query JiraFixVersions($projectId: ID!) {
+            jiraFixVersions(projectId: $projectId) {
+                id
+                name
+                released
+                releaseDate
+            }
+        }
+    `,
+
+    REQUIREMENT_COVERAGE: `
+        query RequirementCoverage($projectId: ID!, $fixVersionName: String!) {
+            requirementCoverage(projectId: $projectId, fixVersionName: $fixVersionName) {
+                fixVersion { id name released releaseDate }
+                epics {
+                    issue { key summary statusName issueType }
+                    coveredCount
+                    totalCount
+                    stories {
+                        issue { key summary statusName issueType }
+                        covered
+                        testRunCoverage { total passed failed skipped lastRunAt }
+                        subTasks {
+                            issue { key summary statusName issueType }
+                            covered
+                            testRunCoverage { total passed failed skipped lastRunAt }
+                        }
+                    }
+                }
+                unassigned {
+                    issue { key summary statusName issueType }
+                    covered
+                    testRunCoverage { total passed failed skipped lastRunAt }
+                }
+            }
+        }
+    `,
+
+    SPEC_RUNS_BY_JIRA_TAG: `
+        query SpecRunsByJiraTag($projectId: String!, $issueKey: String!) {
+            specRunsByJiraTag(projectId: $projectId, issueKey: $issueKey) {
+                specName
+                status
+                suiteName
+                testRunId
+                branch
+                startTime
+                duration
             }
         }
     `

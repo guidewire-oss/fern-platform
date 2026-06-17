@@ -104,9 +104,10 @@ func (r *GormJiraConnectionRepository) toModel(conn *integrations.JiraConnection
 		AuthenticationType:  string(snapshot.AuthenticationType),
 		ProjectKey:          snapshot.ProjectKey,
 		Username:            snapshot.Username,
-		EncryptedCredential: conn.GetEncryptedCredentialDirect(), // This needs to be added to domain
+		EncryptedCredential: conn.GetEncryptedCredentialDirect(),
 		Status:              string(snapshot.Status),
 		IsActive:            snapshot.IsActive,
+		VersionFilter:       snapshot.VersionFilter,
 		LastTestedAt:        snapshot.LastTestedAt,
 	}
 	
@@ -139,6 +140,7 @@ func (r *GormJiraConnectionRepository) toDomain(model *database.JiraConnection) 
 		model.EncryptedCredential,
 		integrations.ConnectionStatus(model.Status),
 		model.IsActive,
+		model.VersionFilter,
 		model.LastTestedAt,
 		model.CreatedAt,
 		model.UpdatedAt,

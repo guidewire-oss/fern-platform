@@ -2,6 +2,8 @@
 .claude/
 CLAUDE.md
 claude-progress.md
+.reviews
+REVIEW.md
 
 # Intent app settings
 .intent/

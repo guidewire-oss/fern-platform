@@ -308,6 +308,10 @@ func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model
 		return nil, fmt.Errorf("forbidden")
 	}
 
+	versionFilter := ""
+	if input.VersionFilter != nil {
+		versionFilter = *input.VersionFilter
+	}
 	connection, err := r.jiraConnectionService.CreateConnection(
 		ctx,
 		input.ProjectID,
@@ -317,6 +321,7 @@ func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model
 		input.ProjectKey,
 		input.Username,
 		input.Credential,
+		versionFilter,
 	)
 	if err != nil {
 		return nil, err
@@ -352,12 +357,17 @@ func (r *mutationResolver) UpdateJiraConnection(ctx context.Context, id string, 
 		return nil, fmt.Errorf("forbidden")
 	}
 
+	versionFilter := ""
+	if input.VersionFilter != nil {
+		versionFilter = *input.VersionFilter
+	}
 	updated, err := r.jiraConnectionService.UpdateConnection(
 		ctx,
 		id,
 		input.Name,
 		input.JiraURL,
 		input.ProjectKey,
+		versionFilter,
 	)
 	if err != nil {
 		return nil, err
@@ -877,6 +887,64 @@ func (r *queryResolver) JiraFieldMapping(ctx context.Context, projectID string) 
 // JiraFields is the resolver for the jiraFields field.
 func (r *queryResolver) JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error) {
 	return r.JiraFields_domain(ctx, connectionID)
+}
+
+// JiraFixVersions is the resolver for the jiraFixVersions field.
+func (r *queryResolver) JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if r.coverageService == nil {
+		return nil, fmt.Errorf("coverage service not configured")
+	}
+	releases, err := r.coverageService.GetReleasesForProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.JiraRelease, len(releases))
+	for i, v := range releases {
+		result[i] = &model.JiraRelease{Name: v}
+	}
+	return result, nil
+}
+
+// RequirementCoverage is the resolver for the requirementCoverage field.
+func (r *queryResolver) RequirementCoverage(ctx context.Context, projectID string, fixVersionName string) (*model.RequirementCoverageTree, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if r.coverageService == nil {
+		return nil, fmt.Errorf("coverage service not configured")
+	}
+	tree, err := r.coverageService.Build(ctx, projectID, fixVersionName)
+	if err != nil {
+		return nil, err
+	}
+	return mapCoverageTree(tree), nil
+}
+
+// SpecRunsByJiraTag is the resolver for the specRunsByJiraTag field.
+func (r *queryResolver) SpecRunsByJiraTag(ctx context.Context, projectID string, issueKey string) ([]*model.CoveredSpecRun, error) {
+	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+		return nil, err
+	}
+	rows, err := r.coverageService.GetSpecRunsByJiraTag(ctx, projectID, issueKey)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.CoveredSpecRun, len(rows))
+	for i, row := range rows {
+		result[i] = &model.CoveredSpecRun{
+			SpecName:  row.SpecName,
+			Status:    row.Status,
+			SuiteName: row.SuiteName,
+			TestRunID: row.TestRunID,
+			Branch:    row.Branch,
+			StartTime: row.StartTime,
+			Duration:  int(row.Duration),
+		}
+	}
+	return result, nil
 }
 
 // TestRunCreated is the resolver for the testRunCreated field.

@@ -76,6 +76,7 @@ type DomainFactory struct {
 	// Integrations domain
 	jiraConnectionService    *integrations.JiraConnectionService
 	jiraFieldMappingService  *integrations.JiraFieldMappingService
+	coverageService          *integrations.CoverageService
 }
 
 // NewDomainFactory creates a new domain factory
@@ -285,6 +286,10 @@ func (f *DomainFactory) initIntegrationsDomain() {
 	// Create JIRA field mapping repo and service
 	jiraFieldMappingRepo := integrationsInfra.NewGormJiraFieldMappingRepository(f.db)
 	f.jiraFieldMappingService = integrations.NewJiraFieldMappingService(jiraFieldMappingRepo, jiraConnRepo)
+
+	// Create coverage service (reuses the same connection repo, JIRA client, and encryption key)
+	tagRepo := tagsInfra.NewGormTagRepository(f.db)
+	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, f.jiraFieldMappingService, encryptionKey)
 }
 
 // GetJiraConnectionService returns the JIRA connection service
@@ -295,4 +300,9 @@ func (f *DomainFactory) GetJiraConnectionService() *integrations.JiraConnectionS
 // GetJiraFieldMappingService returns the JIRA field mapping service
 func (f *DomainFactory) GetJiraFieldMappingService() *integrations.JiraFieldMappingService {
 	return f.jiraFieldMappingService
+}
+
+// GetCoverageService returns the JIRA coverage service
+func (f *DomainFactory) GetCoverageService() *integrations.CoverageService {
+	return f.coverageService
 }

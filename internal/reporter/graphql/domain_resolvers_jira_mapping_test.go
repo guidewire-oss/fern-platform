@@ -252,7 +252,7 @@ func buildActiveConnection(projectID string) *integrations.JiraConnection {
 		"conn-1", projectID, "My JIRA", "https://jira.example.com",
 		integrations.AuthTypeAPIToken, "PROJ", "user@example.com", encryptedCred,
 		integrations.ConnectionStatusConnected, true,
-		nil, time.Now(), time.Now(),
+		"", nil, time.Now(), time.Now(),
 	)
 }
 

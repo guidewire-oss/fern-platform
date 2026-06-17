@@ -10,14 +10,25 @@ import (
 	"time"
 )
 
+type CoveredSpecRun struct {
+	SpecName  string    `json:"specName"`
+	Status    string    `json:"status"`
+	SuiteName string    `json:"suiteName"`
+	TestRunID string    `json:"testRunId"`
+	Branch    string    `json:"branch"`
+	StartTime time.Time `json:"startTime"`
+	Duration  int       `json:"duration"`
+}
+
 type CreateJiraConnectionInput struct {
-	ProjectID          string `json:"projectId"`
-	Name               string `json:"name"`
-	JiraURL            string `json:"jiraUrl"`
-	AuthenticationType string `json:"authenticationType"`
-	ProjectKey         string `json:"projectKey"`
-	Username           string `json:"username"`
-	Credential         string `json:"credential"`
+	ProjectID          string  `json:"projectId"`
+	Name               string  `json:"name"`
+	JiraURL            string  `json:"jiraUrl"`
+	AuthenticationType string  `json:"authenticationType"`
+	ProjectKey         string  `json:"projectKey"`
+	Username           string  `json:"username"`
+	Credential         string  `json:"credential"`
+	VersionFilter      *string `json:"versionFilter,omitempty"`
 }
 
 type CreateProjectInput struct {
@@ -55,6 +66,13 @@ type DashboardSummary struct {
 	OverallPassRate     float64       `json:"overallPassRate"`
 	TotalTestsExecuted  int           `json:"totalTestsExecuted"`
 	AverageTestDuration int           `json:"averageTestDuration"`
+}
+
+type EpicCoverageNode struct {
+	Issue        *JiraIssueSummary    `json:"issue"`
+	Stories      []*StoryCoverageNode `json:"stories"`
+	CoveredCount int                  `json:"coveredCount"`
+	TotalCount   int                  `json:"totalCount"`
 }
 
 type FieldMappingEntry struct {
@@ -131,6 +149,7 @@ type JiraConnection struct {
 	Username           string     `json:"username"`
 	Status             string     `json:"status"`
 	IsActive           bool       `json:"isActive"`
+	VersionFilter      string     `json:"versionFilter"`
 	LastTestedAt       *time.Time `json:"lastTestedAt,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
@@ -148,6 +167,20 @@ type JiraFieldMapping struct {
 	Entries   []*FieldMappingEntry `json:"entries"`
 	UpdatedBy *string              `json:"updatedBy,omitempty"`
 	UpdatedAt *time.Time           `json:"updatedAt,omitempty"`
+}
+
+type JiraIssueSummary struct {
+	Key        string `json:"key"`
+	Summary    string `json:"summary"`
+	StatusName string `json:"statusName"`
+	IssueType  string `json:"issueType"`
+}
+
+type JiraRelease struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Released    bool    `json:"released"`
+	ReleaseDate *string `json:"releaseDate,omitempty"`
 }
 
 type Mutation struct {
@@ -215,6 +248,12 @@ type ProjectTreemapNode struct {
 type Query struct {
 }
 
+type RequirementCoverageTree struct {
+	FixVersion *JiraRelease         `json:"fixVersion"`
+	Epics      []*EpicCoverageNode  `json:"epics"`
+	Unassigned []*StoryCoverageNode `json:"unassigned"`
+}
+
 type RoleGroupConfig struct {
 	AdminGroup   string `json:"adminGroup"`
 	ManagerGroup string `json:"managerGroup"`
@@ -258,6 +297,13 @@ type SpecTreemapNode struct {
 type StatusCount struct {
 	Status string `json:"status"`
 	Count  int    `json:"count"`
+}
+
+type StoryCoverageNode struct {
+	Issue           *JiraIssueSummary    `json:"issue"`
+	Covered         bool                 `json:"covered"`
+	TestRunCoverage *TestRunCoverage     `json:"testRunCoverage,omitempty"`
+	SubTasks        []*StoryCoverageNode `json:"subTasks"`
 }
 
 type Subscription struct {
@@ -358,6 +404,14 @@ type TestRunConnection struct {
 	TotalCount int            `json:"totalCount"`
 }
 
+type TestRunCoverage struct {
+	Total     int        `json:"total"`
+	Passed    int        `json:"passed"`
+	Failed    int        `json:"failed"`
+	Skipped   int        `json:"skipped"`
+	LastRunAt *time.Time `json:"lastRunAt,omitempty"`
+}
+
 type TestRunEdge struct {
 	Node   *TestRun `json:"node"`
 	Cursor string   `json:"cursor"`
@@ -388,9 +442,10 @@ type TreemapData struct {
 }
 
 type UpdateJiraConnectionInput struct {
-	Name       string `json:"name"`
-	JiraURL    string `json:"jiraUrl"`
-	ProjectKey string `json:"projectKey"`
+	Name          string  `json:"name"`
+	JiraURL       string  `json:"jiraUrl"`
+	ProjectKey    string  `json:"projectKey"`
+	VersionFilter *string `json:"versionFilter,omitempty"`
 }
 
 type UpdateJiraCredentialsInput struct {

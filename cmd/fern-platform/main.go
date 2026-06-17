@@ -109,6 +109,7 @@ func main() {
 	// GraphQL routes with role group names from config
 	// Initialize GraphQL resolver with domain services
 	resolver := graphql.NewResolver(testingService, projectService, tagService, flakyDetectionService, jiraConnectionService, jiraFieldMappingService, db.DB, logger)
+	resolver.SetCoverageService(domainFactory.GetCoverageService())
 
 	roleGroupNames := &graphql.RoleGroupNames{
 		AdminGroup:   cfg.Auth.OAuth.AdminGroupName,

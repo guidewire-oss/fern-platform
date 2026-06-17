@@ -1,7 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +12,34 @@ import (
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 )
+
+// versionFilterPrefixPattern allows alphanumeric characters, spaces, and hyphens.
+var versionFilterPrefixPattern = regexp.MustCompile(`^[A-Za-z0-9 \-]+$`)
+
+// validateVersionFilter returns an error if the comma-separated version filter
+// string violates format constraints (max 50 prefixes, each 1-100 chars, alphanumeric + space + hyphen).
+func validateVersionFilter(filter string) error {
+	if filter == "" {
+		return nil
+	}
+	parts := strings.Split(filter, ",")
+	if len(parts) > 50 {
+		return fmt.Errorf("versionFilter: too many prefixes (max 50, got %d)", len(parts))
+	}
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		if len(p) == 0 {
+			return fmt.Errorf("versionFilter: empty prefix after trimming whitespace")
+		}
+		if len(p) > 100 {
+			return fmt.Errorf("versionFilter: prefix too long (max 100 chars): %q", p)
+		}
+		if !versionFilterPrefixPattern.MatchString(p) {
+			return fmt.Errorf("versionFilter: prefix contains invalid characters (only alphanumeric, space, hyphen allowed): %q", p)
+		}
+	}
+	return nil
+}
 
 // JiraConnectionHandler handles JIRA connection HTTP requests
 type JiraConnectionHandler struct {
@@ -38,13 +69,15 @@ type CreateJiraConnectionRequest struct {
 	ProjectKey         string `json:"projectKey" binding:"required"`
 	Username           string `json:"username"`
 	Credential         string `json:"credential" binding:"required"`
+	VersionFilter      string `json:"versionFilter"`
 }
 
 // UpdateJiraConnectionRequest represents the request to update a JIRA connection
 type UpdateJiraConnectionRequest struct {
-	Name       string `json:"name"`
-	JiraURL    string `json:"jiraUrl"`
-	ProjectKey string `json:"projectKey"`
+	Name          string `json:"name"`
+	JiraURL       string `json:"jiraUrl"`
+	ProjectKey    string `json:"projectKey"`
+	VersionFilter string `json:"versionFilter"`
 }
 
 // UpdateJiraCredentialsRequest represents the request to update JIRA credentials
@@ -65,6 +98,7 @@ type JiraConnectionResponse struct {
 	Username           string  `json:"username"`
 	Status             string  `json:"status"`
 	IsActive           bool    `json:"isActive"`
+	VersionFilter      string  `json:"versionFilter"`
 	LastTestedAt       *string `json:"lastTestedAt,omitempty"`
 	CreatedAt          string  `json:"createdAt"`
 	UpdatedAt          string  `json:"updatedAt"`
@@ -108,6 +142,11 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 		return
 	}
 
+	if err := validateVersionFilter(req.VersionFilter); err != nil {
+		h.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	connection, err := h.jiraService.CreateConnection(
 		c.Request.Context(),
 		projectID,
@@ -117,6 +156,7 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 		req.ProjectKey,
 		req.Username,
 		req.Credential,
+		req.VersionFilter,
 	)
 	if err != nil {
 		h.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -236,12 +276,18 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 		return
 	}
 
+	if err := validateVersionFilter(req.VersionFilter); err != nil {
+		h.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	updated, err := h.jiraService.UpdateConnection(
 		c.Request.Context(),
 		connectionID,
 		req.Name,
 		req.JiraURL,
 		req.ProjectKey,
+		req.VersionFilter,
 	)
 	if err != nil {
 		h.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -422,6 +468,7 @@ func (h *JiraConnectionHandler) convertToResponse(conn *integrations.JiraConnect
 		Username:           snapshot.Username,
 		Status:             string(snapshot.Status),
 		IsActive:           snapshot.IsActive,
+		VersionFilter:      snapshot.VersionFilter,
 		LastTestedAt:       lastTested,
 		CreatedAt:          snapshot.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:          snapshot.UpdatedAt.Format(time.RFC3339),

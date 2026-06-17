@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,6 +30,7 @@ type JiraConnection struct {
 	encryptedCredential string
 	status             ConnectionStatus
 	isActive           bool
+	versionFilter      string
 	lastTestedAt       *time.Time
 	createdAt          time.Time
 	updatedAt          time.Time
@@ -123,9 +126,20 @@ func (j *JiraConnection) IsActive() bool {
 	return j.isActive
 }
 
+// VersionFilter returns the comma-separated version name prefixes for the coverage picker
+func (j *JiraConnection) VersionFilter() string {
+	return j.versionFilter
+}
+
 // GetEncryptedCredentialDirect returns the encrypted credential directly (for repository use only)
 func (j *JiraConnection) GetEncryptedCredentialDirect() string {
 	return j.encryptedCredential
+}
+
+// SetEncryptedCredentialForTest replaces the stored credential with an already-encrypted
+// value. Use only in tests to simulate a connection retrieved from the database.
+func (j *JiraConnection) SetEncryptedCredentialForTest(encrypted string) {
+	j.encryptedCredential = encrypted
 }
 
 // LastTestedAt returns when the connection was last tested
@@ -144,7 +158,7 @@ func (j *JiraConnection) UpdatedAt() time.Time {
 }
 
 // UpdateConnectionInfo updates the connection information
-func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey string) error {
+func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey, versionFilter string) error {
 	if name == "" {
 		return errors.New("connection name is required")
 	}
@@ -158,6 +172,7 @@ func (j *JiraConnection) UpdateConnectionInfo(name, jiraURL, projectKey string) 
 	j.name = name
 	j.jiraURL = strings.TrimRight(jiraURL, "/")
 	j.projectKey = projectKey
+	j.versionFilter = versionFilter
 	j.updatedAt = time.Now()
 	return nil
 }
@@ -269,6 +284,7 @@ func (j *JiraConnection) Snapshot() JiraConnectionSnapshot {
 		Username:           j.username,
 		Status:             j.status,
 		IsActive:           j.isActive,
+		VersionFilter:      j.versionFilter,
 		LastTestedAt:       j.lastTestedAt,
 		CreatedAt:          j.createdAt,
 		UpdatedAt:          j.updatedAt,
@@ -286,6 +302,7 @@ type JiraConnectionSnapshot struct {
 	Username           string
 	Status             ConnectionStatus
 	IsActive           bool
+	VersionFilter      string
 	LastTestedAt       *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -298,6 +315,7 @@ func ReconstructJiraConnection(
 	projectKey, username, encryptedCredential string,
 	status ConnectionStatus,
 	isActive bool,
+	versionFilter string,
 	lastTestedAt *time.Time,
 	createdAt, updatedAt time.Time,
 ) *JiraConnection {
@@ -312,13 +330,44 @@ func ReconstructJiraConnection(
 		encryptedCredential: encryptedCredential,
 		status:              status,
 		isActive:            isActive,
+		versionFilter:       versionFilter,
 		lastTestedAt:        lastTestedAt,
 		createdAt:           createdAt,
 		updatedAt:           updatedAt,
 	}
 }
 
-// Helper function to validate JIRA URL
-func isValidJiraURL(url string) bool {
-	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+// isValidJiraURL checks that the URL is a valid http/https URL and does not target
+// loopback, link-local, or private network addresses (SSRF prevention).
+func isValidJiraURL(rawURL string) bool {
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	hostname := parsed.Hostname()
+	if hostname == "" {
+		return false
+	}
+	// Reject bare IP addresses in private/loopback/link-local ranges.
+	if ip := net.ParseIP(hostname); ip != nil {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || isPrivateIP(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPrivateIP reports whether ip falls in RFC-1918 / RFC-4193 private ranges.
+func isPrivateIP(ip net.IP) bool {
+	private := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "169.254.0.0/16"}
+	for _, cidr := range private {
+		_, block, _ := net.ParseCIDR(cidr)
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

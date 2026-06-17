@@ -246,8 +246,60 @@ func (r *Resolver) convertJiraConnectionToModel(conn *integrations.JiraConnectio
 		Username:           conn.Username(),
 		Status:             string(conn.Status()),
 		IsActive:           conn.IsActive(),
+		VersionFilter:      conn.VersionFilter(),
 		LastTestedAt:       lastTestedAt,
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 	}
+}
+
+func mapCoverageTree(tree *integrations.CoverageTree) *model.RequirementCoverageTree {
+	rel := &model.JiraRelease{Name: tree.Release}
+
+	epics := make([]*model.EpicCoverageNode, len(tree.Epics))
+	for i, e := range tree.Epics {
+		epics[i] = &model.EpicCoverageNode{
+			Issue:        mapIssueSummary(e.Issue),
+			Stories:      mapStoryNodes(e.Stories),
+			CoveredCount: e.CoveredCount,
+			TotalCount:   e.TotalCount,
+		}
+	}
+
+	return &model.RequirementCoverageTree{
+		FixVersion: rel,
+		Epics:      epics,
+		Unassigned: mapStoryNodes(tree.Unassigned),
+	}
+}
+
+func mapIssueSummary(issue integrations.JiraIssue) *model.JiraIssueSummary {
+	return &model.JiraIssueSummary{
+		Key:        issue.Key,
+		Summary:    issue.Summary,
+		StatusName: issue.StatusName,
+		IssueType:  issue.IssueType,
+	}
+}
+
+func mapStoryNodes(stories []integrations.StoryNode) []*model.StoryCoverageNode {
+	nodes := make([]*model.StoryCoverageNode, len(stories))
+	for i, s := range stories {
+		node := &model.StoryCoverageNode{
+			Issue:    mapIssueSummary(s.Issue),
+			Covered:  s.Covered,
+			SubTasks: mapStoryNodes(s.SubTasks),
+		}
+		if s.TestRunCoverage != nil {
+			node.TestRunCoverage = &model.TestRunCoverage{
+				Total:     s.TestRunCoverage.Total,
+				Passed:    s.TestRunCoverage.Passed,
+				Failed:    s.TestRunCoverage.Failed,
+				Skipped:   s.TestRunCoverage.Skipped,
+				LastRunAt: s.TestRunCoverage.LastRunAt,
+			}
+		}
+		nodes[i] = node
+	}
+	return nodes
 }
