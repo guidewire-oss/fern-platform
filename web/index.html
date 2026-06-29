@@ -6843,8 +6843,9 @@
 
         function StoryRow({ story, jiraUrl, projectId, uncoveredOnly }) {
             const [showDrillDown, setShowDrillDown] = React.useState(false);
+            const [hover, setHover] = React.useState(false);
             const hidden = uncoveredOnly && story.covered;
-            const leftPad = '2.5rem';
+            const leftPad = '1rem';
             const issueLinkStyle = { color: 'var(--primary)', fontFamily: 'monospace', fontSize: '0.8125rem' };
             // Badge color reflects RESULTS, not just covered/uncovered:
             //   uncovered = grey, any failure = red, skips-only = amber, all pass = green.
@@ -6867,13 +6868,17 @@
                 <>
                     <div
                         className={`coverage-story-row${story.covered ? ' covered' : ' uncovered'}`}
+                        onMouseEnter={() => setHover(true)}
+                        onMouseLeave={() => setHover(false)}
                         style={{
                             display: hidden ? 'none' : 'flex',
                             alignItems: 'center',
                             gap: '0.75rem',
                             padding: `0.625rem 1rem 0.625rem ${leftPad}`,
                             borderBottom: '1px solid var(--border-light)',
-                            fontSize: '0.875rem'
+                            fontSize: '0.875rem',
+                            background: hover ? 'var(--bg-secondary)' : 'transparent',
+                            transition: 'background 0.12s ease'
                         }}
                     >
                         <IssueLink issueKey={story.issue.key} jiraUrl={jiraUrl} style={issueLinkStyle} />
@@ -6977,7 +6982,6 @@
                 : 'partial';
             const pillColor = { failed: '#dc2626', uncovered: '#6b7280', ready: '#16a34a', partial: 'var(--text-primary)' }[state];
             const pillBg    = { failed: 'rgba(239,68,68,0.12)', uncovered: 'rgba(107,114,128,0.12)', ready: 'rgba(34,197,94,0.12)', partial: 'rgba(16,185,129,0.10)' }[state];
-            const barColor  = { failed: '#dc2626', uncovered: '#9ca3af', ready: '#16a34a', partial: 'var(--primary)' }[state];
             const label     = { failed: `✗ ${failingIssues} failing`, uncovered: 'Not started', ready: 'Release ready', partial: 'In progress' }[state];
             return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem 1rem', background: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', fontWeight: '600' }}>
@@ -6986,20 +6990,25 @@
                     <span style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: pillBg, color: pillColor, whiteSpace: 'nowrap' }}>{label}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', minWidth: '140px' }}>
                         <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{covered}/{total} covered · {pct}%</span>
-                        <div style={{ width: '120px', height: '5px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: pct + '%', height: '100%', background: barColor, borderRadius: '2px' }} />
+                        <div style={{ display: 'flex', width: '140px', height: '6px', background: '#d1d5db', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{ width: (total > 0 ? (covered - failingIssues) / total * 100 : 0) + '%', height: '100%', background: '#16a34a' }} />
+                            <div style={{ width: (total > 0 ? failingIssues / total * 100 : 0) + '%', height: '100%', background: '#dc2626' }} />
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function EpicRow({ epic, jiraUrl, projectId, uncoveredOnly }) {
-            const [expanded, setExpanded] = React.useState(true);
+        function EpicRow({ epic, jiraUrl, projectId, uncoveredOnly, expanded, onToggle }) {
+            const [hover, setHover] = React.useState(false);
             const anyVisible = uncoveredOnly
                 ? epic.stories.some(s => !s.covered)
                 : true;
             if (uncoveredOnly && !anyVisible) return null;
+            // "Show uncovered only" forces every matching epic open so the gaps are
+            // visible without manual expansion; otherwise the parent controls it.
+            const isOpen = uncoveredOnly || expanded;
+            const storyCount = epic.stories ? epic.stories.length : 0;
             const pct = epic.totalCount > 0 ? Math.round(epic.coveredCount / epic.totalCount * 100) : 0;
             // The % is coverage breadth (stories with tests); the COLOR conveys health,
             // so a fully-covered-but-failing epic is red, not green. Count failing
@@ -7016,28 +7025,35 @@
                 : pct === 100 ? 'passed'
                 : 'partial';
             const epicTextColor = { failed: '#dc2626', uncovered: '#6b7280', passed: '#16a34a', partial: 'var(--text-secondary)' }[epicState];
-            const epicBarColor  = { failed: '#dc2626', uncovered: '#9ca3af', passed: '#16a34a', partial: 'var(--primary)' }[epicState];
             const issueLinkStyle = { color: 'var(--primary)', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' };
             return (
                 <div>
                     <div
                         className="coverage-epic-row"
-                        onClick={() => setExpanded(x => !x)}
+                        onClick={onToggle}
+                        onMouseEnter={() => setHover(true)}
+                        onMouseLeave={() => setHover(false)}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.75rem',
                             padding: '0.75rem 1rem',
-                            background: 'var(--bg-secondary)',
+                            background: hover ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
                             borderBottom: '1px solid var(--border-color)',
                             cursor: 'pointer',
                             fontWeight: '500',
-                            fontSize: '0.9375rem'
+                            fontSize: '0.9375rem',
+                            transition: 'background 0.12s ease'
                         }}
                     >
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', userSelect: 'none' }}>{expanded ? '▼' : '▶'}</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', userSelect: 'none', display: 'inline-block', width: '0.85rem', textAlign: 'center', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▶</span>
                         <IssueLink issueKey={epic.issue.key} jiraUrl={jiraUrl} style={issueLinkStyle} />
-                        <span style={{ flex: 1 }}>{epic.issue.summary}</span>
+                        <span style={{ flex: 1, color: 'var(--text-primary)' }}>{epic.issue.summary}</span>
+                        {!isOpen && storyCount > 0 && (
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '9999px', padding: '0.0625rem 0.5rem', whiteSpace: 'nowrap' }}>
+                                {storyCount} {storyCount === 1 ? 'story' : 'stories'}
+                            </span>
+                        )}
                         {epicAgg.failingIssues > 0 && (
                             <span style={{ fontSize: '0.6875rem', fontWeight: '600', padding: '0.125rem 0.5rem', borderRadius: '9999px', background: 'rgba(239,68,68,0.12)', color: '#dc2626', whiteSpace: 'nowrap' }}>
                                 ✗ {epicAgg.failingIssues} failing
@@ -7047,14 +7063,24 @@
                             <span style={{ fontSize: '0.8125rem', color: epicTextColor, whiteSpace: 'nowrap' }}>
                                 {pct}% ({epic.coveredCount}/{epic.totalCount})
                             </span>
-                            <div style={{ width: '100px', height: '4px', background: 'var(--border-color)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: pct + '%', height: '100%', background: epicBarColor, borderRadius: '2px' }} />
+                            <div style={{ display: 'flex', width: '100px', height: '4px', background: '#d1d5db', borderRadius: '9999px', overflow: 'hidden' }}>
+                                <div style={{ width: (epic.totalCount > 0 ? (epic.coveredCount - epicAgg.failingIssues) / epic.totalCount * 100 : 0) + '%', height: '100%', background: '#16a34a', transition: 'width 0.3s ease' }} />
+                                <div style={{ width: (epic.totalCount > 0 ? epicAgg.failingIssues / epic.totalCount * 100 : 0) + '%', height: '100%', background: '#dc2626', transition: 'width 0.3s ease' }} />
                             </div>
                         </div>
                     </div>
-                    {expanded && epic.stories.map(story => (
-                        <StoryRow key={story.issue.key} story={story} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
-                    ))}
+                    {isOpen && storyCount > 0 && (
+                        <div style={{ marginLeft: '1.5rem', borderLeft: '2px solid var(--border-light)' }}>
+                            {epic.stories.map(story => (
+                                <StoryRow key={story.issue.key} story={story} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                            ))}
+                        </div>
+                    )}
+                    {isOpen && storyCount === 0 && (
+                        <div style={{ padding: '0.5rem 1rem 0.5rem 2.5rem', fontSize: '0.8125rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderBottom: '1px solid var(--border-light)' }}>
+                            No stories linked to this epic
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -7064,6 +7090,106 @@
         function sortVersions(vs) {
             return [...vs].sort((a, b) =>
                 b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })
+            );
+        }
+
+        // Release-readiness charts (D3, matching the dashboard idiom): an overall
+        // coverage donut (passing/failing/uncovered, % in center) + per-epic bars.
+        function CoverageCharts({ tree, jiraUrl }) {
+            const donutRef = React.useRef();
+
+            const stats = React.useMemo(() => {
+                let passing = 0, failing = 0, uncovered = 0, total = 0;
+                const classify = (s) => {
+                    total++;
+                    if (!s.covered) { uncovered++; return; }
+                    if (s.testRunCoverage && s.testRunCoverage.failed > 0) failing++;
+                    else passing++;
+                };
+                (tree.epics || []).forEach(e => (e.stories || []).forEach(classify));
+                (tree.unassigned || []).forEach(classify);
+                const epics = (tree.epics || []).map(e => {
+                    let f = 0;
+                    (e.stories || []).forEach(s => { if (s.testRunCoverage && s.testRunCoverage.failed > 0) f++; });
+                    return { key: e.issue.key, covered: e.coveredCount, total: e.totalCount,
+                             pct: e.totalCount > 0 ? e.coveredCount / e.totalCount : 0, failing: f };
+                }).filter(e => e.total > 0).sort((a, b) => b.pct - a.pct);
+                return { passing, failing, uncovered, total, covered: passing + failing, epics };
+            }, [tree]);
+
+            React.useEffect(() => {
+                if (!donutRef.current) return;
+                const svg = d3.select(donutRef.current);
+                svg.selectAll("*").remove();
+                const size = 180, r = size / 2, thickness = 32;
+                svg.attr("viewBox", `0 0 ${size} ${size}`);
+                const g = svg.append("g").attr("transform", `translate(${r},${r})`);
+                const segs = [
+                    { label: 'Passing', value: stats.passing, color: '#16a34a' },
+                    { label: 'Failing', value: stats.failing, color: '#dc2626' },
+                    { label: 'Uncovered', value: stats.uncovered, color: '#d1d5db' },
+                ].filter(s => s.value > 0);
+                const arc = d3.arc().innerRadius(r - thickness).outerRadius(r).cornerRadius(2);
+                g.selectAll("path").data(d3.pie().sort(null).value(d => d.value)(segs)).enter()
+                    .append("path").attr("d", arc).attr("fill", d => d.data.color)
+                    .append("title").text(d => `${d.data.label}: ${d.data.value}`);
+                const pct = stats.total > 0 ? Math.round(stats.covered / stats.total * 100) : 0;
+                g.append("text").attr("text-anchor", "middle").attr("dy", "-0.05em")
+                    .attr("font-size", "2rem").attr("font-weight", "700").attr("fill", "var(--text-primary)").text(pct + "%");
+                g.append("text").attr("text-anchor", "middle").attr("dy", "1.5em")
+                    .attr("font-size", "0.7rem").attr("fill", "var(--text-secondary)").text(`${stats.covered}/${stats.total} covered`);
+            }, [stats]);
+
+            if (stats.total === 0) return null;
+            const dot = (c) => <span style={{ color: c }}>●</span>;
+            return (
+                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'center',
+                    padding: '1.25rem', marginBottom: '1rem', border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-lg)', background: 'var(--bg-primary)', boxShadow: 'var(--shadow-sm)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.625rem' }}>
+                        <svg ref={donutRef} width="180" height="180" style={{ overflow: 'visible' }} />
+                        <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            <span>{dot('#16a34a')} Passing</span>
+                            <span>{dot('#dc2626')} Failing</span>
+                            <span>{dot('#d1d5db')} Uncovered</span>
+                        </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '300px' }}>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                            Coverage by epic <span style={{ fontWeight: '400' }}>({stats.epics.length})</span>
+                        </div>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                            gap: '0.5rem 1.5rem',
+                            maxHeight: '260px',
+                            overflowY: 'auto',
+                            paddingRight: '0.25rem'
+                        }}>
+                            {stats.epics.map(e => {
+                                const pct = Math.round(e.pct * 100);
+                                // Two axes in one bar: filled (green+red) = coverage breadth,
+                                // green vs red = pass/fail health, grey track = uncovered.
+                                const passPct = e.total > 0 ? (e.covered - e.failing) / e.total * 100 : 0;
+                                const failPct = e.total > 0 ? e.failing / e.total * 100 : 0;
+                                return (
+                                    <div
+                                        key={e.key}
+                                        title={`${e.key}: ${pct}% (${e.covered}/${e.total})${e.failing ? ', ' + e.failing + ' failing' : ''}`}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                        <IssueLink issueKey={e.key} jiraUrl={jiraUrl} style={{ display: 'block', fontFamily: 'monospace', color: 'var(--primary)', flex: '0 0 86px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} />
+                                        <div style={{ flex: 1, display: 'flex', height: '8px', background: '#d1d5db', borderRadius: '9999px', overflow: 'hidden', minWidth: '40px' }}>
+                                            <div style={{ width: passPct + '%', height: '100%', background: '#16a34a', transition: 'width 0.3s ease' }} />
+                                            <div style={{ width: failPct + '%', height: '100%', background: '#dc2626', transition: 'width 0.3s ease' }} />
+                                        </div>
+                                        <span style={{ flex: '0 0 32px', textAlign: 'right', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
             );
         }
 
@@ -7080,6 +7206,10 @@
             const [treeLoading, setTreeLoading] = React.useState(false);
             const [treeError, setTreeError] = React.useState(null);
             const [uncoveredOnly, setUncoveredOnly] = React.useState(false);
+            // Epic expansion is lifted here (rather than per-EpicRow) so the
+            // Expand all / Collapse all controls can drive every epic. Empty set
+            // = all collapsed, which is the default whenever a release loads.
+            const [expandedEpics, setExpandedEpics] = React.useState(() => new Set());
 
             React.useEffect(() => {
                 let cancelled = false;
@@ -7129,6 +7259,7 @@
                 try {
                     const data = await graphqlClient.query(GRAPHQL_QUERIES.REQUIREMENT_COVERAGE, { projectId, fixVersionName: name });
                     setTree(data.requirementCoverage);
+                    setExpandedEpics(new Set()); // new release → start fully collapsed
                 } catch (err) {
                     setTreeError(err.message || 'Failed to load coverage data');
                 } finally {
@@ -7159,6 +7290,16 @@
             } else {
                 groups = [{ label: null, versions: versions.filter(v => textOk(v)) }];
             }
+
+            const toggleEpic = (key) => setExpandedEpics(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) { next.delete(key); } else { next.add(key); }
+                return next;
+            });
+            const allEpicKeys = (tree && tree.epics) ? tree.epics.map(e => e.issue.key) : [];
+            const expandAllEpics = () => setExpandedEpics(new Set(allEpicKeys));
+            const collapseAllEpics = () => setExpandedEpics(new Set());
+            const treeBtnStyle = { background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.8125rem', fontWeight: '500', cursor: 'pointer', padding: '0.25rem 0.5rem', borderRadius: 'var(--radius-sm)' };
 
             return (
                 <div id="coverage-panel" style={{ padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
@@ -7216,26 +7357,56 @@
 
                             {tree && !treeLoading && (
                                 <>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
-                                        <input
-                                            type="checkbox"
-                                            id="coverage-uncovered-only"
-                                            checked={uncoveredOnly}
-                                            onChange={e => setUncoveredOnly(e.target.checked)}
-                                        />
-                                        <label htmlFor="coverage-uncovered-only" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
-                                            Show uncovered only
-                                        </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.875rem', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                id="coverage-uncovered-only"
+                                                checked={uncoveredOnly}
+                                                onChange={e => setUncoveredOnly(e.target.checked)}
+                                            />
+                                            <label htmlFor="coverage-uncovered-only" style={{ fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                                Show uncovered only
+                                            </label>
+                                        </div>
+                                        {tree.epics.length > 0 && !uncoveredOnly && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={expandAllEpics}
+                                                    style={treeBtnStyle}
+                                                    onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                                                    onMouseLeave={e => e.target.style.background = 'none'}
+                                                >Expand all</button>
+                                                <span style={{ color: 'var(--border-color)' }}>·</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={collapseAllEpics}
+                                                    style={treeBtnStyle}
+                                                    onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                                                    onMouseLeave={e => e.target.style.background = 'none'}
+                                                >Collapse all</button>
+                                            </div>
+                                        )}
                                     </div>
                                     {tree.epics.length > 0 && tree.epics.every(e => e.totalCount === 0) && (
-                                        <div role="alert" style={{ marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '0.375rem', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                        <div role="alert" style={{ marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                                             Epics found but no stories linked. This feature requires a <strong>team-managed (next-gen)</strong> JIRA project. Classic projects use a separate Epic Link field that is not yet supported.
                                         </div>
                                     )}
-                                    <div style={{ border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                                    <CoverageCharts tree={tree} jiraUrl={jiraUrl} />
+                                    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                                         <ReleaseSummary tree={tree} versionName={selectedVersion} />
                                         {tree.epics.map(epic => (
-                                            <EpicRow key={epic.issue.key} epic={epic} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
+                                            <EpicRow
+                                                key={epic.issue.key}
+                                                epic={epic}
+                                                jiraUrl={jiraUrl}
+                                                projectId={projectId}
+                                                uncoveredOnly={uncoveredOnly}
+                                                expanded={expandedEpics.has(epic.issue.key)}
+                                                onToggle={() => toggleEpic(epic.issue.key)}
+                                            />
                                         ))}
                                         {tree.unassigned.length > 0 && (
                                             <UnassignedSection stories={tree.unassigned} jiraUrl={jiraUrl} projectId={projectId} uncoveredOnly={uncoveredOnly} />
