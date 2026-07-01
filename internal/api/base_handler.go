@@ -50,7 +50,7 @@ func (h *BaseHandler) getTeamID(c *gin.Context) string {
 
 // getUserRole extracts the user role from the context
 func (h *BaseHandler) getUserRole(c *gin.Context) string {
-	role, ok := c.Get("role")
+	role, ok := c.Get("user_role")
 	if !ok || role == nil {
 		return ""
 	}

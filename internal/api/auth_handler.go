@@ -53,7 +53,7 @@ func (h *AuthHandler) getCurrentUser(c *gin.Context) {
 	userID := h.getUserID(c)
 	userName, _ := c.Get("user_name")
 	userEmail, _ := c.Get("user_email")
-	userRole, _ := c.Get("role")
+	userRole, _ := c.Get("user_role")
 	teamID, _ := c.Get("team_id")
 	teamName, _ := c.Get("team_name")
 

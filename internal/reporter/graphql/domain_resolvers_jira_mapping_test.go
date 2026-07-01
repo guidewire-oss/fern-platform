@@ -124,13 +124,15 @@ func newTestResolverWithJiraMapping(t *testing.T, mappingSvc *integrations.JiraF
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	// Default permissive project service: any projectID resolves to a project,
-	// and the standard test users "admin-1" and "manager-1" have project-scoped
-	// permissions on every project. Regular users (e.g. "user-1") have none and
-	// are rejected by the new project-scoped auth helper.
+	// Default permissive project service: any projectID resolves to a project.
+	// "admin-1" and "manager-1" hold Write; "reader-1" holds Read.
+	// Regular users (e.g. "user-1") have no row and are rejected by write checks.
 	projSvc := projectsApp.NewProjectService(
 		newAnyProjectRepo(),
-		newSeededPermissionRepo("admin-1", "manager-1"),
+		newMixedPermissionRepo(
+			[]string{"admin-1", "manager-1"},
+			[]string{"reader-1"},
+		),
 	)
 
 	r := NewResolver(nil, projSvc, nil, nil, connSvc, nil, db, logger)
@@ -170,28 +172,33 @@ func (a *anyProjectRepo) ExistsByProjectID(ctx context.Context, id projectsDomai
 	return id != "", nil
 }
 
-// seededPermissionRepo grants every listed user a Write permission on any
-// project they're queried for. Users not in the list get no permissions.
+// seededPermissionRepo grants each seeded user a specific permission on any
+// project they're queried for. Users not in the map get no permissions.
 type seededPermissionRepo struct {
-	allowedUsers map[string]struct{}
+	permissions map[string]projectsDomain.PermissionType
 }
 
-func newSeededPermissionRepo(userIDs ...string) *seededPermissionRepo {
-	s := &seededPermissionRepo{allowedUsers: make(map[string]struct{}, len(userIDs))}
-	for _, u := range userIDs {
-		s.allowedUsers[u] = struct{}{}
+// newMixedPermissionRepo seeds write users with PermissionWrite and read users with PermissionRead.
+func newMixedPermissionRepo(writeUsers, readUsers []string) *seededPermissionRepo {
+	m := make(map[string]projectsDomain.PermissionType, len(writeUsers)+len(readUsers))
+	for _, u := range writeUsers {
+		m[u] = projectsDomain.PermissionWrite
 	}
-	return s
+	for _, u := range readUsers {
+		m[u] = projectsDomain.PermissionRead
+	}
+	return &seededPermissionRepo{permissions: m}
 }
 
 func (s *seededPermissionRepo) Save(ctx context.Context, p *projectsDomain.ProjectPermission) error {
 	return nil
 }
 func (s *seededPermissionRepo) FindByProjectAndUser(ctx context.Context, projectID projectsDomain.ProjectID, userID string) ([]*projectsDomain.ProjectPermission, error) {
-	if _, ok := s.allowedUsers[userID]; !ok {
+	pt, ok := s.permissions[userID]
+	if !ok {
 		return nil, nil
 	}
-	perm, err := projectsDomain.NewProjectPermission(projectID, userID, projectsDomain.PermissionWrite, "test-seed")
+	perm, err := projectsDomain.NewProjectPermission(projectID, userID, pt, "test-seed")
 	if err != nil {
 		return nil, err
 	}
@@ -229,6 +236,26 @@ func regularUserCtxForMapping() context.Context {
 		UserID: "user-1",
 		Role:   authDomain.RoleUser,
 		Groups: []authDomain.UserGroup{{GroupName: "team-a"}},
+	})
+}
+
+// readOnlyUserCtxForMapping returns a non-admin user with a PermissionRead row in
+// the seeded permission repo. It must be DENIED writes but ALLOWED reads.
+func readOnlyUserCtxForMapping() context.Context {
+	return context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "reader-1",
+		Role:   authDomain.RoleUser,
+		Groups: []authDomain.UserGroup{},
+	})
+}
+
+// unownedAdminCtxForMapping returns an admin user whose UserID has NO permission
+// row in the seeded repo. The admin bypass must shortcut the missing row.
+func unownedAdminCtxForMapping() context.Context {
+	return context.WithValue(context.Background(), "user", &authDomain.User{
+		UserID: "admin-no-row",
+		Role:   authDomain.RoleAdmin,
+		Groups: []authDomain.UserGroup{},
 	})
 }
 
@@ -344,6 +371,41 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
+	})
+
+	t.Run("read-only user is allowed to read the mapping", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		snap := buildDefaultSnapshot("proj-1")
+		mapping := integrations.ReconstructJiraFieldMapping("proj-1", snap.Entries, "reader-1", snap.CreatedAt, snap.UpdatedAt)
+		mappingRepo := &fakeMappingRepo{mapping: mapping}
+		mappingSvc := integrations.NewJiraFieldMappingService(mappingRepo, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		qr := &queryResolver{resolver}
+
+		result, err := qr.JiraFieldMapping_domain(readOnlyUserCtxForMapping(), "proj-1")
+
+		require.NoError(t, err, "read-only user must be allowed to read the mapping")
+		require.NotNil(t, result)
+		assert.Equal(t, "proj-1", result.ProjectID)
+	})
+
+	t.Run("admin with no permission row is allowed to read the mapping", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		snap := buildDefaultSnapshot("proj-1")
+		mapping := integrations.ReconstructJiraFieldMapping("proj-1", snap.Entries, "admin-no-row", snap.CreatedAt, snap.UpdatedAt)
+		mappingRepo := &fakeMappingRepo{mapping: mapping}
+		mappingSvc := integrations.NewJiraFieldMappingService(mappingRepo, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		qr := &queryResolver{resolver}
+
+		result, err := qr.JiraFieldMapping_domain(unownedAdminCtxForMapping(), "proj-1")
+
+		require.NoError(t, err, "admin must bypass permission check even with no permission row")
+		require.NotNil(t, result)
 	})
 
 	t.Run("unauthenticated request is denied", func(t *testing.T) {
@@ -481,6 +543,40 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 		assert.Contains(t, err.Error(), "forbidden")
 	})
 
+	t.Run("read-only user is denied the write mutation", func(t *testing.T) {
+		// reader-1 has PermissionRead but not PermissionWrite; the write boundary must reject them.
+		activeConn := buildActiveConnection("proj-1")
+		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.SaveJiraFieldMapping_domain(readOnlyUserCtxForMapping(), validInput)
+
+		assert.Error(t, err, "read-only user must be denied write access")
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "forbidden")
+	})
+
+	t.Run("admin with no permission row is allowed the write mutation", func(t *testing.T) {
+		// admin-no-row has no permission row but is admin; the bypass must allow them.
+		activeConn := buildActiveConnection("proj-1")
+		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.SaveJiraFieldMapping_domain(unownedAdminCtxForMapping(), validInput)
+
+		require.NoError(t, err, "admin must bypass permission check even with no permission row")
+		require.NotNil(t, result)
+		assert.Equal(t, "proj-1", result.ProjectID)
+	})
+
 	t.Run("valid input saves and returns the mapping", func(t *testing.T) {
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
@@ -576,6 +672,36 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "forbidden")
+	})
+
+	t.Run("read-only user is denied the reset mutation", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.ResetJiraFieldMapping_domain(readOnlyUserCtxForMapping(), "proj-1")
+
+		assert.Error(t, err, "read-only user must be denied reset access")
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "forbidden")
+	})
+
+	t.Run("admin with no permission row is allowed the reset mutation", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
+
+		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.ResetJiraFieldMapping_domain(unownedAdminCtxForMapping(), "proj-1")
+
+		require.NoError(t, err, "admin must bypass permission check even with no permission row")
+		require.NotNil(t, result)
+		assert.Equal(t, "proj-1", result.ProjectID)
 	})
 
 	t.Run("manager resets and gets default mapping back", func(t *testing.T) {
