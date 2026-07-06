@@ -5,6 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/guidewire-oss/fern-platform?style=flat-square)](https://goreportcard.com/report/github.com/guidewire-oss/fern-platform)
 [![codecov](https://codecov.io/gh/guidewire-oss/fern-platform/branch/main/graph/badge.svg)](https://codecov.io/gh/guidewire-oss/fern-platform)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/guidewire-oss/fern-platform/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/guidewire-oss/fern-platform/actions/workflows/ci.yml)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/GfGQhMDAzS)
 
 A unified test intelligence platform that transforms fragmented test data into actionable insights.
 
@@ -276,6 +277,7 @@ Building a client for your favorite test framework? Check our [client developmen
 
 ## Community
 
+- 💬 [**Join our Discord**](https://discord.gg/GfGQhMDAzS) - Our community server is the primary place for discussion, questions, and help. The invite is open to everyone — click to join. *(Already a member? [Open the server](https://discord.com/channels/1503382684951379978).)*
 - [GitHub Discussions](https://github.com/guidewire-oss/fern-platform/discussions) - Ask questions and share ideas
 - [Issue Tracker](https://github.com/guidewire-oss/fern-platform/issues) - Report bugs or request features
 
