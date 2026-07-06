@@ -11,11 +11,9 @@ import (
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 )
 
-// authorizeProjectManagement enforces the canonical per-project authorization
-// used by every JIRA-related resolver. The caller must be authenticated AND
-// hold at least one project-level permission row for `projectID` — global
-// roles alone are not sufficient. Mirrors the pattern in
-// CreateJiraConnection / UpdateJiraConnection (schema.resolvers.go).
+// authorizeProjectManagement checks that the caller is authenticated and holds
+// at least read-level permission on the project (or is an admin). Used by
+// read-only JIRA resolvers (JiraFieldMapping_domain, JiraFields_domain).
 func (r *Resolver) authorizeProjectManagement(ctx context.Context, projectID string) (*authDomain.User, error) {
 	user, err := getCurrentUser(ctx)
 	if err != nil || user == nil {
@@ -30,9 +28,48 @@ func (r *Resolver) authorizeProjectManagement(ctx context.Context, projectID str
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		return nil, fmt.Errorf("forbidden")
+	if !user.IsAdmin() {
+		permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
+		if err != nil || len(permissions) == 0 {
+			return nil, fmt.Errorf("forbidden")
+		}
+	}
+
+	return user, nil
+}
+
+// authorizeProjectWrite checks that the caller is authenticated and holds
+// write-level permission on the project (or is an admin). Used by all JIRA
+// connection and field-mapping mutation resolvers.
+func (r *Resolver) authorizeProjectWrite(ctx context.Context, projectID string) (*authDomain.User, error) {
+	user, err := getCurrentUser(ctx)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(projectID))
+	if err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	if !user.IsAdmin() {
+		permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("forbidden")
+		}
+		canWrite := false
+		for _, p := range permissions {
+			if p.CanWrite() || p.CanAdmin() {
+				canWrite = true
+				break
+			}
+		}
+		if !canWrite {
+			return nil, fmt.Errorf("forbidden")
+		}
 	}
 
 	return user, nil
@@ -83,7 +120,7 @@ func (r *queryResolver) JiraFields_domain(ctx context.Context, connectionID stri
 
 // SaveJiraFieldMapping_domain validates and persists a field mapping for the project.
 func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, input model.SaveJiraFieldMappingInput) (*model.JiraFieldMapping, error) {
-	user, err := r.authorizeProjectManagement(ctx, input.ProjectID)
+	user, err := r.authorizeProjectWrite(ctx, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +154,7 @@ func (r *mutationResolver) SaveJiraFieldMapping_domain(ctx context.Context, inpu
 // ResetJiraFieldMapping_domain deletes any saved mapping for the project and
 // returns the default mapping snapshot.
 func (r *mutationResolver) ResetJiraFieldMapping_domain(ctx context.Context, projectID string) (*model.JiraFieldMapping, error) {
-	if _, err := r.authorizeProjectManagement(ctx, projectID); err != nil {
+	if _, err := r.authorizeProjectWrite(ctx, projectID); err != nil {
 		return nil, err
 	}
 

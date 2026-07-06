@@ -19,7 +19,7 @@ func authContextMiddleware(userID, userName, userEmail, role, teamID, teamName s
 		c.Set("user_id", userID)
 		c.Set("user_name", userName)
 		c.Set("user_email", userEmail)
-		c.Set("role", role)
+		c.Set("user_role", role)
 		c.Set("team_id", teamID)
 		c.Set("team_name", teamName)
 		c.Next()

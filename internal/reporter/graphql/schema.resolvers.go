@@ -7,14 +7,12 @@ package graphql
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
-	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/generated"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/model"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
@@ -288,24 +286,8 @@ func (r *mutationResolver) ToggleProjectFavorite(ctx context.Context, projectID 
 
 // CreateJiraConnection is the resolver for the createJiraConnection field.
 func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model.CreateJiraConnectionInput) (*model.JiraConnection, error) {
-	// Check if user can manage the project
-	user, err := getCurrentUser(ctx)
-	if err != nil || user == nil {
-		return nil, fmt.Errorf("unauthorized")
-	}
-
-	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(input.ProjectID))
-	if err != nil {
-		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Check if user has manager permissions for this project
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		return nil, fmt.Errorf("forbidden")
+	if _, err := r.authorizeProjectWrite(ctx, input.ProjectID); err != nil {
+		return nil, err
 	}
 
 	versionFilter := ""
@@ -332,9 +314,7 @@ func (r *mutationResolver) CreateJiraConnection(ctx context.Context, input model
 
 // UpdateJiraConnection is the resolver for the updateJiraConnection field.
 func (r *mutationResolver) UpdateJiraConnection(ctx context.Context, id string, input model.UpdateJiraConnectionInput) (*model.JiraConnection, error) {
-	// Check if user can manage the connection
-	user, err := getCurrentUser(ctx)
-	if err != nil || user == nil {
+	if _, err := getCurrentUser(ctx); err != nil {
 		return nil, fmt.Errorf("unauthorized")
 	}
 
@@ -343,18 +323,8 @@ func (r *mutationResolver) UpdateJiraConnection(ctx context.Context, id string, 
 		return nil, fmt.Errorf("connection not found")
 	}
 
-	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(connection.ProjectID()))
-	if err != nil {
-		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Check if user has manager permissions for this project
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		return nil, fmt.Errorf("forbidden")
+	if _, err := r.authorizeProjectWrite(ctx, connection.ProjectID()); err != nil {
+		return nil, err
 	}
 
 	versionFilter := ""
@@ -378,9 +348,7 @@ func (r *mutationResolver) UpdateJiraConnection(ctx context.Context, id string, 
 
 // UpdateJiraCredentials is the resolver for the updateJiraCredentials field.
 func (r *mutationResolver) UpdateJiraCredentials(ctx context.Context, id string, input model.UpdateJiraCredentialsInput) (*model.JiraConnection, error) {
-	// Check if user can manage the connection
-	user, err := getCurrentUser(ctx)
-	if err != nil || user == nil {
+	if _, err := getCurrentUser(ctx); err != nil {
 		return nil, fmt.Errorf("unauthorized")
 	}
 
@@ -389,18 +357,8 @@ func (r *mutationResolver) UpdateJiraCredentials(ctx context.Context, id string,
 		return nil, fmt.Errorf("connection not found")
 	}
 
-	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(connection.ProjectID()))
-	if err != nil {
-		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Check if user has manager permissions for this project
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		return nil, fmt.Errorf("forbidden")
+	if _, err := r.authorizeProjectWrite(ctx, connection.ProjectID()); err != nil {
+		return nil, err
 	}
 
 	updated, err := r.jiraConnectionService.UpdateCredentials(
@@ -419,9 +377,7 @@ func (r *mutationResolver) UpdateJiraCredentials(ctx context.Context, id string,
 
 // TestJiraConnection is the resolver for the testJiraConnection field.
 func (r *mutationResolver) TestJiraConnection(ctx context.Context, id string) (bool, error) {
-	// Check if user can manage the connection
-	user, err := getCurrentUser(ctx)
-	if err != nil || user == nil {
+	if _, err := getCurrentUser(ctx); err != nil {
 		r.logger.Errorf("TestJiraConnection: unauthorized user")
 		return false, fmt.Errorf("unauthorized")
 	}
@@ -432,23 +388,12 @@ func (r *mutationResolver) TestJiraConnection(ctx context.Context, id string) (b
 		return false, fmt.Errorf("connection not found")
 	}
 
-	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(connection.ProjectID()))
-	if err != nil {
-		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
-			r.logger.Errorf("TestJiraConnection: project not found: %v", err)
-			return false, err
-		}
-		return false, fmt.Errorf("failed to get project: %w", err)
+	if _, err := r.authorizeProjectWrite(ctx, connection.ProjectID()); err != nil {
+		r.logger.Errorf("TestJiraConnection: authorization failed for connection %s: %v", id, err)
+		return false, err
 	}
 
-	// Check if user has manager permissions for this project
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		r.logger.Errorf("TestJiraConnection: forbidden for user %s on project %s", user.UserID, project.ProjectID())
-		return false, fmt.Errorf("forbidden")
-	}
-
-	r.logger.Infof("Testing JIRA connection %s for project %s", id, project.ProjectID())
+	r.logger.Infof("Testing JIRA connection %s for project %s", id, connection.ProjectID())
 	if err := r.jiraConnectionService.TestConnection(ctx, id); err != nil {
 		r.logger.Errorf("TestJiraConnection failed: %v", err)
 		return false, nil // Return false but no error so GraphQL returns the boolean
@@ -460,9 +405,7 @@ func (r *mutationResolver) TestJiraConnection(ctx context.Context, id string) (b
 
 // DeleteJiraConnection is the resolver for the deleteJiraConnection field.
 func (r *mutationResolver) DeleteJiraConnection(ctx context.Context, id string) (bool, error) {
-	// Check if user can manage the connection
-	user, err := getCurrentUser(ctx)
-	if err != nil || user == nil {
+	if _, err := getCurrentUser(ctx); err != nil {
 		return false, fmt.Errorf("unauthorized")
 	}
 
@@ -471,18 +414,8 @@ func (r *mutationResolver) DeleteJiraConnection(ctx context.Context, id string) 
 		return false, fmt.Errorf("connection not found")
 	}
 
-	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(connection.ProjectID()))
-	if err != nil {
-		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
-			return false, err
-		}
-		return false, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Check if user has manager permissions for this project
-	permissions, err := r.projectService.GetUserPermissions(ctx, project.ProjectID(), user.UserID)
-	if err != nil || len(permissions) == 0 {
-		return false, fmt.Errorf("forbidden")
+	if _, err := r.authorizeProjectWrite(ctx, connection.ProjectID()); err != nil {
+		return false, err
 	}
 
 	if err := r.jiraConnectionService.DeleteConnection(ctx, id); err != nil {

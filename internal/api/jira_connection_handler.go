@@ -115,19 +115,19 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(projectID), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has write permission (needed to manage connections)
-	canManage := false
-	for _, perm := range permissions {
-		if perm.CanWrite() || perm.CanAdmin() {
-			canManage = true
-			break
+	canManage := h.isAdmin(c)
+	if !canManage {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(projectID), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanWrite() || perm.CanAdmin() {
+				canManage = true
+				break
+			}
 		}
 	}
 
@@ -177,6 +177,25 @@ func (h *JiraConnectionHandler) GetConnections(c *gin.Context) {
 		return
 	}
 
+	canView := h.isAdmin(c)
+	if !canView {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(projectID), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanRead() {
+				canView = true
+				break
+			}
+		}
+	}
+	if !canView {
+		h.ErrorResponse(c, http.StatusForbidden, "forbidden")
+		return
+	}
+
 	connections, err := h.jiraService.GetProjectConnections(c.Request.Context(), projectID)
 	if err != nil {
 		h.ErrorResponse(c, http.StatusInternalServerError, err.Error())
@@ -208,19 +227,19 @@ func (h *JiraConnectionHandler) GetConnection(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has read permission
-	canView := false
-	for _, perm := range permissions {
-		if perm.CanRead() {
-			canView = true
-			break
+	canView := h.isAdmin(c)
+	if !canView {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanRead() {
+				canView = true
+				break
+			}
 		}
 	}
 
@@ -249,19 +268,19 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has write permission
-	canManage := false
-	for _, perm := range permissions {
-		if perm.CanWrite() || perm.CanAdmin() {
-			canManage = true
-			break
+	canManage := h.isAdmin(c)
+	if !canManage {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanWrite() || perm.CanAdmin() {
+				canManage = true
+				break
+			}
 		}
 	}
 
@@ -314,19 +333,19 @@ func (h *JiraConnectionHandler) UpdateCredentials(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has write permission
-	canManage := false
-	for _, perm := range permissions {
-		if perm.CanWrite() || perm.CanAdmin() {
-			canManage = true
-			break
+	canManage := h.isAdmin(c)
+	if !canManage {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanWrite() || perm.CanAdmin() {
+				canManage = true
+				break
+			}
 		}
 	}
 
@@ -373,19 +392,19 @@ func (h *JiraConnectionHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has write permission
-	canManage := false
-	for _, perm := range permissions {
-		if perm.CanWrite() || perm.CanAdmin() {
-			canManage = true
-			break
+	canManage := h.isAdmin(c)
+	if !canManage {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanWrite() || perm.CanAdmin() {
+				canManage = true
+				break
+			}
 		}
 	}
 
@@ -419,19 +438,19 @@ func (h *JiraConnectionHandler) DeleteConnection(c *gin.Context) {
 		return
 	}
 
-	// Check project permissions
-	permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
-	if err != nil {
-		h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
-		return
-	}
-
 	// Check if user has write permission
-	canManage := false
-	for _, perm := range permissions {
-		if perm.CanWrite() || perm.CanAdmin() {
-			canManage = true
-			break
+	canManage := h.isAdmin(c)
+	if !canManage {
+		permissions, err := h.projectService.GetUserPermissions(c.Request.Context(), projectsDomain.ProjectID(connection.ProjectID()), userID)
+		if err != nil {
+			h.ErrorResponse(c, http.StatusInternalServerError, "failed to get permissions")
+			return
+		}
+		for _, perm := range permissions {
+			if perm.CanWrite() || perm.CanAdmin() {
+				canManage = true
+				break
+			}
 		}
 	}
 
