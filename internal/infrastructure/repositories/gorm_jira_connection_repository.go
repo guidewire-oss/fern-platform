@@ -20,11 +20,19 @@ func NewGormJiraConnectionRepository(db *gorm.DB) integrations.JiraConnectionRep
 // Create saves a new JIRA connection
 func (r *GormJiraConnectionRepository) Create(ctx context.Context, connection *integrations.JiraConnection) error {
 	model := r.toModel(connection)
-	
+	// toModel() populates ID for the Update path, where the domain object
+	// already carries a real numeric row ID as a string. A brand-new
+	// connection instead carries a throwaway construction-time UUID, which
+	// must never be forced onto the insert -- the database assigns the real
+	// primary key.
+	model.ID = 0
+
 	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
 		return fmt.Errorf("failed to create JIRA connection: %w", err)
 	}
-	
+
+	connection.SetID(fmt.Sprintf("%d", model.ID))
+
 	return nil
 }
 

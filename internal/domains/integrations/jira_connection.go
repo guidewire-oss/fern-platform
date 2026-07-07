@@ -147,6 +147,13 @@ func (j *JiraConnection) LastTestedAt() *time.Time {
 	return j.lastTestedAt
 }
 
+// SetID replaces the connection's identifier. Used by the repository after a
+// successful insert to replace the throwaway construction-time ID with the
+// real database-assigned primary key.
+func (j *JiraConnection) SetID(id string) {
+	j.id = id
+}
+
 // CreatedAt returns when the connection was created
 func (j *JiraConnection) CreatedAt() time.Time {
 	return j.createdAt
