@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -179,7 +180,7 @@ func (h *SavedViewHandler) delete(c *gin.Context) {
 		return
 	}
 	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || id64 > math.MaxUint {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be a positive integer"})
 		return
 	}

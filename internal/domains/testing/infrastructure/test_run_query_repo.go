@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"time"
@@ -327,6 +328,9 @@ func decodeCursor(s string) (time.Time, uint, error) {
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("malformed cursor id: %w", err)
+	}
+	if id > math.MaxUint {
+		return time.Time{}, 0, fmt.Errorf("malformed cursor id: out of range")
 	}
 	return time.Unix(0, tsNs).UTC(), uint(id), nil
 }
