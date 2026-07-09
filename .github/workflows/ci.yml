@@ -200,13 +200,16 @@ jobs:
     - uses: actions/dependency-review-action@v4.7.1
       with:
         fail-on-severity: moderate
-        # Only block on vulnerabilities in shipped (runtime) dependencies.
-        # The web-v2 toolchain (vite, esbuild, vitest, jsdom, graphql-codegen
-        # and their transitives such as lodash/ws/form-data) pulls in dev-only
-        # CVEs that never reach the production bundle; several have no in-place
-        # patch. Gating every PR on dev-tooling advisories is noise — runtime
-        # deps are still fully enforced.
-        fail-on-scopes: runtime
+        # Allow-list of advisories confined to the web-v2 dev/build/test
+        # toolchain (babel, esbuild, vite, ws, lodash, form-data, immutable,
+        # js-yaml — pulled via graphql-codegen / jsdom / vite). None reach the
+        # shipped production bundle (verified: no runtime dependency path), and
+        # several have no in-place patch on the pinned major (e.g. vite's
+        # server.fs.deny fix lands only in 6.x). fail-on-scopes can't filter
+        # these because GitHub's dependency graph carries no dev/runtime scope
+        # for the pnpm lockfile. Runtime deps stay fully enforced at moderate+.
+        # Revisit when the web-v2 toolchain is upgraded.
+        allow-ghsas: GHSA-4x5r-pxfx-6jf8,GHSA-67mh-4wv8-2f99,GHSA-hmw2-7cc7-3qxx,GHSA-wf6x-7x77-mvgw,GHSA-h67p-54hq-rp68,GHSA-r5fr-rjxr-66jc,GHSA-f23m-r3pf-42rh,GHSA-4w7w-66w2-5vf9,GHSA-v6wh-96g9-6wx3,GHSA-fx2h-pf6j-xcff,GHSA-96hv-2xvq-fx4p
 
   build:
     name: Build Images
