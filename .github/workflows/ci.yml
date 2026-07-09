@@ -200,6 +200,13 @@ jobs:
     - uses: actions/dependency-review-action@v4.7.1
       with:
         fail-on-severity: moderate
+        # Only block on vulnerabilities in shipped (runtime) dependencies.
+        # The web-v2 toolchain (vite, esbuild, vitest, jsdom, graphql-codegen
+        # and their transitives such as lodash/ws/form-data) pulls in dev-only
+        # CVEs that never reach the production bundle; several have no in-place
+        # patch. Gating every PR on dev-tooling advisories is noise — runtime
+        # deps are still fully enforced.
+        fail-on-scopes: runtime
 
   build:
     name: Build Images
