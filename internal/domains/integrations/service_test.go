@@ -116,7 +116,7 @@ func TestJiraConnectionService_TestConnection_ActivatesOnSuccess(t *testing.T) {
 	key := make([]byte, 32) // zero key is fine for unit tests
 	repo := newMockConnectionRepo()
 	client := &mockJiraClientSvc{}
-	svc := integrations.NewJiraConnectionService(repo, client, key)
+	svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 	stored := buildStoredConnection(t, key)
 	repo.stored[stored.ID()] = stored
@@ -135,7 +135,7 @@ func TestJiraConnectionService_TestConnection_NotActivatedOnFailure(t *testing.T
 	key := make([]byte, 32)
 	repo := newMockConnectionRepo()
 	client := &mockJiraClientSvc{err: errors.New("auth failed")}
-	svc := integrations.NewJiraConnectionService(repo, client, key)
+	svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 	stored := buildStoredConnection(t, key)
 	repo.stored[stored.ID()] = stored
@@ -159,7 +159,7 @@ func TestJiraConnectionService_ListJiraFields(t *testing.T) {
 			{ID: "status", Name: "Status", Custom: false},
 		}
 		client := &mockJiraClientSvc{fields: wantFields}
-		svc := integrations.NewJiraConnectionService(repo, client, key)
+		svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 		stored := buildStoredConnection(t, key)
 		repo.stored[stored.ID()] = stored
@@ -172,7 +172,7 @@ func TestJiraConnectionService_ListJiraFields(t *testing.T) {
 	t.Run("returns error when connection not found", func(t *testing.T) {
 		repo := newMockConnectionRepo()
 		client := &mockJiraClientSvc{}
-		svc := integrations.NewJiraConnectionService(repo, client, key)
+		svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 		_, err := svc.ListJiraFields(context.Background(), "nonexistent-id")
 		require.Error(t, err)
@@ -182,7 +182,7 @@ func TestJiraConnectionService_ListJiraFields(t *testing.T) {
 		repo := newMockConnectionRepo()
 		clientErr := errors.New("JIRA unavailable")
 		client := &mockJiraClientSvc{err: clientErr}
-		svc := integrations.NewJiraConnectionService(repo, client, key)
+		svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 		stored := buildStoredConnection(t, key)
 		repo.stored[stored.ID()] = stored
@@ -193,11 +193,71 @@ func TestJiraConnectionService_ListJiraFields(t *testing.T) {
 	})
 }
 
+func TestJiraConnectionService_DisabledIntegration(t *testing.T) {
+	newDisabledService := func() (*integrations.JiraConnectionService, *mockConnectionRepo) {
+		repo := newMockConnectionRepo()
+		client := &mockJiraClientSvc{}
+		svc := integrations.NewJiraConnectionService(repo, client, nil, false)
+		return svc, repo
+	}
+
+	t.Run("IsEnabled reports false", func(t *testing.T) {
+		svc, _ := newDisabledService()
+		assert.False(t, svc.IsEnabled())
+	})
+
+	t.Run("CreateConnection is rejected without touching the repo", func(t *testing.T) {
+		svc, repo := newDisabledService()
+		_, err := svc.CreateConnection(context.Background(), "proj-1", "Test", "https://jira.example.com",
+			integrations.AuthTypeAPIToken, "PROJ", "user@example.com", "token", "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, integrations.ErrJiraDisabled)
+		assert.Empty(t, repo.stored, "repo must not be written to when integration is disabled")
+	})
+
+	t.Run("UpdateConnection is rejected without touching the repo", func(t *testing.T) {
+		svc, repo := newDisabledService()
+		_, err := svc.UpdateConnection(context.Background(), "conn-1", "New Name", "https://jira.example.com", "PROJ", "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, integrations.ErrJiraDisabled)
+		assert.Equal(t, 0, repo.updateCount, "repo must not be written to when integration is disabled")
+	})
+
+	t.Run("UpdateCredentials is rejected without touching the repo", func(t *testing.T) {
+		svc, repo := newDisabledService()
+		_, err := svc.UpdateCredentials(context.Background(), "conn-1", integrations.AuthTypeAPIToken, "user@example.com", "token")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, integrations.ErrJiraDisabled)
+		assert.Equal(t, 0, repo.updateCount, "repo must not be written to when integration is disabled")
+	})
+
+	t.Run("TestConnection is rejected without touching the repo", func(t *testing.T) {
+		svc, repo := newDisabledService()
+		err := svc.TestConnection(context.Background(), "conn-1")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, integrations.ErrJiraDisabled)
+		assert.Equal(t, 0, repo.updateCount, "repo must not be written to when integration is disabled")
+	})
+
+	t.Run("enabling integration allows CreateConnection to succeed", func(t *testing.T) {
+		key := make([]byte, 32)
+		repo := newMockConnectionRepo()
+		client := &mockJiraClientSvc{}
+		svc := integrations.NewJiraConnectionService(repo, client, key, true)
+
+		conn, err := svc.CreateConnection(context.Background(), "proj-1", "Test", "https://jira.example.com",
+			integrations.AuthTypeAPIToken, "PROJ", "user@example.com", "token", "")
+		require.NoError(t, err)
+		assert.NotNil(t, conn)
+		assert.True(t, svc.IsEnabled())
+	})
+}
+
 func TestJiraConnectionService_TestConnection_EncryptedCredentialPreservedAfterTest(t *testing.T) {
 	key := make([]byte, 32)
 	repo := newMockConnectionRepo()
 	client := &mockJiraClientSvc{}
-	svc := integrations.NewJiraConnectionService(repo, client, key)
+	svc := integrations.NewJiraConnectionService(repo, client, key, true)
 
 	stored := buildStoredConnection(t, key)
 	originalEncrypted := stored.GetEncryptedCredentialDirect()

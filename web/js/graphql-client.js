@@ -426,6 +426,12 @@ const QUERIES = {
     `,
     
     // JIRA Connection queries
+    GET_JIRA_INTEGRATION_ENABLED: `
+        query GetJiraIntegrationEnabled {
+            jiraIntegrationEnabled
+        }
+    `,
+
     GET_JIRA_CONNECTIONS: `
         query GetJiraConnections($projectId: String!) {
             jiraConnections(projectId: $projectId) {

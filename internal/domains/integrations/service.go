@@ -11,19 +11,30 @@ type JiraConnectionService struct {
 	repo           JiraConnectionRepository
 	jiraClient     JiraClient
 	encryptionKey  []byte
+	enabled        bool
 }
 
 // NewJiraConnectionService creates a new JIRA connection service
-func NewJiraConnectionService(repo JiraConnectionRepository, jiraClient JiraClient, encryptionKey []byte) *JiraConnectionService {
+func NewJiraConnectionService(repo JiraConnectionRepository, jiraClient JiraClient, encryptionKey []byte, enabled bool) *JiraConnectionService {
 	return &JiraConnectionService{
 		repo:          repo,
 		jiraClient:    jiraClient,
 		encryptionKey: encryptionKey,
+		enabled:       enabled,
 	}
+}
+
+// IsEnabled returns whether JIRA integration is enabled
+func (s *JiraConnectionService) IsEnabled() bool {
+	return s.enabled
 }
 
 // CreateConnection creates a new JIRA connection
 func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID, name, jiraURL string, authType AuthenticationType, projectKey, username, credential, versionFilter string) (*JiraConnection, error) {
+	if !s.enabled {
+		return nil, ErrJiraDisabled
+	}
+
 	// Check if a connection already exists for this project
 	existingConnections, err := s.repo.FindByProjectID(ctx, projectID)
 	if err != nil {
@@ -61,6 +72,10 @@ func (s *JiraConnectionService) CreateConnection(ctx context.Context, projectID,
 
 // UpdateConnection updates an existing JIRA connection
 func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connectionID, name, jiraURL, projectKey, versionFilter string) (*JiraConnection, error) {
+	if !s.enabled {
+		return nil, ErrJiraDisabled
+	}
+
 	// Retrieve the connection
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
@@ -82,6 +97,10 @@ func (s *JiraConnectionService) UpdateConnection(ctx context.Context, connection
 
 // UpdateCredentials updates the credentials for a JIRA connection
 func (s *JiraConnectionService) UpdateCredentials(ctx context.Context, connectionID string, authType AuthenticationType, username, credential string) (*JiraConnection, error) {
+	if !s.enabled {
+		return nil, ErrJiraDisabled
+	}
+
 	// Retrieve the connection
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
@@ -110,6 +129,10 @@ func (s *JiraConnectionService) UpdateCredentials(ctx context.Context, connectio
 
 // TestConnection tests a JIRA connection
 func (s *JiraConnectionService) TestConnection(ctx context.Context, connectionID string) error {
+	if !s.enabled {
+		return ErrJiraDisabled
+	}
+
 	// Retrieve the connection
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {

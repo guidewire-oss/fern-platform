@@ -131,7 +131,7 @@ func buildJiraConnectionHandler(t *testing.T, permRepo projectsDomain.ProjectPer
 	require.NoError(t, err)
 
 	key := []byte("0123456789abcdef")
-	connSvc := integrations.NewJiraConnectionService(&jiraHandlerTestConnRepo{}, &jiraHandlerTestJiraClient{}, key)
+	connSvc := integrations.NewJiraConnectionService(&jiraHandlerTestConnRepo{}, &jiraHandlerTestJiraClient{}, key, true)
 	projSvc := projectsApp.NewProjectService(&jiraHandlerTestProjectRepo{}, permRepo)
 
 	base := NewBaseHandler(logger)

@@ -106,8 +106,13 @@ type JiraConnectionResponse struct {
 
 // CreateConnection creates a new JIRA connection
 func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
+	if !h.jiraService.IsEnabled() {
+		h.ErrorResponse(c, http.StatusServiceUnavailable, "JIRA integration is not configured; set JIRA_ENCRYPTION_KEY environment variable to enable it")
+		return
+	}
+
 	projectID := c.Param("projectId")
-	
+
 	// Check if user can manage the project
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -253,8 +258,13 @@ func (h *JiraConnectionHandler) GetConnection(c *gin.Context) {
 
 // UpdateConnection updates a JIRA connection
 func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
+	if !h.jiraService.IsEnabled() {
+		h.ErrorResponse(c, http.StatusServiceUnavailable, "JIRA integration is not configured; set JIRA_ENCRYPTION_KEY environment variable to enable it")
+		return
+	}
+
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -318,8 +328,13 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 
 // UpdateCredentials updates JIRA connection credentials
 func (h *JiraConnectionHandler) UpdateCredentials(c *gin.Context) {
+	if !h.jiraService.IsEnabled() {
+		h.ErrorResponse(c, http.StatusServiceUnavailable, "JIRA integration is not configured; set JIRA_ENCRYPTION_KEY environment variable to enable it")
+		return
+	}
+
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -377,8 +392,13 @@ func (h *JiraConnectionHandler) UpdateCredentials(c *gin.Context) {
 
 // TestConnection tests a JIRA connection
 func (h *JiraConnectionHandler) TestConnection(c *gin.Context) {
+	if !h.jiraService.IsEnabled() {
+		h.ErrorResponse(c, http.StatusServiceUnavailable, "JIRA integration is not configured; set JIRA_ENCRYPTION_KEY environment variable to enable it")
+		return
+	}
+
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {

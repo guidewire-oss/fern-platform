@@ -71,12 +71,17 @@ services:
       DB_HOST: postgres
       DB_PASSWORD: postgres
       REDIS_HOST: redis
+      # Optional: Only needed if using JIRA integration
+      # Generate with: openssl rand -hex 32
+      JIRA_ENCRYPTION_KEY: ""
     depends_on:
       - postgres
       - redis
 ```
 
 Run: `docker-compose up -d`
+
+> **Note**: Set `JIRA_ENCRYPTION_KEY` to a 64-character hex string (generated with `openssl rand -hex 32`) only if you plan to use JIRA integration. If not using JIRA, you can leave it empty.
 
 Visit `http://localhost:8080`
 
@@ -435,6 +440,9 @@ Set your environment variables:
 ```bash
 export FERN_URL=http://fern-platform.local:8080
 export FERN_PROJECT_ID=your-project-id
+
+# Optional: Only if using JIRA integration
+export JIRA_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
 Run your tests as usual - results will automatically appear in Fern Platform!
@@ -525,6 +533,7 @@ Copy this checklist to track your progress:
 - [ ] Submitted first test data via API
 - [ ] Test run appears in dashboard
 - [ ] Configured CI/CD integration (optional)
+- [ ] Set up JIRA integration (optional, see [JIRA Integration Guide](../configuration/jira-integration.md))
 - [ ] Added AI API keys (optional)
 
 ### Next Steps
