@@ -16,6 +16,13 @@ linters:
     - lll
     - unparam
 
+linters-settings:
+  misspell:
+    # "capitola" is the project/pod name (see cmd/seed seed data), not a
+    # misspelling of "capital". Keep it out of misspell's dictionary.
+    ignore-words:
+      - capitola
+
 issues:
   exclude-rules:
     # Skip generated files

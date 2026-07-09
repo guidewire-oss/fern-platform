@@ -1191,7 +1191,7 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 						// continuous passRate (PassedRuns/TotalRuns)
 						// below so a spec that's 99% green renders the
 						// same shade as its 99%-green parent suite.
-						status := "passed"
+						var status string
 						switch {
 						case sp.PassedRuns >= sp.FailedRuns && sp.PassedRuns >= sp.SkippedRuns:
 							status = "passed"

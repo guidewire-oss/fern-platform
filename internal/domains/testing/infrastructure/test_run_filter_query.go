@@ -1,7 +1,6 @@
 package infrastructure
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
@@ -85,14 +84,13 @@ func BuildTestRunWhere(f domain.TestRunFilter) ([]string, []any) {
 				args = append(args, tag)
 			}
 		default: // LogicOr (default)
-			clauses = append(clauses, fmt.Sprintf(
-				`EXISTS (
+			clauses = append(clauses, `EXISTS (
 					SELECT 1 FROM suite_runs sr
 					JOIN suite_run_tags srt ON srt.suite_run_id = sr.id
 					JOIN tags t ON t.id = srt.tag_id
 					WHERE sr.test_run_id = test_runs.id
 					  AND t.name IN (?)
-				)`))
+				)`)
 			args = append(args, f.Tags)
 		}
 	}

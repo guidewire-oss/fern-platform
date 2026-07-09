@@ -19,7 +19,6 @@ type recordingTracer struct {
 type recordedSpan struct {
 	name string
 	attrs map[string]any
-	endedWithError bool
 }
 
 func (r *recordingTracer) Start(_ context.Context, name string) (context.Context, tracing.Span) {
