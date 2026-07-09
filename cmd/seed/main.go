@@ -18,6 +18,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	// math/rand is intentional here: this is dev-only seed tooling that
+	// generates fake demo data, deliberately seeded per project so reruns
+	// produce identical data (see the NewSource calls below). A CSPRNG
+	// (crypto/rand, imported above only for opaque fake SHAs) cannot be
+	// seeded and would break that reproducibility. No value drawn from
+	// mathrand here is security-sensitive.
 	mathrand "math/rand"
 	"os"
 	"strconv"

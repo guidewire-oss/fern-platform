@@ -5,6 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	// math/rand is intentional here: this is dev-only seed tooling that
+	// generates fake demo data, and it is deliberately seeded so reruns
+	// produce identical data (see the NewSource call below). A CSPRNG
+	// (crypto/rand) cannot be seeded and would break that reproducibility.
+	// No value produced here is security-sensitive.
 	mathrand "math/rand"
 	"strings"
 	"time"

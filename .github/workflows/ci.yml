@@ -116,8 +116,16 @@ jobs:
     name: Web v2 (typecheck · lint · test · build · schema check)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Read-only token: this job only checks out and builds. Keeps the
+    # blast radius minimal if a dependency in the build is compromised.
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      # Actions pinned to full commit SHAs (not moving tags) so an action
+      # owner cannot silently repoint a tag at malicious code in our runner.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
 
       - name: GraphQL schema drift check
         # Backend SDL is the source of truth; web-v2 keeps a synced
@@ -128,11 +136,11 @@ jobs:
                   web-v2/src/gql/schema.graphql \
             || { echo "::error::GraphQL schema drift between backend and web-v2 copy. Sync the two files."; exit 1; }
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'pnpm'
