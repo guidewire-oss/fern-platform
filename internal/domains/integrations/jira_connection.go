@@ -14,26 +14,24 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // JiraConnection represents a JIRA integration connection
 type JiraConnection struct {
-	id                 string
-	projectID          string
-	name               string
-	jiraURL            string
-	authenticationType AuthenticationType
-	projectKey         string
-	username           string
+	id                  string
+	projectID           string
+	name                string
+	jiraURL             string
+	authenticationType  AuthenticationType
+	projectKey          string
+	username            string
 	encryptedCredential string
-	status             ConnectionStatus
-	isActive           bool
-	versionFilter      string
-	lastTestedAt       *time.Time
-	createdAt          time.Time
-	updatedAt          time.Time
+	status              ConnectionStatus
+	isActive            bool
+	versionFilter       string
+	lastTestedAt        *time.Time
+	createdAt           time.Time
+	updatedAt           time.Time
 }
 
 // JiraClient interface for testing connections
@@ -66,18 +64,20 @@ func NewJiraConnection(projectID, name, jiraURL string, authType AuthenticationT
 
 	now := time.Now()
 	return &JiraConnection{
-		id:                 uuid.New().String(),
-		projectID:          projectID,
-		name:               name,
-		jiraURL:            strings.TrimRight(jiraURL, "/"),
-		authenticationType: authType,
-		projectKey:         projectKey,
-		username:           username,
+		// id is intentionally left empty: this connection has no row yet, so
+		// there is no real identity to assign. The repository's Create call
+		// sets the database-assigned numeric ID via SetID after insert.
+		projectID:           projectID,
+		name:                name,
+		jiraURL:             strings.TrimRight(jiraURL, "/"),
+		authenticationType:  authType,
+		projectKey:          projectKey,
+		username:            username,
 		encryptedCredential: credential, // Will be encrypted when saved
-		status:             ConnectionStatusPending,
-		isActive:           false,
-		createdAt:          now,
-		updatedAt:          now,
+		status:              ConnectionStatusPending,
+		isActive:            false,
+		createdAt:           now,
+		updatedAt:           now,
 	}, nil
 }
 
@@ -147,9 +147,9 @@ func (j *JiraConnection) LastTestedAt() *time.Time {
 	return j.lastTestedAt
 }
 
-// SetID replaces the connection's identifier. Used by the repository after a
-// successful insert to replace the throwaway construction-time ID with the
-// real database-assigned primary key.
+// SetID assigns the connection's identifier. Used by the repository after a
+// successful insert to give a newly-created connection its real
+// database-assigned primary key.
 func (j *JiraConnection) SetID(id string) {
 	j.id = id
 }
@@ -204,7 +204,7 @@ func (j *JiraConnection) UpdateCredentials(authType AuthenticationType, username
 // TestConnection tests the JIRA connection
 func (j *JiraConnection) TestConnection(ctx context.Context, client JiraClient) error {
 	log.Printf("[JiraConnection] Testing connection for ID: %s, URL: %s", j.id, j.jiraURL)
-	
+
 	err := client.TestConnection(ctx, j.jiraURL, j.username, j.encryptedCredential, j.authenticationType)
 	now := time.Now()
 	j.lastTestedAt = &now
