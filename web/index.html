@@ -7430,6 +7430,7 @@
             const [showFieldMapping, setShowFieldMapping] = useState(false);
             const [mappingConnection, setMappingConnection] = useState(null);
             const [jiraIntegrationEnabled, setJiraIntegrationEnabled] = useState(true);
+            const [jiraIntegrationEnabledLoaded, setJiraIntegrationEnabledLoaded] = useState(false);
 
             useEffect(() => {
                 fetchConnections();
@@ -7457,6 +7458,8 @@
                     // Fail open: don't block the UI on this check failing; the
                     // save/test calls themselves still enforce the real state.
                     setJiraIntegrationEnabled(true);
+                } finally {
+                    setJiraIntegrationEnabledLoaded(true);
                 }
             };
 
@@ -7562,7 +7565,7 @@
                 );
             };
 
-            if (loading) {
+            if (loading || !jiraIntegrationEnabledLoaded) {
                 return (
                     <div style={{ padding: '2rem', textAlign: 'center' }}>
                         <div className="loading-spinner"></div>

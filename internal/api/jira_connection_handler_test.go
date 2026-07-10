@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
@@ -226,4 +228,159 @@ func TestJiraConnectionHandler_UnauthenticatedUserIsRejected(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code, "request with no user_id must be rejected")
+}
+
+// ---------------------------------------------------------------------------
+// Disabled-integration ordering: the "JIRA not configured" check must never
+// run ahead of authentication/authorization, or an unauthenticated/forbidden
+// caller learns global server configuration state instead of getting the
+// normal 401/403.
+// ---------------------------------------------------------------------------
+
+// jiraHandlerTestConnRepoWithConnection always resolves FindByID to a single
+// seeded connection, for handlers (Update/UpdateCredentials/TestConnection)
+// that must look up a connection's ProjectID before the permission check.
+type jiraHandlerTestConnRepoWithConnection struct {
+	jiraHandlerTestConnRepo
+	conn *integrations.JiraConnection
+}
+
+func (r *jiraHandlerTestConnRepoWithConnection) FindByID(ctx context.Context, id string) (*integrations.JiraConnection, error) {
+	return r.conn, nil
+}
+
+func buildJiraConnectionHandlerForEnabledState(t *testing.T, permRepo projectsDomain.ProjectPermissionRepository, enabled bool) (*JiraConnectionHandler, *gin.Engine) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	logger, err := logging.NewLogger(&config.LoggingConfig{Level: "error", Format: "json"})
+	require.NoError(t, err)
+
+	conn := integrations.ReconstructJiraConnection(
+		"conn-1", "proj-1", "My JIRA", "https://jira.example.com",
+		integrations.AuthTypeAPIToken, "PROJ", "user@example.com", "encrypted-cred",
+		integrations.ConnectionStatusPending, false, "", nil, time.Now(), time.Now(),
+	)
+	connRepo := &jiraHandlerTestConnRepoWithConnection{conn: conn}
+
+	var key []byte
+	if enabled {
+		key = []byte("0123456789abcdef")
+	}
+	connSvc := integrations.NewJiraConnectionService(connRepo, &jiraHandlerTestJiraClient{}, key, enabled)
+	projSvc := projectsApp.NewProjectService(&jiraHandlerTestProjectRepo{}, permRepo)
+
+	base := NewBaseHandler(logger)
+	handler := NewJiraConnectionHandler(base, connSvc, projSvc)
+	router := gin.New()
+	return handler, router
+}
+
+func TestJiraConnectionHandler_DisabledIntegration_CreateConnection(t *testing.T) {
+	t.Run("unauthenticated request is rejected as unauthorized, not disabled", func(t *testing.T) {
+		handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo(), false)
+		router.POST("/projects/:projectId/jira-connections", handler.CreateConnection)
+
+		req := httptest.NewRequest("POST", "/projects/proj-1/jira-connections", strings.NewReader(""))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code,
+			"an unauthenticated caller must not learn the JIRA configuration state")
+	})
+
+	t.Run("forbidden user is rejected as forbidden, not disabled", func(t *testing.T) {
+		handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo(), false) // no permission rows
+		router.Use(productionContextMiddleware("user-1", "user"))
+		router.POST("/projects/:projectId/jira-connections", handler.CreateConnection)
+
+		req := httptest.NewRequest("POST", "/projects/proj-1/jira-connections", strings.NewReader(""))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code,
+			"a caller without project access must not learn the JIRA configuration state")
+	})
+
+	t.Run("authorized user gets 503 when JIRA is disabled", func(t *testing.T) {
+		handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo("user-1"), false)
+		router.Use(productionContextMiddleware("user-1", "user"))
+		router.POST("/projects/:projectId/jira-connections", handler.CreateConnection)
+
+		req := httptest.NewRequest("POST", "/projects/proj-1/jira-connections", strings.NewReader(""))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	})
+}
+
+func TestJiraConnectionHandler_DisabledIntegration_ConnectionScopedMutations(t *testing.T) {
+	cases := []struct {
+		name      string
+		method    string
+		routePath string
+		reqPath   string
+		handlerFn func(*JiraConnectionHandler) gin.HandlerFunc
+	}{
+		{
+			name:      "UpdateConnection",
+			method:    "PUT",
+			routePath: "/jira-connections/:connectionId",
+			reqPath:   "/jira-connections/conn-1",
+			handlerFn: func(h *JiraConnectionHandler) gin.HandlerFunc { return h.UpdateConnection },
+		},
+		{
+			name:      "UpdateCredentials",
+			method:    "PUT",
+			routePath: "/jira-connections/:connectionId/credentials",
+			reqPath:   "/jira-connections/conn-1/credentials",
+			handlerFn: func(h *JiraConnectionHandler) gin.HandlerFunc { return h.UpdateCredentials },
+		},
+		{
+			name:      "TestConnection",
+			method:    "POST",
+			routePath: "/jira-connections/:connectionId/test",
+			reqPath:   "/jira-connections/conn-1/test",
+			handlerFn: func(h *JiraConnectionHandler) gin.HandlerFunc { return h.TestConnection },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+"/unauthenticated returns 401 not 503", func(t *testing.T) {
+			handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo(), false)
+			router.Handle(tc.method, tc.routePath, tc.handlerFn(handler))
+
+			req := httptest.NewRequest(tc.method, tc.reqPath, strings.NewReader(""))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code,
+				"an unauthenticated caller must not learn the JIRA configuration state")
+		})
+
+		t.Run(tc.name+"/forbidden returns 403 not 503", func(t *testing.T) {
+			handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo(), false) // no permission rows
+			router.Use(productionContextMiddleware("user-1", "user"))
+			router.Handle(tc.method, tc.routePath, tc.handlerFn(handler))
+
+			req := httptest.NewRequest(tc.method, tc.reqPath, strings.NewReader(""))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusForbidden, w.Code,
+				"a caller without project access must not learn the JIRA configuration state")
+		})
+
+		t.Run(tc.name+"/authorized gets 503 when JIRA is disabled", func(t *testing.T) {
+			handler, router := buildJiraConnectionHandlerForEnabledState(t, newJiraHandlerPermRepo("user-1"), false)
+			router.Use(productionContextMiddleware("user-1", "user"))
+			router.Handle(tc.method, tc.routePath, tc.handlerFn(handler))
+
+			req := httptest.NewRequest(tc.method, tc.reqPath, strings.NewReader(""))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		})
+	}
 }

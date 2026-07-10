@@ -191,6 +191,22 @@ func TestJiraConnectionService_ListJiraFields(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, clientErr)
 	})
+
+	t.Run("returns ErrJiraDisabled instead of a raw crypto error when disabled", func(t *testing.T) {
+		// A connection created while JIRA was enabled can still exist in the
+		// database after JIRA_ENCRYPTION_KEY is unset. Reading its fields must
+		// not reach DecryptCredential with a nil key.
+		repo := newMockConnectionRepo()
+		client := &mockJiraClientSvc{}
+		svc := integrations.NewJiraConnectionService(repo, client, nil, false)
+
+		stored := buildStoredConnection(t, key)
+		repo.stored[stored.ID()] = stored
+
+		_, err := svc.ListJiraFields(context.Background(), stored.ID())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, integrations.ErrJiraDisabled)
+	})
 }
 
 func TestJiraConnectionService_DisabledIntegration(t *testing.T) {
