@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -168,6 +168,7 @@ function readTabFromHash(): TabId {
 
 function GeneralTab({ project }: { project: Project }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const update = useUpdateProject();
   const del = useDeleteProject();
 
@@ -276,7 +277,17 @@ function GeneralTab({ project }: { project: Project }) {
                     <Button
                       variant="danger"
                       disabled={!matches || del.isPending}
-                      onClick={() => del.mutate(project.id)}
+                      // Navigate back to the list on success: the current
+                      // route is this project's own settings page, so without
+                      // leaving it the page's project query refetches, finds
+                      // the project gone, and collapses into a "not found"
+                      // empty state (looks like a refresh). The list path
+                      // works because it's already on /projects.
+                      onClick={() =>
+                        del.mutate(project.id, {
+                          onSuccess: () => navigate({ to: '/projects' }),
+                        })
+                      }
                     >
                       {del.isPending ? <Spinner className="text-white" /> : 'Delete project forever'}
                     </Button>
