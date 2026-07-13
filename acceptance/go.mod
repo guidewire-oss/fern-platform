@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
-	github.com/playwright-community/playwright-go v0.4802.0
+	github.com/playwright-community/playwright-go v0.5200.1
 )
 
 require (
