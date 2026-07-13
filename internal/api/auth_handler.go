@@ -48,7 +48,15 @@ func (h *AuthHandler) showLoginPage(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
 
-// getCurrentUser handles GET /auth/user
+// getCurrentUser godoc
+// @Summary      Get current user
+// @Description  Returns the profile of the currently authenticated user
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Router       /auth/user [get]
+// @Security     BearerAuth
 func (h *AuthHandler) getCurrentUser(c *gin.Context) {
 	userID := h.getUserID(c)
 	userName, _ := c.Get("user_name")
@@ -71,7 +79,15 @@ func (h *AuthHandler) getCurrentUser(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, response)
 }
 
-// getUserPreferences handles GET /api/v1/user/preferences
+// getUserPreferences godoc
+// @Summary      Get user preferences
+// @Description  Returns the preferences for the currently authenticated user
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Router       /api/v1/user/preferences [get]
+// @Security     BearerAuth
 func (h *AuthHandler) getUserPreferences(c *gin.Context) {
 	userID := h.getUserID(c)
 
@@ -95,7 +111,18 @@ func (h *AuthHandler) getUserPreferences(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, preferences)
 }
 
-// updateUserPreferences handles PUT /api/v1/user/preferences
+// updateUserPreferences godoc
+// @Summary      Update user preferences
+// @Description  Updates preferences for the currently authenticated user
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Preferences object"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Router       /api/v1/user/preferences [put]
+// @Security     BearerAuth
 func (h *AuthHandler) updateUserPreferences(c *gin.Context) {
 	var preferences map[string]interface{}
 	if err := c.ShouldBindJSON(&preferences); err != nil {
@@ -108,7 +135,15 @@ func (h *AuthHandler) updateUserPreferences(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, preferences)
 }
 
-// getUserProjects handles GET /api/v1/user/projects
+// getUserProjects godoc
+// @Summary      Get user's projects
+// @Description  Returns all projects the currently authenticated user has access to
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Router       /api/v1/user/projects [get]
+// @Security     BearerAuth
 func (h *AuthHandler) getUserProjects(c *gin.Context) {
 	userID := h.getUserID(c)
 
@@ -125,38 +160,105 @@ func (h *AuthHandler) getUserProjects(c *gin.Context) {
 
 // Admin user management endpoints
 
-// listUsers handles GET /api/v1/admin/users
+// listUsers godoc
+// @Summary      List users
+// @Description  Returns all users in the system (admin only)
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /api/v1/admin/users [get]
+// @Security     BearerAuth
 func (h *AuthHandler) listUsers(c *gin.Context) {
 	// TODO: Implement user listing from auth service
 	h.respondWithJSON(c, http.StatusOK, gin.H{"items": []gin.H{}, "total": 0})
 }
 
-// getUser handles GET /api/v1/admin/users/:userId
+// getUser godoc
+// @Summary      Get a user
+// @Description  Returns a specific user by ID (admin only)
+// @Tags         admin
+// @Produce      json
+// @Param        userId  path  string  true  "User ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/users/{userId} [get]
+// @Security     BearerAuth
 func (h *AuthHandler) getUser(c *gin.Context) {
 	userID := c.Param("userId")
 	// TODO: Implement get user from auth service
 	h.respondWithJSON(c, http.StatusOK, gin.H{"id": userID})
 }
 
-// updateUserRole handles PUT /api/v1/admin/users/:userId/role
+// updateUserRole godoc
+// @Summary      Update user role
+// @Description  Changes the role of a user (admin only)
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        userId  path  string              true  "User ID"
+// @Param        body    body  map[string]string   true  "Role update"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/users/{userId}/role [put]
+// @Security     BearerAuth
 func (h *AuthHandler) updateUserRole(c *gin.Context) {
 	// TODO: Implement update user role
 	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "Role updated successfully"})
 }
 
-// suspendUser handles POST /api/v1/admin/users/:userId/suspend
+// suspendUser godoc
+// @Summary      Suspend a user
+// @Description  Suspends a user account, preventing login (admin only)
+// @Tags         admin
+// @Produce      json
+// @Param        userId  path  string  true  "User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/users/{userId}/suspend [post]
+// @Security     BearerAuth
 func (h *AuthHandler) suspendUser(c *gin.Context) {
 	// TODO: Implement suspend user
 	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User suspended successfully"})
 }
 
-// activateUser handles POST /api/v1/admin/users/:userId/activate
+// activateUser godoc
+// @Summary      Activate a user
+// @Description  Re-activates a suspended user account (admin only)
+// @Tags         admin
+// @Produce      json
+// @Param        userId  path  string  true  "User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/users/{userId}/activate [post]
+// @Security     BearerAuth
 func (h *AuthHandler) activateUser(c *gin.Context) {
 	// TODO: Implement activate user
 	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User activated successfully"})
 }
 
-// deleteUser handles DELETE /api/v1/admin/users/:userId
+// deleteUser godoc
+// @Summary      Delete a user
+// @Description  Permanently removes a user account (admin only)
+// @Tags         admin
+// @Produce      json
+// @Param        userId  path  string  true  "User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/users/{userId} [delete]
+// @Security     BearerAuth
 func (h *AuthHandler) deleteUser(c *gin.Context) {
 	// TODO: Implement delete user
 	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User deleted successfully"})
@@ -177,7 +279,7 @@ func (h *AuthHandler) generateOAuthURL(c *gin.Context) string {
 	if c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	
+
 	host := c.Request.Host
 	if forwardedHost := c.Request.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
 		host = forwardedHost

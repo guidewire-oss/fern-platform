@@ -104,10 +104,24 @@ type JiraConnectionResponse struct {
 	UpdatedAt          string  `json:"updatedAt"`
 }
 
-// CreateConnection creates a new JIRA connection
+// CreateConnection godoc
+// @Summary      Create a JIRA connection
+// @Description  Configures a JIRA integration for a project (manager or admin only)
+// @Tags         jira
+// @Accept       json
+// @Produce      json
+// @Param        projectId  path  string                    true  "Project ID"
+// @Param        body       body  CreateJiraConnectionRequest  true  "JIRA connection details"
+// @Success      201  {object}  JiraConnectionResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections [post]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 	projectID := c.Param("projectId")
-	
+
 	// Check if user can manage the project
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -166,10 +180,20 @@ func (h *JiraConnectionHandler) CreateConnection(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusCreated, h.convertToResponse(connection))
 }
 
-// GetConnections retrieves all JIRA connections for a project
+// GetConnections godoc
+// @Summary      List JIRA connections
+// @Description  Returns all JIRA connections configured for a project
+// @Tags         jira
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Success      200  {array}   JiraConnectionResponse
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections [get]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) GetConnections(c *gin.Context) {
 	projectID := c.Param("projectId")
-	
+
 	// Check if user can view the project
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -210,10 +234,10 @@ func (h *JiraConnectionHandler) GetConnections(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, responses)
 }
 
-// GetConnection retrieves a specific JIRA connection
+// GetConnection retrieves a specific JIRA connection by ID
 func (h *JiraConnectionHandler) GetConnection(c *gin.Context) {
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -251,10 +275,26 @@ func (h *JiraConnectionHandler) GetConnection(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, h.convertToResponse(connection))
 }
 
-// UpdateConnection updates a JIRA connection
+// UpdateConnection godoc
+// @Summary      Update a JIRA connection
+// @Description  Updates name, URL, or project key for a JIRA connection (manager or admin only)
+// @Tags         jira
+// @Accept       json
+// @Produce      json
+// @Param        projectId     path  string                       true  "Project ID"
+// @Param        connectionId  path  string                       true  "Connection ID"
+// @Param        body          body  UpdateJiraConnectionRequest  true  "Fields to update"
+// @Success      200  {object}  JiraConnectionResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId} [put]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -316,10 +356,26 @@ func (h *JiraConnectionHandler) UpdateConnection(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, h.convertToResponse(updated))
 }
 
-// UpdateCredentials updates JIRA connection credentials
+// UpdateCredentials godoc
+// @Summary      Update JIRA connection credentials
+// @Description  Replaces the authentication type and credential for a JIRA connection (manager or admin only)
+// @Tags         jira
+// @Accept       json
+// @Produce      json
+// @Param        projectId     path  string                        true  "Project ID"
+// @Param        connectionId  path  string                        true  "Connection ID"
+// @Param        body          body  UpdateJiraCredentialsRequest  true  "New credentials"
+// @Success      200  {object}  JiraConnectionResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId}/credentials [put]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) UpdateCredentials(c *gin.Context) {
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -375,10 +431,24 @@ func (h *JiraConnectionHandler) UpdateCredentials(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, h.convertToResponse(updated))
 }
 
-// TestConnection tests a JIRA connection
+// TestConnection godoc
+// @Summary      Test a JIRA connection
+// @Description  Verifies that the stored credentials can reach JIRA (manager or admin only)
+// @Tags         jira
+// @Produce      json
+// @Param        projectId     path  string  true  "Project ID"
+// @Param        connectionId  path  string  true  "Connection ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId}/test [post]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) TestConnection(c *gin.Context) {
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -421,10 +491,23 @@ func (h *JiraConnectionHandler) TestConnection(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "Connection test successful"})
 }
 
-// DeleteConnection deletes a JIRA connection
+// DeleteConnection godoc
+// @Summary      Delete a JIRA connection
+// @Description  Permanently removes a JIRA connection from a project (manager or admin only)
+// @Tags         jira
+// @Produce      json
+// @Param        projectId     path  string  true  "Project ID"
+// @Param        connectionId  path  string  true  "Connection ID"
+// @Success      204
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId} [delete]
+// @Security     BearerAuth
 func (h *JiraConnectionHandler) DeleteConnection(c *gin.Context) {
 	connectionID := c.Param("connectionId")
-	
+
 	// Check if user can manage the connection
 	userID := h.getUserID(c)
 	if userID == "" {
@@ -470,13 +553,13 @@ func (h *JiraConnectionHandler) DeleteConnection(c *gin.Context) {
 // convertToResponse converts a domain entity to response format
 func (h *JiraConnectionHandler) convertToResponse(conn *integrations.JiraConnection) *JiraConnectionResponse {
 	snapshot := conn.Snapshot()
-	
+
 	var lastTested *string
 	if snapshot.LastTestedAt != nil {
 		formatted := snapshot.LastTestedAt.Format(time.RFC3339)
 		lastTested = &formatted
 	}
-	
+
 	return &JiraConnectionResponse{
 		ID:                 snapshot.ID,
 		ProjectID:          snapshot.ProjectID,

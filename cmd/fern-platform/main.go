@@ -1,4 +1,47 @@
 // Fern Platform - Unified platform entry point
+
+// @title           Fern Platform API
+// @version         1.0
+// @description     Unified test intelligence platform — aggregate, analyze and act on test results from any CI/CD pipeline.
+// @termsOfService  https://github.com/guidewire-oss/fern-platform
+
+// @contact.name   Fern Platform Team
+// @contact.url    https://github.com/guidewire-oss/fern-platform/issues
+
+// @license.name  Apache 2.0
+// @license.url   https://www.apache.org/licenses/LICENSE-2.0.html
+
+// @BasePath  /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description JWT bearer token. Format: "Bearer <token>"
+
+// @tag.name health
+// @tag.description Health and readiness checks
+
+// @tag.name test-runs
+// @tag.description Test run submission and retrieval
+
+// @tag.name projects
+// @tag.description Project management
+
+// @tag.name tags
+// @tag.description Test tagging
+
+// @tag.name flaky-tests
+// @tag.description Flaky test detection
+
+// @tag.name jira
+// @tag.description JIRA integration
+
+// @tag.name auth
+// @tag.description Authentication and user management
+
+// @tag.name admin
+// @tag.description Admin-only operations
+
 package main
 
 import (
@@ -12,6 +55,7 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/guidewire-oss/fern-platform/docs"
 	api "github.com/guidewire-oss/fern-platform/internal/api"
 	"github.com/guidewire-oss/fern-platform/internal/domains"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql"
@@ -19,6 +63,8 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 	"github.com/guidewire-oss/fern-platform/pkg/middleware"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -46,7 +92,12 @@ func main() {
 	if err != nil {
 		logger.WithService("fern-platform").WithError(err).Fatal("Failed to connect to database")
 	}
-	defer db.Close()
+	defer func(db *database.DB) {
+		err := db.Close()
+		if err != nil {
+			logger.WithService("fern-platform").WithError(err).Fatal("Failed to close database connection")
+		}
+	}(db)
 
 	// Run migrations
 	logger.WithService("fern-platform").Info("Starting database migrations from path: migrations")
@@ -119,6 +170,13 @@ func main() {
 
 	gqlHandler := graphql.NewHandler(resolver, roleGroupNames)
 	gqlHandler.RegisterRoutes(router, authMiddleware)
+
+	// Swagger UI is intentionally unauthenticated so that developers and
+	// API consumers can explore the API without needing a token. The UI
+	// only serves generated documentation — no data is exposed through it.
+	// If this instance needs to be locked down, wrap the handler with
+	// authMiddleware.RequireAuth() before deploying to a restricted environment.
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Note: Static file serving is handled by the API handler
 

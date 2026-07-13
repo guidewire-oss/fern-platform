@@ -40,7 +40,19 @@ func (h *TestRunHandler) SetTagService(tagService *tagsApp.TagService) {
 	h.tagService = tagService
 }
 
-// createTestRun handles POST /api/v1/admin/test-runs
+// createTestRun godoc
+// @Summary      Create a test run
+// @Description  Creates a new test run record (admin only)
+// @Tags         test-runs,admin
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{projectId=string,status=string,branch=string}  true  "Test run payload"
+// @Success      201   {object}  map[string]interface{}
+// @Failure      400   {object}  map[string]string
+// @Failure      404   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Router       /api/v1/admin/test-runs [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) createTestRun(c *gin.Context) {
 	var input struct {
 		ID        string     `json:"id"`
@@ -112,7 +124,17 @@ func (h *TestRunHandler) createTestRun(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-// getTestRun handles GET /api/v1/test-runs/:id
+// getTestRun godoc
+// @Summary      Get a test run by ID
+// @Description  Returns a single test run by its numeric ID
+// @Tags         test-runs
+// @Produce      json
+// @Param        id   path  int  true  "Test run ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id} [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getTestRun(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -130,7 +152,17 @@ func (h *TestRunHandler) getTestRun(c *gin.Context) {
 	c.JSON(http.StatusOK, convertTestRunToAPI(testRun))
 }
 
-// getTestRunByRunID handles GET /api/v1/test-runs/by-run-id/:runId
+// getTestRunByRunID godoc
+// @Summary      Get a test run by run ID string
+// @Description  Returns a test run looked up by its string run ID
+// @Tags         test-runs
+// @Produce      json
+// @Param        runId  path  string  true  "Run ID string"
+// @Success      200    {object}  map[string]interface{}
+// @Failure      400    {object}  map[string]string
+// @Failure      404    {object}  map[string]string
+// @Router       /api/v1/test-runs/by-run-id/{runId} [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getTestRunByRunID(c *gin.Context) {
 	runID := c.Param("runId")
 	if runID == "" {
@@ -147,7 +179,19 @@ func (h *TestRunHandler) getTestRunByRunID(c *gin.Context) {
 	c.JSON(http.StatusOK, convertTestRunToAPI(testRun))
 }
 
-// listTestRuns handles GET /api/v1/test-runs
+// listTestRuns godoc
+// @Summary      List test runs
+// @Description  Returns a paginated list of test runs, optionally filtered by project
+// @Tags         test-runs
+// @Produce      json
+// @Param        project_id  query  string  false  "Filter by project ID"
+// @Param        limit       query  int     false  "Page size (default 50)"
+// @Param        offset      query  int     false  "Page offset (default 0)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 	limit := 50 // default
@@ -192,7 +236,16 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 	})
 }
 
-// countTestRuns handles GET /api/v1/test-runs/count
+// countTestRuns godoc
+// @Summary      Count test runs
+// @Description  Returns the total number of test runs, optionally filtered by project
+// @Tags         test-runs
+// @Produce      json
+// @Param        project_id  query  string  false  "Filter by project ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/count [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) countTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 
@@ -208,7 +261,20 @@ func (h *TestRunHandler) countTestRuns(c *gin.Context) {
 	})
 }
 
-// updateTestRunStatus handles PUT /api/v1/admin/test-runs/:runId/status
+// updateTestRunStatus godoc
+// @Summary      Update test run status
+// @Description  Updates the status of a test run (admin only)
+// @Tags         test-runs,admin
+// @Accept       json
+// @Produce      json
+// @Param        runId  path  string  true  "Run ID string"
+// @Param        body   body  object{status=string}  true  "Status update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/admin/test-runs/{runId}/status [put]
+// @Security     BearerAuth
 func (h *TestRunHandler) updateTestRunStatus(c *gin.Context) {
 	runID := c.Param("runId")
 	if runID == "" {
@@ -251,7 +317,17 @@ func (h *TestRunHandler) updateTestRunStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, convertTestRunToAPI(updatedRun))
 }
 
-// deleteTestRun handles DELETE /api/v1/admin/test-runs/:id
+// deleteTestRun godoc
+// @Summary      Delete a test run
+// @Description  Permanently deletes a test run by ID (admin only)
+// @Tags         test-runs,admin
+// @Produce      json
+// @Param        id  path  int  true  "Test run ID"
+// @Success      204
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/test-runs/{id} [delete]
+// @Security     BearerAuth
 func (h *TestRunHandler) deleteTestRun(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -268,7 +344,17 @@ func (h *TestRunHandler) deleteTestRun(c *gin.Context) {
 	c.JSON(http.StatusNoContent, nil)
 }
 
-// getTestRunStats handles GET /api/v1/test-runs/stats
+// getTestRunStats godoc
+// @Summary      Get test run statistics
+// @Description  Returns pass/fail counts and average duration for a project
+// @Tags         test-runs
+// @Produce      json
+// @Param        project_id  query  string  false  "Filter by project ID"
+// @Param        days        query  int     false  "Number of days to look back (default 30)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/stats [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getTestRunStats(c *gin.Context) {
 	projectID := c.Query("project_id")
 	days := 30 // default
@@ -296,7 +382,18 @@ func (h *TestRunHandler) getTestRunStats(c *gin.Context) {
 	})
 }
 
-// getRecentTestRuns handles GET /api/v1/test-runs/recent
+// getRecentTestRuns godoc
+// @Summary      Get recent test runs
+// @Description  Returns the N most recent test runs for a project
+// @Tags         test-runs
+// @Produce      json
+// @Param        project_id  query  string  false  "Filter by project ID"
+// @Param        limit       query  int     false  "Number of results (default 10)"
+// @Success      200  {array}   map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/recent [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getRecentTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 	limit := 10 // default
@@ -326,7 +423,18 @@ func (h *TestRunHandler) getRecentTestRuns(c *gin.Context) {
 	c.JSON(http.StatusOK, apiTestRuns)
 }
 
-// assignTagsToTestRun handles POST /api/v1/test-runs/:id/tags
+// assignTagsToTestRun godoc
+// @Summary      Assign tags to a test run
+// @Description  Associates a list of tag names with a test run (not yet persisted — returns success without saving)
+// @Tags         test-runs,tags
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                     true  "Test run ID"
+// @Param        body  body  object{tags=[]string}   true  "Tag names"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id}/tags [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) assignTagsToTestRun(c *gin.Context) {
 	_, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -351,7 +459,18 @@ func (h *TestRunHandler) assignTagsToTestRun(c *gin.Context) {
 	})
 }
 
-// bulkDeleteTestRuns handles POST /api/v1/admin/test-runs/bulk-delete
+// bulkDeleteTestRuns godoc
+// @Summary      Bulk delete test runs
+// @Description  Deletes multiple test runs by ID in a single request (admin only)
+// @Tags         test-runs,admin
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{ids=[]int}  true  "List of test run IDs"
+// @Success      200  {object}  map[string]interface{}
+// @Success      206  {object}  map[string]interface{}  "Partial success — some deletes failed"
+// @Failure      400  {object}  map[string]string
+// @Router       /api/v1/admin/test-runs/bulk-delete [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) bulkDeleteTestRuns(c *gin.Context) {
 	var input struct {
 		IDs []uint `json:"ids" binding:"required"`
@@ -367,20 +486,20 @@ func (h *TestRunHandler) bulkDeleteTestRuns(c *gin.Context) {
 		return
 	}
 
-	var errors []string
+	var errs []string
 	deleted := 0
 	for _, id := range input.IDs {
 		if err := h.testingService.DeleteTestRun(c.Request.Context(), id); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to delete test run %d: %s", id, err.Error()))
+			errs = append(errs, fmt.Sprintf("failed to delete test run %d: %s", id, err.Error()))
 		} else {
 			deleted++
 		}
 	}
 
-	if len(errors) > 0 {
+	if len(errs) > 0 {
 		c.JSON(http.StatusPartialContent, gin.H{
 			"deleted": deleted,
-			"errors":  errors,
+			"errors":  errs,
 		})
 		return
 	}
@@ -390,7 +509,17 @@ func (h *TestRunHandler) bulkDeleteTestRuns(c *gin.Context) {
 	})
 }
 
-// getSuiteRuns handles GET /api/v1/test-runs/:id/suite-runs
+// getSuiteRuns godoc
+// @Summary      List suite runs for a test run
+// @Description  Returns all suite runs belonging to a test run
+// @Tags         test-runs
+// @Produce      json
+// @Param        id  path  int  true  "Test run ID"
+// @Success      200  {array}   map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id}/suite-runs [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getSuiteRuns(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -407,7 +536,20 @@ func (h *TestRunHandler) getSuiteRuns(c *gin.Context) {
 	c.JSON(http.StatusOK, suiteRuns)
 }
 
-// getSuiteRun handles GET /api/v1/test-runs/:id/suite-runs/:suiteId
+// getSuiteRun godoc
+// @Summary      Get a suite run
+// @Description  Returns a specific suite run belonging to a test run
+// @Tags         test-runs
+// @Produce      json
+// @Param        id       path  int  true  "Test run ID"
+// @Param        suiteId  path  int  true  "Suite run ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id}/suite-runs/{suiteId} [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getSuiteRun(c *gin.Context) {
 	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -434,7 +576,20 @@ func (h *TestRunHandler) getSuiteRun(c *gin.Context) {
 	c.JSON(http.StatusOK, suiteRun)
 }
 
-// getSpecRuns handles GET /api/v1/test-runs/:id/suite-runs/:suiteId/spec-runs
+// getSpecRuns godoc
+// @Summary      List spec runs
+// @Description  Returns all spec runs within a suite run
+// @Tags         test-runs
+// @Produce      json
+// @Param        id       path  int  true  "Test run ID"
+// @Param        suiteId  path  int  true  "Suite run ID"
+// @Success      200  {array}   map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id}/suite-runs/{suiteId}/spec-runs [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getSpecRuns(c *gin.Context) {
 	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -461,7 +616,21 @@ func (h *TestRunHandler) getSpecRuns(c *gin.Context) {
 	c.JSON(http.StatusOK, specRuns)
 }
 
-// getSpecRun handles GET /api/v1/test-runs/:id/suite-runs/:suiteId/spec-runs/:specId
+// getSpecRun godoc
+// @Summary      Get a spec run
+// @Description  Returns a specific spec run within a suite run
+// @Tags         test-runs
+// @Produce      json
+// @Param        id       path  int  true  "Test run ID"
+// @Param        suiteId  path  int  true  "Suite run ID"
+// @Param        specId   path  int  true  "Spec run ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id}/suite-runs/{suiteId}/spec-runs/{specId} [get]
+// @Security     BearerAuth
 func (h *TestRunHandler) getSpecRun(c *gin.Context) {
 	testRunID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -524,7 +693,19 @@ func convertTestRunToAPI(tr *domain.TestRun) gin.H {
 // --- Public (unauthenticated) test submission endpoints ---
 // These are compatible with the legacy Fern Reporter API
 
-// recordTestRun handles POST /api/v1/test-runs (public)
+// recordTestRun godoc
+// @Summary      Record a test run (legacy)
+// @Description  Submits a complete test run with suite and spec results in a single call. Compatible with the legacy Fern Reporter API.
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      TestRunRequest  true  "Test run data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	var req TestRunRequest
 
@@ -666,7 +847,19 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-// startTestRun handles POST /api/v1/test-runs/start (public)
+// startTestRun godoc
+// @Summary      Start a test run
+// @Description  Creates a new test run in running state. Use with completeTestRun for streaming reporters.
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Test run start data (projectId, runId, branch, commitSha, environment, tags, metadata)"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/start [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) startTestRun(c *gin.Context) {
 	var req struct {
 		ProjectID   string                 `json:"projectId" binding:"required"`
@@ -715,7 +908,20 @@ func (h *TestRunHandler) startTestRun(c *gin.Context) {
 	})
 }
 
-// completeTestRun handles POST /api/v1/test-runs/complete (public)
+// completeTestRun godoc
+// @Summary      Complete a test run
+// @Description  Marks a running test run as finished and records final counts and status
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Completion data (runId, status, endTime, totalTests, passedTests, failedTests, skippedTests)"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/test-runs/complete [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) completeTestRun(c *gin.Context) {
 	var req struct {
 		RunID        string     `json:"runId" binding:"required"`
@@ -751,7 +957,20 @@ func (h *TestRunHandler) completeTestRun(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Test run completed successfully"})
 }
 
-// addSuiteRun handles POST /api/v1/suite-runs (public)
+// addSuiteRun godoc
+// @Summary      Add a suite run
+// @Description  Adds a suite run to an existing test run (streaming reporter API)
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Suite run data (testRunId, suiteName, status, startTime, endTime, duration, totalSpecs, passedSpecs, failedSpecs)"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/suite-runs [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) addSuiteRun(c *gin.Context) {
 	var req struct {
 		TestRunID   string     `json:"testRunId" binding:"required"`
@@ -809,7 +1028,19 @@ func (h *TestRunHandler) addSuiteRun(c *gin.Context) {
 	})
 }
 
-// addSpecRun handles POST /api/v1/spec-runs (public)
+// addSpecRun godoc
+// @Summary      Add a spec run
+// @Description  Adds an individual spec (test case) result to a suite run (streaming reporter API)
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      map[string]interface{}  true  "Spec run data (suiteRunId, specName, status, startTime, endTime, duration, errorMessage, stackTrace, retries)"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/spec-runs [post]
+// @Security     BearerAuth
 func (h *TestRunHandler) addSpecRun(c *gin.Context) {
 	var req struct {
 		SuiteRunID   uint       `json:"suiteRunId" binding:"required"`
@@ -862,7 +1093,18 @@ func (h *TestRunHandler) addSpecRun(c *gin.Context) {
 	})
 }
 
-// updateTestRunPublic handles PUT /api/v1/test-runs/:id (public)
+// updateTestRunPublic godoc
+// @Summary      Update a test run
+// @Description  Updates a test run by ID (not yet implemented)
+// @Tags         test-runs
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                     true  "Test run ID"
+// @Param        body  body  map[string]interface{}  true  "Update data"
+// @Failure      401  {object}  map[string]string
+// @Failure      501  {object}  map[string]string
+// @Router       /api/v1/test-runs/{id} [put]
+// @Security     BearerAuth
 func (h *TestRunHandler) updateTestRunPublic(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, gin.H{"error": "Update test run not yet implemented"})
 }

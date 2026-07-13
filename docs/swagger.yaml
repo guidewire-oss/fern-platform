@@ -1,0 +1,2597 @@
+basePath: /
+definitions:
+  api.CreateJiraConnectionRequest:
+    properties:
+      authenticationType:
+        type: string
+      credential:
+        type: string
+      jiraUrl:
+        type: string
+      name:
+        type: string
+      projectKey:
+        type: string
+      username:
+        type: string
+    required:
+    - authenticationType
+    - credential
+    - jiraUrl
+    - name
+    - projectKey
+    type: object
+  api.JiraConnectionResponse:
+    properties:
+      authenticationType:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      isActive:
+        type: boolean
+      jiraUrl:
+        type: string
+      lastTestedAt:
+        type: string
+      name:
+        type: string
+      projectId:
+        type: string
+      projectKey:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+      username:
+        type: string
+    type: object
+  api.SpecRun:
+    properties:
+      end_time:
+        type: string
+      id:
+        type: integer
+      message:
+        type: string
+      spec_description:
+        type: string
+      start_time:
+        type: string
+      status:
+        type: string
+      suite_id:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/api.Tag'
+        type: array
+    type: object
+  api.SuiteRun:
+    properties:
+      end_time:
+        type: string
+      id:
+        type: integer
+      spec_runs:
+        items:
+          $ref: '#/definitions/api.SpecRun'
+        type: array
+      start_time:
+        type: string
+      suite_name:
+        type: string
+      tags:
+        items:
+          $ref: '#/definitions/api.Tag'
+        type: array
+      test_run_id:
+        type: integer
+    type: object
+  api.Tag:
+    properties:
+      category:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      value:
+        type: string
+    type: object
+  api.TestRunRequest:
+    properties:
+      build_trigger_actor:
+        type: string
+      build_url:
+        type: string
+      end_time:
+        type: string
+      environment:
+        type: string
+      git_branch:
+        type: string
+      git_sha:
+        type: string
+      id:
+        type: integer
+      start_time:
+        type: string
+      suite_runs:
+        items:
+          $ref: '#/definitions/api.SuiteRun'
+        type: array
+      tags:
+        items:
+          $ref: '#/definitions/api.Tag'
+        type: array
+      test_project_id:
+        type: string
+      test_project_name:
+        type: string
+      test_seed:
+        type: integer
+    type: object
+  api.UpdateJiraConnectionRequest:
+    properties:
+      jiraUrl:
+        type: string
+      name:
+        type: string
+      projectKey:
+        type: string
+    type: object
+  api.UpdateJiraCredentialsRequest:
+    properties:
+      authenticationType:
+        type: string
+      credential:
+        type: string
+      username:
+        type: string
+    required:
+    - authenticationType
+    - credential
+    type: object
+info:
+  contact:
+    name: Fern Platform Team
+    url: https://github.com/guidewire-oss/fern-platform/issues
+  description: Unified test intelligence platform — aggregate, analyze and act on
+    test results from any CI/CD pipeline.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: https://github.com/guidewire-oss/fern-platform
+  title: Fern Platform API
+  version: "1.0"
+paths:
+  /api/v1/admin/audit-logs:
+    get:
+      description: Returns the audit log of administrative actions (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get audit logs
+      tags:
+      - admin
+  /api/v1/admin/system/cleanup:
+    post:
+      description: Triggers garbage collection and other cleanup operations (admin
+        only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Perform system cleanup
+      tags:
+      - admin
+  /api/v1/admin/system/health:
+    get:
+      description: Returns the health status of system dependencies such as the database
+        (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get system health
+      tags:
+      - admin
+  /api/v1/admin/system/stats:
+    get:
+      description: Returns runtime memory, CPU, and goroutine statistics (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get system statistics
+      tags:
+      - admin
+  /api/v1/admin/tags:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new tag (admin only)
+      parameters:
+      - description: Tag details
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            color:
+              type: string
+            description:
+              type: string
+            name:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a tag
+      tags:
+      - tags
+      - admin
+  /api/v1/admin/tags/{id}:
+    delete:
+      description: Permanently removes a tag (admin only)
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a tag
+      tags:
+      - tags
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: Returns tag metadata without persisting changes (tags are immutable
+        except for deletion)
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        schema:
+          properties:
+            color:
+              type: string
+            description:
+              type: string
+            name:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get tag metadata (tags are immutable)
+      tags:
+      - tags
+      - admin
+  /api/v1/admin/test-runs:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new test run record (admin only)
+      parameters:
+      - description: Test run payload
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            branch:
+              type: string
+            projectId:
+              type: string
+            status:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a test run
+      tags:
+      - test-runs
+      - admin
+  /api/v1/admin/test-runs/{id}:
+    delete:
+      description: Permanently deletes a test run by ID (admin only)
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a test run
+      tags:
+      - test-runs
+      - admin
+  /api/v1/admin/test-runs/{runId}/status:
+    put:
+      consumes:
+      - application/json
+      description: Updates the status of a test run (admin only)
+      parameters:
+      - description: Run ID string
+        in: path
+        name: runId
+        required: true
+        type: string
+      - description: Status update
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            status:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update test run status
+      tags:
+      - test-runs
+      - admin
+  /api/v1/admin/test-runs/bulk-delete:
+    post:
+      consumes:
+      - application/json
+      description: Deletes multiple test runs by ID in a single request (admin only)
+      parameters:
+      - description: List of test run IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            ids:
+              items:
+                type: integer
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "206":
+          description: Partial success — some deletes failed
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Bulk delete test runs
+      tags:
+      - test-runs
+      - admin
+  /api/v1/admin/users:
+    get:
+      description: Returns all users in the system (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - admin
+  /api/v1/admin/users/{userId}:
+    delete:
+      description: Permanently removes a user account (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a user
+      tags:
+      - admin
+    get:
+      description: Returns a specific user by ID (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a user
+      tags:
+      - admin
+  /api/v1/admin/users/{userId}/activate:
+    post:
+      description: Re-activates a suspended user account (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Activate a user
+      tags:
+      - admin
+  /api/v1/admin/users/{userId}/role:
+    put:
+      consumes:
+      - application/json
+      description: Changes the role of a user (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Role update
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update user role
+      tags:
+      - admin
+  /api/v1/admin/users/{userId}/suspend:
+    post:
+      description: Suspends a user account, preventing login (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Suspend a user
+      tags:
+      - admin
+  /api/v1/flaky-tests:
+    get:
+      description: Returns tests detected as intermittently failing for a project
+      parameters:
+      - description: Project ID to query flaky tests for
+        in: query
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List flaky tests
+      tags:
+      - flaky-tests
+  /api/v1/flaky-tests/{id}/ignore:
+    post:
+      description: Suppresses alerts for a detected flaky test
+      parameters:
+      - description: Flaky test ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Ignore a flaky test
+      tags:
+      - flaky-tests
+  /api/v1/flaky-tests/{id}/resolve:
+    post:
+      description: Marks a detected flaky test as resolved
+      parameters:
+      - description: Flaky test ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Resolve a flaky test
+      tags:
+      - flaky-tests
+  /api/v1/health:
+    get:
+      description: Returns the health status, timestamp, service name, and version
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /api/v1/projects:
+    get:
+      description: Returns a paginated list of all accessible projects
+      parameters:
+      - description: Page size (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List projects
+      tags:
+      - projects
+    post:
+      consumes:
+      - application/json
+      description: Creates a new project (manager or admin only)
+      parameters:
+      - description: Project details
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            defaultBranch:
+              type: string
+            description:
+              type: string
+            name:
+              type: string
+            projectId:
+              type: string
+            repository:
+              type: string
+            settings:
+              type: object
+            team:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a project
+      tags:
+      - projects
+  /api/v1/projects/{projectId}:
+    delete:
+      description: Permanently deletes a project and its data (manager or admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a project
+      tags:
+      - projects
+    get:
+      description: Returns a project by its project ID string
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a project
+      tags:
+      - projects
+    put:
+      consumes:
+      - application/json
+      description: Updates project metadata (manager or admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        schema:
+          properties:
+            defaultBranch:
+              type: string
+            description:
+              type: string
+            name:
+              type: string
+            repository:
+              type: string
+            settings:
+              type: object
+            team:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a project
+      tags:
+      - projects
+  /api/v1/projects/{projectId}/activate:
+    post:
+      description: Marks a project as active so it accepts new test runs
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Activate a project
+      tags:
+      - projects
+  /api/v1/projects/{projectId}/integrations/jira/connections:
+    get:
+      description: Returns all JIRA connections configured for a project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.JiraConnectionResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List JIRA connections
+      tags:
+      - jira
+    post:
+      consumes:
+      - application/json
+      description: Configures a JIRA integration for a project (manager or admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: JIRA connection details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateJiraConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.JiraConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a JIRA connection
+      tags:
+      - jira
+  /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId}:
+    delete:
+      description: Permanently removes a JIRA connection from a project (manager or
+        admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Connection ID
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a JIRA connection
+      tags:
+      - jira
+    put:
+      consumes:
+      - application/json
+      description: Updates name, URL, or project key for a JIRA connection (manager
+        or admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Connection ID
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateJiraConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.JiraConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a JIRA connection
+      tags:
+      - jira
+  /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId}/credentials:
+    put:
+      consumes:
+      - application/json
+      description: Replaces the authentication type and credential for a JIRA connection
+        (manager or admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Connection ID
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      - description: New credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateJiraCredentialsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.JiraConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update JIRA connection credentials
+      tags:
+      - jira
+  /api/v1/projects/{projectId}/integrations/jira/connections/{connectionId}/test:
+    post:
+      description: Verifies that the stored credentials can reach JIRA (manager or
+        admin only)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Connection ID
+        in: path
+        name: connectionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Test a JIRA connection
+      tags:
+      - jira
+  /api/v1/projects/by-project-id/{projectId}:
+    get:
+      description: Explicit lookup by project ID string (avoids numeric ID ambiguity)
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a project by project ID
+      tags:
+      - projects
+  /api/v1/spec-runs:
+    post:
+      consumes:
+      - application/json
+      description: Adds an individual spec (test case) result to a suite run (streaming
+        reporter API)
+      parameters:
+      - description: Spec run data (suiteRunId, specName, status, startTime, endTime,
+          duration, errorMessage, stackTrace, retries)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a spec run
+      tags:
+      - test-runs
+  /api/v1/suite-runs:
+    post:
+      consumes:
+      - application/json
+      description: Adds a suite run to an existing test run (streaming reporter API)
+      parameters:
+      - description: Suite run data (testRunId, suiteName, status, startTime, endTime,
+          duration, totalSpecs, passedSpecs, failedSpecs)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a suite run
+      tags:
+      - test-runs
+  /api/v1/summary/{projectId}/{seed}:
+    get:
+      description: Returns an aggregated test summary for a project, optionally grouped
+        by one or more dimensions
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Test seed or run identifier
+        in: path
+        name: seed
+        required: true
+        type: string
+      - collectionFormat: multi
+        description: Dimensions to group results by (repeatable)
+        in: query
+        items:
+          type: string
+        name: group_by
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get test summary
+      tags:
+      - test-runs
+  /api/v1/tags:
+    get:
+      description: Returns all available tags
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all tags
+      tags:
+      - tags
+  /api/v1/tags/{id}:
+    get:
+      description: Returns a single tag by ID
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a tag
+      tags:
+      - tags
+  /api/v1/tags/by-name/{name}:
+    get:
+      description: Returns a tag looked up by its name
+      parameters:
+      - description: Tag name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a tag by name
+      tags:
+      - tags
+  /api/v1/tags/popular:
+    get:
+      description: Returns up to N tags; usage counts are not yet implemented and
+        will be 0
+      parameters:
+      - description: Maximum number of tags to return (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get popular tags
+      tags:
+      - tags
+  /api/v1/tags/usage-stats:
+    get:
+      description: Returns usage statistics for all tags (not yet implemented; always
+        returns an empty array)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get tag usage statistics
+      tags:
+      - tags
+  /api/v1/test-runs:
+    get:
+      description: Returns a paginated list of test runs, optionally filtered by project
+      parameters:
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: string
+      - description: Page size (default 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List test runs
+      tags:
+      - test-runs
+    post:
+      consumes:
+      - application/json
+      description: Submits a complete test run with suite and spec results in a single
+        call. Compatible with the legacy Fern Reporter API.
+      parameters:
+      - description: Test run data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.TestRunRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Record a test run (legacy)
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}:
+    get:
+      description: Returns a single test run by its numeric ID
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a test run by ID
+      tags:
+      - test-runs
+    put:
+      consumes:
+      - application/json
+      description: Updates a test run by ID (not yet implemented)
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update data
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "501":
+          description: Not Implemented
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a test run
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}/suite-runs:
+    get:
+      description: Returns all suite runs belonging to a test run
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List suite runs for a test run
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}/suite-runs/{suiteId}:
+    get:
+      description: Returns a specific suite run belonging to a test run
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Suite run ID
+        in: path
+        name: suiteId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a suite run
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}/suite-runs/{suiteId}/spec-runs:
+    get:
+      description: Returns all spec runs within a suite run
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Suite run ID
+        in: path
+        name: suiteId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List spec runs
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}/suite-runs/{suiteId}/spec-runs/{specId}:
+    get:
+      description: Returns a specific spec run within a suite run
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Suite run ID
+        in: path
+        name: suiteId
+        required: true
+        type: integer
+      - description: Spec run ID
+        in: path
+        name: specId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a spec run
+      tags:
+      - test-runs
+  /api/v1/test-runs/{id}/tags:
+    post:
+      consumes:
+      - application/json
+      description: Associates a list of tag names with a test run (not yet persisted
+        — returns success without saving)
+      parameters:
+      - description: Test run ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Tag names
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            tags:
+              items:
+                type: string
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign tags to a test run
+      tags:
+      - test-runs
+      - tags
+  /api/v1/test-runs/by-run-id/{runId}:
+    get:
+      description: Returns a test run looked up by its string run ID
+      parameters:
+      - description: Run ID string
+        in: path
+        name: runId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a test run by run ID string
+      tags:
+      - test-runs
+  /api/v1/test-runs/complete:
+    post:
+      consumes:
+      - application/json
+      description: Marks a running test run as finished and records final counts and
+        status
+      parameters:
+      - description: Completion data (runId, status, endTime, totalTests, passedTests,
+          failedTests, skippedTests)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Complete a test run
+      tags:
+      - test-runs
+  /api/v1/test-runs/count:
+    get:
+      description: Returns the total number of test runs, optionally filtered by project
+      parameters:
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Count test runs
+      tags:
+      - test-runs
+  /api/v1/test-runs/recent:
+    get:
+      description: Returns the N most recent test runs for a project
+      parameters:
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: string
+      - description: Number of results (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get recent test runs
+      tags:
+      - test-runs
+  /api/v1/test-runs/start:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new test run in running state. Use with completeTestRun
+        for streaming reporters.
+      parameters:
+      - description: Test run start data (projectId, runId, branch, commitSha, environment,
+          tags, metadata)
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Start a test run
+      tags:
+      - test-runs
+  /api/v1/test-runs/stats:
+    get:
+      description: Returns pass/fail counts and average duration for a project
+      parameters:
+      - description: Filter by project ID
+        in: query
+        name: project_id
+        type: string
+      - description: Number of days to look back (default 30)
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get test run statistics
+      tags:
+      - test-runs
+  /api/v1/user/preferences:
+    get:
+      description: Returns the preferences for the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user preferences
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      description: Updates preferences for the currently authenticated user
+      parameters:
+      - description: Preferences object
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update user preferences
+      tags:
+      - auth
+  /api/v1/user/projects:
+    get:
+      description: Returns all projects the currently authenticated user has access
+        to
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user's projects
+      tags:
+      - auth
+  /auth/user:
+    get:
+      description: Returns the profile of the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: 'JWT bearer token. Format: "Bearer <token>"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+- description: Health and readiness checks
+  name: health
+- description: Test run submission and retrieval
+  name: test-runs
+- description: Project management
+  name: projects
+- description: Test tagging
+  name: tags
+- description: Flaky test detection
+  name: flaky-tests
+- description: JIRA integration
+  name: jira
+- description: Authentication and user management
+  name: auth
+- description: Admin-only operations
+  name: admin

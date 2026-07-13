@@ -90,7 +90,18 @@ func processTagList(c context.Context, tagService *tagsApp.TagService, tags []Ta
 	return result, nil
 }
 
-// createTag handles POST /api/v1/admin/tags
+// createTag godoc
+// @Summary      Create a tag
+// @Description  Creates a new tag (admin only)
+// @Tags         tags,admin
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{name=string,description=string,color=string}  true  "Tag details"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/admin/tags [post]
+// @Security     BearerAuth
 func (h *TagHandler) createTag(c *gin.Context) {
 	var input struct {
 		Name        string `json:"name" binding:"required"`
@@ -121,7 +132,16 @@ func (h *TagHandler) createTag(c *gin.Context) {
 	})
 }
 
-// getTag handles GET /api/v1/tags/:id
+// getTag godoc
+// @Summary      Get a tag
+// @Description  Returns a single tag by ID
+// @Tags         tags
+// @Produce      json
+// @Param        id  path  string  true  "Tag ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/tags/{id} [get]
+// @Security     BearerAuth
 func (h *TagHandler) getTag(c *gin.Context) {
 	idStr := c.Param("id")
 
@@ -134,7 +154,16 @@ func (h *TagHandler) getTag(c *gin.Context) {
 	c.JSON(http.StatusOK, h.convertTagToAPI(tag))
 }
 
-// getTagByName handles GET /api/v1/tags/by-name/:name
+// getTagByName godoc
+// @Summary      Get a tag by name
+// @Description  Returns a tag looked up by its name
+// @Tags         tags
+// @Produce      json
+// @Param        name  path  string  true  "Tag name"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/tags/by-name/{name} [get]
+// @Security     BearerAuth
 func (h *TagHandler) getTagByName(c *gin.Context) {
 	name := c.Param("name")
 
@@ -147,7 +176,19 @@ func (h *TagHandler) getTagByName(c *gin.Context) {
 	c.JSON(http.StatusOK, h.convertTagToAPI(tag))
 }
 
-// updateTag handles PUT /api/v1/admin/tags/:id
+// updateTag godoc
+// @Summary      Get tag metadata (tags are immutable)
+// @Description  Returns tag metadata without persisting changes (tags are immutable except for deletion)
+// @Tags         tags,admin
+// @Accept       json
+// @Produce      json
+// @Param        id    path  string  true  "Tag ID"
+// @Param        body  body  object{name=string,description=string,color=string}  false  "Fields to update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/v1/admin/tags/{id} [put]
+// @Security     BearerAuth
 func (h *TagHandler) updateTag(c *gin.Context) {
 	idStr := c.Param("id")
 
@@ -182,7 +223,16 @@ func (h *TagHandler) updateTag(c *gin.Context) {
 	})
 }
 
-// deleteTag handles DELETE /api/v1/admin/tags/:id
+// deleteTag godoc
+// @Summary      Delete a tag
+// @Description  Permanently removes a tag (admin only)
+// @Tags         tags,admin
+// @Produce      json
+// @Param        id  path  string  true  "Tag ID"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/admin/tags/{id} [delete]
+// @Security     BearerAuth
 func (h *TagHandler) deleteTag(c *gin.Context) {
 	idStr := c.Param("id")
 
@@ -194,7 +244,15 @@ func (h *TagHandler) deleteTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Tag deleted successfully"})
 }
 
-// listTags handles GET /api/v1/tags
+// listTags godoc
+// @Summary      List all tags
+// @Description  Returns all available tags
+// @Tags         tags
+// @Produce      json
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/tags [get]
+// @Security     BearerAuth
 func (h *TagHandler) listTags(c *gin.Context) {
 	tags, err := h.tagService.ListTags(c.Request.Context())
 	if err != nil {
@@ -211,13 +269,31 @@ func (h *TagHandler) listTags(c *gin.Context) {
 	c.JSON(http.StatusOK, apiTags)
 }
 
-// getTagUsageStats handles GET /api/v1/tags/usage-stats
+// getTagUsageStats godoc
+// @Summary      Get tag usage statistics
+// @Description  Returns usage statistics for all tags (not yet implemented; always returns an empty array)
+// @Tags         tags
+// @Produce      json
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/tags/usage-stats [get]
+// @Security     BearerAuth
 func (h *TagHandler) getTagUsageStats(c *gin.Context) {
 	// TODO: Implement tag usage stats in domain service
 	c.JSON(http.StatusOK, []gin.H{})
 }
 
-// getPopularTags handles GET /api/v1/tags/popular
+// getPopularTags godoc
+// @Summary      Get popular tags
+// @Description  Returns up to N tags; usage counts are not yet implemented and will be 0
+// @Tags         tags
+// @Produce      json
+// @Param        limit  query     int  false  "Maximum number of tags to return (default 10)"
+// @Success      200  {array}   map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/tags/popular [get]
+// @Security     BearerAuth
 func (h *TagHandler) getPopularTags(c *gin.Context) {
 	limit := 10
 	if limitStr := c.Query("limit"); limitStr != "" {

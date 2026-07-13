@@ -42,6 +42,11 @@ run: build ## Build and run the platform
 	./$(BUILD_DIR)/$(BINARY_NAME) -config config/config.yaml
 
 # Project information
+swagger: ## Generate Swagger API docs (requires swag: go install github.com/swaggo/swag/cmd/swag@latest)
+	@echo "📄 Generating Swagger docs..."
+	swag init --generalInfo cmd/fern-platform/main.go --output docs --parseInternal
+	@echo "✅ Docs at docs/swagger.json — UI available at /swagger/index.html when running"
+
 info: ## Show project information
 	@echo "🌿 Fern Platform Information"
 	@echo "========================="

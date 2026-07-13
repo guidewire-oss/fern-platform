@@ -18,9 +18,19 @@ func NewSummaryHandler(service *application.SummaryService) *SummaryHandler {
 	return &SummaryHandler{service: service}
 }
 
-// GetSummary handles GET requests for test summary
-// Path: /api/v1/summary/:projectId/:seed
-// Query params: group_by (can be repeated)
+// GetSummary godoc
+// @Summary      Get test summary
+// @Description  Returns an aggregated test summary for a project, optionally grouped by one or more dimensions
+// @Tags         test-runs
+// @Produce      json
+// @Param        projectId  path      string    true   "Project ID"
+// @Param        seed       path      string    true   "Test seed or run identifier"
+// @Param        group_by   query     []string  false  "Dimensions to group results by (repeatable)"  collectionFormat(multi)
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/summary/{projectId}/{seed} [get]
+// @Security     BearerAuth
 func (h *SummaryHandler) GetSummary(c *gin.Context) {
 	projectUUID := c.Param("projectId")
 	seed := c.Param("seed")

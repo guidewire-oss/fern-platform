@@ -23,7 +23,17 @@ func NewFlakyTestHandler(flakyDetectionService *analyticsApp.FlakyDetectionServi
 	}
 }
 
-// getFlakyTests handles GET /api/v1/flaky-tests
+// getFlakyTests godoc
+// @Summary      List flaky tests
+// @Description  Returns tests detected as intermittently failing for a project
+// @Tags         flaky-tests
+// @Produce      json
+// @Param        projectId  query  string  true  "Project ID to query flaky tests for"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/flaky-tests [get]
+// @Security     BearerAuth
 func (h *FlakyTestHandler) getFlakyTests(c *gin.Context) {
 	projectID := c.Query("projectId")
 	if projectID == "" {
@@ -44,7 +54,17 @@ func (h *FlakyTestHandler) getFlakyTests(c *gin.Context) {
 	})
 }
 
-// resolveFlakyTest handles POST /api/v1/flaky-tests/:id/resolve
+// resolveFlakyTest godoc
+// @Summary      Resolve a flaky test
+// @Description  Marks a detected flaky test as resolved
+// @Tags         flaky-tests
+// @Produce      json
+// @Param        id  path  string  true  "Flaky test ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/flaky-tests/{id}/resolve [post]
+// @Security     BearerAuth
 func (h *FlakyTestHandler) resolveFlakyTest(c *gin.Context) {
 	testID := c.Param("id")
 	if testID == "" {
@@ -63,7 +83,17 @@ func (h *FlakyTestHandler) resolveFlakyTest(c *gin.Context) {
 	})
 }
 
-// ignoreFlakyTest handles POST /api/v1/flaky-tests/:id/ignore
+// ignoreFlakyTest godoc
+// @Summary      Ignore a flaky test
+// @Description  Suppresses alerts for a detected flaky test
+// @Tags         flaky-tests
+// @Produce      json
+// @Param        id  path  string  true  "Flaky test ID"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/flaky-tests/{id}/ignore [post]
+// @Security     BearerAuth
 func (h *FlakyTestHandler) ignoreFlakyTest(c *gin.Context) {
 	testID := c.Param("id")
 	if testID == "" {
@@ -88,4 +118,3 @@ func (h *FlakyTestHandler) RegisterRoutes(userGroup *gin.RouterGroup) {
 	userGroup.POST("/flaky-tests/:id/resolve", h.resolveFlakyTest)
 	userGroup.POST("/flaky-tests/:id/ignore", h.ignoreFlakyTest)
 }
-

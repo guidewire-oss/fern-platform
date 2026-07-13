@@ -22,7 +22,16 @@ func NewSystemHandler(logger *logging.Logger) *SystemHandler {
 	}
 }
 
-// getSystemStats handles GET /api/v1/admin/system/stats
+// getSystemStats godoc
+// @Summary      Get system statistics
+// @Description  Returns runtime memory, CPU, and goroutine statistics (admin only)
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /api/v1/admin/system/stats [get]
+// @Security     BearerAuth
 func (h *SystemHandler) getSystemStats(c *gin.Context) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -43,7 +52,16 @@ func (h *SystemHandler) getSystemStats(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, stats)
 }
 
-// getSystemHealth handles GET /api/v1/admin/system/health
+// getSystemHealth godoc
+// @Summary      Get system health
+// @Description  Returns the health status of system dependencies such as the database (admin only)
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /api/v1/admin/system/health [get]
+// @Security     BearerAuth
 func (h *SystemHandler) getSystemHealth(c *gin.Context) {
 	// TODO: Add actual health checks (database, redis, etc.)
 	health := gin.H{
@@ -64,7 +82,16 @@ func (h *SystemHandler) getSystemHealth(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, health)
 }
 
-// performSystemCleanup handles POST /api/v1/admin/system/cleanup
+// performSystemCleanup godoc
+// @Summary      Perform system cleanup
+// @Description  Triggers garbage collection and other cleanup operations (admin only)
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /api/v1/admin/system/cleanup [post]
+// @Security     BearerAuth
 func (h *SystemHandler) performSystemCleanup(c *gin.Context) {
 	// TODO: Implement actual cleanup operations
 	// For now, just run garbage collection
@@ -76,7 +103,16 @@ func (h *SystemHandler) performSystemCleanup(c *gin.Context) {
 	})
 }
 
-// getAuditLogs handles GET /api/v1/admin/audit-logs
+// getAuditLogs godoc
+// @Summary      Get audit logs
+// @Description  Returns the audit log of administrative actions (admin only)
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /api/v1/admin/audit-logs [get]
+// @Security     BearerAuth
 func (h *SystemHandler) getAuditLogs(c *gin.Context) {
 	// TODO: Implement audit log retrieval
 	// For now, return empty logs

@@ -27,7 +27,18 @@ func NewProjectHandler(projectService *projectsApp.ProjectService, logger *loggi
 	}
 }
 
-// createProject handles POST /api/v1/projects
+// createProject godoc
+// @Summary      Create a project
+// @Description  Creates a new project (manager or admin only)
+// @Tags         projects
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object{projectId=string,name=string,team=string,description=string,repository=string,defaultBranch=string,settings=object}  true  "Project details"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects [post]
+// @Security     BearerAuth
 func (h *ProjectHandler) createProject(c *gin.Context) {
 	var input struct {
 		ProjectID     string                 `json:"projectId"`
@@ -83,8 +94,9 @@ func (h *ProjectHandler) createProject(c *gin.Context) {
 			updates.Settings = input.Settings
 		}
 
-		if err := h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates); err != nil {
-			h.logger.WithError(err).Warn("Failed to update project details after creation")
+		updateErr := h.projectService.UpdateProject(c.Request.Context(), project.ProjectID(), updates)
+		if updateErr != nil {
+			h.logger.WithError(updateErr).Warn("Failed to update project details after creation")
 		}
 	}
 
@@ -92,7 +104,18 @@ func (h *ProjectHandler) createProject(c *gin.Context) {
 	c.JSON(http.StatusCreated, h.convertProjectToAPI(project))
 }
 
-// getProject handles GET /api/v1/projects/:projectId
+// getProject godoc
+// @Summary      Get a project
+// @Description  Returns a project by its project ID string
+// @Tags         projects
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Failure      501  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId} [get]
+// @Security     BearerAuth
 func (h *ProjectHandler) getProject(c *gin.Context) {
 	projectIDStr := c.Param("projectId")
 
@@ -117,7 +140,17 @@ func (h *ProjectHandler) getProject(c *gin.Context) {
 	c.JSON(http.StatusOK, h.convertProjectToAPI(project))
 }
 
-// getProjectByProjectID handles GET /api/v1/projects/by-project-id/:projectId
+// getProjectByProjectID godoc
+// @Summary      Get a project by project ID
+// @Description  Explicit lookup by project ID string (avoids numeric ID ambiguity)
+// @Tags         projects
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/by-project-id/{projectId} [get]
+// @Security     BearerAuth
 func (h *ProjectHandler) getProjectByProjectID(c *gin.Context) {
 	projectID := c.Param("projectId")
 
@@ -134,7 +167,20 @@ func (h *ProjectHandler) getProjectByProjectID(c *gin.Context) {
 	c.JSON(http.StatusOK, h.convertProjectToAPI(project))
 }
 
-// updateProject handles PUT /api/v1/projects/:projectId
+// updateProject godoc
+// @Summary      Update a project
+// @Description  Updates project metadata (manager or admin only)
+// @Tags         projects
+// @Accept       json
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Param        body       body  object{name=string,description=string,team=string,repository=string,defaultBranch=string,settings=object}  false  "Fields to update"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId} [put]
+// @Security     BearerAuth
 func (h *ProjectHandler) updateProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
@@ -198,7 +244,17 @@ func (h *ProjectHandler) updateProject(c *gin.Context) {
 	c.JSON(http.StatusOK, h.convertProjectToAPI(project))
 }
 
-// deleteProject handles DELETE /api/v1/projects/:projectId
+// deleteProject godoc
+// @Summary      Delete a project
+// @Description  Permanently deletes a project and its data (manager or admin only)
+// @Tags         projects
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Success      200  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId} [delete]
+// @Security     BearerAuth
 func (h *ProjectHandler) deleteProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
@@ -214,7 +270,17 @@ func (h *ProjectHandler) deleteProject(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Project deleted successfully"})
 }
 
-// listProjects handles GET /api/v1/projects
+// listProjects godoc
+// @Summary      List projects
+// @Description  Returns a paginated list of all accessible projects
+// @Tags         projects
+// @Produce      json
+// @Param        limit   query  int  false  "Page size (default 20)"
+// @Param        offset  query  int  false  "Page offset (default 0)"
+// @Success      200  {array}   map[string]interface{}
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects [get]
+// @Security     BearerAuth
 func (h *ProjectHandler) listProjects(c *gin.Context) {
 	limit := 20
 	offset := 0
@@ -246,7 +312,17 @@ func (h *ProjectHandler) listProjects(c *gin.Context) {
 	c.JSON(http.StatusOK, apiProjects)
 }
 
-// activateProject handles POST /api/v1/projects/:projectId/activate
+// activateProject godoc
+// @Summary      Activate a project
+// @Description  Marks a project as active so it accepts new test runs
+// @Tags         projects
+// @Produce      json
+// @Param        projectId  path  string  true  "Project ID"
+// @Success      200  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/v1/projects/{projectId}/activate [post]
+// @Security     BearerAuth
 func (h *ProjectHandler) activateProject(c *gin.Context) {
 	projectID := c.Param("projectId")
 
@@ -318,7 +394,7 @@ func (h *ProjectHandler) getProjectUsers(c *gin.Context) {
 // convertProjectToAPI converts a domain project to API response format
 func (h *ProjectHandler) convertProjectToAPI(p *projectsDomain.Project) gin.H {
 	snapshot := p.ToSnapshot()
-	
+
 	return gin.H{
 		"id":            snapshot.ID,
 		"projectId":     string(snapshot.ProjectID),

@@ -21,7 +21,13 @@ func NewHealthHandler(logger *logging.Logger) *HealthHandler {
 	}
 }
 
-// healthCheck handles GET /api/v1/health
+// healthCheck godoc
+// @Summary      Health check
+// @Description  Returns the health status, timestamp, service name, and version
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /api/v1/health [get]
 func (h *HealthHandler) healthCheck(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, gin.H{
 		"status":    "healthy",
