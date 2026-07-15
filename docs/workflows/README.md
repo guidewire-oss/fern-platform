@@ -171,12 +171,13 @@ public class YourTestClass {
 #### **For JUnit with Gradle**
 ```gradle
 plugins {
-    id 'com.guidewire.oss.fern-junit-gradle' version 'latest'
+    id("io.github.guidewire-oss.fern-publisher") version "1.1.0"
 }
 
-fern {
-    projectId = 'YOUR-PROJECT-ID'
-    baseUrl = 'https://your-fern-platform.com'
+fernPublisher {
+    fernUrl.set("FERN_URL")
+    projectId.set("FERN_PROJECT_ID")
+    projectName.set("FERN_PROJECT_NAME")
 }
 ```
 [📖 Full Gradle Plugin Documentation](https://github.com/guidewire-oss/fern-junit-gradle-plugin)
