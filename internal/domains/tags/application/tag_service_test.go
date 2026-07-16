@@ -103,6 +103,13 @@ func (r *inMemoryTagRepo) Delete(ctx context.Context, id domain.TagID) error {
 	return nil
 }
 
+func (r *inMemoryTagRepo) UsageCounts(ctx context.Context) (map[string]int, error) {
+	if r.fail {
+		return nil, fmt.Errorf("repo error")
+	}
+	return map[string]int{}, nil
+}
+
 func (r *inMemoryTagRepo) AssignToTestRun(ctx context.Context, testRunID string, tagIDs []domain.TagID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -166,6 +173,13 @@ func (r *erroringRepo) Delete(ctx context.Context, id domain.TagID) error {
 	return nil
 }
 
+func (r *erroringRepo) UsageCounts(ctx context.Context) (map[string]int, error) {
+	if r.shouldFailOn == "UsageCounts" {
+		return nil, fmt.Errorf("usage counts error")
+	}
+	return map[string]int{}, nil
+}
+
 func (r *erroringRepo) AssignToTestRun(ctx context.Context, testRunID string, tagIDs []domain.TagID) error {
 	if r.shouldFailOn == "AssignToTestRun" {
 		return fmt.Errorf("assign error")
@@ -202,6 +216,10 @@ func (r *mockRepoForDelete) AssignToTestRun(ctx context.Context, testRunID strin
 	return fmt.Errorf("not implemented")
 }
 
+func (r *mockRepoForDelete) UsageCounts(ctx context.Context) (map[string]int, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // mockRepoForAssign allows FindByID to succeed but AssignToTestRun to fail
 type mockRepoForAssign struct {
 	tag *domain.Tag
@@ -229,6 +247,10 @@ func (r *mockRepoForAssign) FindAll(ctx context.Context) ([]*domain.Tag, error) 
 
 func (r *mockRepoForAssign) Delete(ctx context.Context, id domain.TagID) error {
 	return fmt.Errorf("not implemented")
+}
+
+func (r *mockRepoForAssign) UsageCounts(ctx context.Context) (map[string]int, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // --- Specs ---

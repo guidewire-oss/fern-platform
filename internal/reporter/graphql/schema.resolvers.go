@@ -508,10 +508,14 @@ func (r *projectResolver) Stats(ctx context.Context, obj *model.Project) (*model
 		RecentTestRuns:  0,
 	}
 
-	buildStats := func(totalRuns, passedRuns, uniqueBranches int64, avgDurationMs float64, lastRunTime *time.Time) *model.ProjectStats {
+	// successRate is the share of individual test cases that passed —
+	// the same definition the treemap uses (passed_tests / total_tests).
+	// Previously this was passed_runs / total_runs, a much harsher metric
+	// that disagreed with the treemap for the same project.
+	buildStats := func(totalRuns, totalTests, passedTests, uniqueBranches int64, avgDurationMs float64, lastRunTime *time.Time) *model.ProjectStats {
 		successRate := 0.0
-		if totalRuns > 0 {
-			successRate = float64(passedRuns) / float64(totalRuns)
+		if totalTests > 0 {
+			successRate = float64(passedTests) / float64(totalTests)
 		}
 		return &model.ProjectStats{
 			TotalTestRuns:   int(totalRuns),
@@ -531,7 +535,7 @@ func (r *projectResolver) Stats(ctx context.Context, obj *model.Project) (*model
 		if err != nil {
 			return empty, fmt.Errorf("failed to load stats for project %s: %w", projectID, err)
 		}
-		return buildStats(data.TotalRuns, data.PassedRuns, data.UniqueBranches, data.AvgDurationMs, data.LastRunTime), nil
+		return buildStats(data.TotalRuns, data.TotalTests, data.PassedTests, data.UniqueBranches, data.AvgDurationMs, data.LastRunTime), nil
 	}
 
 	if r.testingService == nil {
@@ -543,7 +547,7 @@ func (r *projectResolver) Stats(ctx context.Context, obj *model.Project) (*model
 		return empty, fmt.Errorf("failed to get stats for project %s: %w", projectID, err)
 	}
 
-	return buildStats(stats.TotalRuns, stats.PassedRuns, stats.UniqueBranches, stats.AvgDurationMs, stats.LastRunTime), nil
+	return buildStats(stats.TotalRuns, stats.TotalTests, stats.PassedTests, stats.UniqueBranches, stats.AvgDurationMs, stats.LastRunTime), nil
 }
 
 // CurrentUser is the resolver for the currentUser field.
@@ -670,9 +674,9 @@ func (r *queryResolver) Health(ctx context.Context) (*model.HealthStatus, error)
 }
 
 // TreemapData is the resolver for the treemapData field.
-func (r *queryResolver) TreemapData(ctx context.Context, projectID *string, days *int) (*model.TreemapData, error) {
+func (r *queryResolver) TreemapData(ctx context.Context, projectID *string, suiteName *string, days *int) (*model.TreemapData, error) {
 	// Use domain service implementation
-	return r.TreemapData_domain(ctx, projectID, days)
+	return r.TreemapData_domain(ctx, projectID, suiteName, days)
 }
 
 // TestRun is the resolver for the testRun field.
@@ -700,14 +704,84 @@ func (r *queryResolver) TestRuns(ctx context.Context, filter *model.TestRunFilte
 	return r.TestRuns_domain(ctx, filter, first, after, orderBy, orderDirection)
 }
 
-// TestRunStats is the resolver for the testRunStats field.
+// TestRunStats is the resolver for the testRunStats field. Returns
+// aggregate counts + success rate over the past N days (default 30).
+// Backed by `AggregateProjectsInRange` — same SQL aggregate the
+// treemap and trends endpoints use.
 func (r *queryResolver) TestRunStats(ctx context.Context, projectID *string, days *int) (*model.TestRunStats, error) {
-	// TODO: Implement test run stats using domain service
+	d := 30
+	if days != nil && *days > 0 {
+		d = *days
+	}
+	endTime := time.Now()
+	startTime := endTime.AddDate(0, 0, -d)
+
+	// Scope by access — same pattern as TreemapData_domain. Admins see
+	// everything; non-admins only the projects they can read.
+	user, err := getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+	allProjects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch projects: %w", err)
+	}
+	teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
+	projectIDs := make([]string, 0, len(allProjects))
+	for _, p := range allProjects {
+		pid := string(p.ProjectID())
+		if projectID != nil && *projectID != "" && pid != *projectID {
+			continue
+		}
+		if user.Role != authDomain.RoleAdmin && !userCanAccessProject(p.ToSnapshot(), teamMap) {
+			continue
+		}
+		projectIDs = append(projectIDs, pid)
+	}
+	if len(projectIDs) == 0 {
+		return &model.TestRunStats{
+			TotalRuns:       0,
+			StatusCounts:    []*model.StatusCount{},
+			AverageDuration: 0,
+			SuccessRate:     0,
+		}, nil
+	}
+
+	aggs, err := r.testingService.AggregateProjectsInRange(ctx, projectIDs, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate test-run stats: %w", err)
+	}
+
+	var totalRuns, totalTests, passedTests, failedTests, skippedTests int
+	var totalDuration int64
+	for _, a := range aggs {
+		totalRuns += a.TotalRuns
+		totalTests += a.TotalTests
+		passedTests += a.PassedTests
+		failedTests += a.FailedTests
+		skippedTests += a.SkippedTests
+		totalDuration += a.DurationMs
+	}
+
+	statusCounts := []*model.StatusCount{
+		{Status: "passed", Count: passedTests},
+		{Status: "failed", Count: failedTests},
+		{Status: "skipped", Count: skippedTests},
+	}
+	successRate := float64(0)
+	if totalTests > 0 {
+		successRate = float64(passedTests) / float64(totalTests)
+	}
+	avgDuration := 0
+	if totalRuns > 0 {
+		avgDuration = int(totalDuration / int64(totalRuns))
+	}
+
 	return &model.TestRunStats{
-		TotalRuns:       0,
-		StatusCounts:    []*model.StatusCount{},
-		AverageDuration: 0,
-		SuccessRate:     0.0,
+		TotalRuns:       totalRuns,
+		StatusCounts:    statusCounts,
+		AverageDuration: avgDuration,
+		SuccessRate:     successRate,
 	}, nil
 }
 

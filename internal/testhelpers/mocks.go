@@ -320,6 +320,38 @@ func (m *MockTestRunRepository) GetRecentByProjectIDs(ctx context.Context, proje
 	return args.Get(0).([]*testingDomain.TestRun), args.Get(1).(int64), args.Error(2)
 }
 
+func (m *MockTestRunRepository) AggregateProjectsInRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*testingDomain.ProjectAggregate, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.ProjectAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateSuitesInRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*testingDomain.SuiteAggregate, error) {
+	args := m.Called(ctx, projectID, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.SuiteAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateSpecsForSuiteInRange(ctx context.Context, projectID, suiteName string, startDate, endDate time.Time) ([]*testingDomain.SpecAggregate, error) {
+	args := m.Called(ctx, projectID, suiteName, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.SpecAggregate), args.Error(1)
+}
+
+func (m *MockTestRunRepository) AggregateDailyByProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*testingDomain.DailyProjectAggregate, error) {
+	args := m.Called(ctx, projectIDs, startDate, endDate)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*testingDomain.DailyProjectAggregate), args.Error(1)
+}
+
 func (m *MockTestRunRepository) Create(ctx context.Context, testRun *testingDomain.TestRun) error {
 	args := m.Called(ctx, testRun)
 	return args.Error(0)
@@ -383,6 +415,14 @@ func (m *MockTagRepository) FindByName(ctx context.Context, name string) (*tagsD
 func (m *MockTagRepository) AssignToTestRun(ctx context.Context, testRunID string, tagIDs []tagsDomain.TagID) error {
 	args := m.Called(ctx, testRunID, tagIDs)
 	return args.Error(0)
+}
+
+func (m *MockTagRepository) UsageCounts(ctx context.Context) (map[string]int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]int), args.Error(1)
 }
 
 // MockBuilder provides a fluent interface for setting up mocks

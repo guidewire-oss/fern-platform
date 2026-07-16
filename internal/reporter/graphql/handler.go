@@ -15,8 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	// "github.com/guidewire-oss/fern-platform/internal/reporter/graphql/dataloader"
 	authInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
+	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/dataloader"
 	"github.com/guidewire-oss/fern-platform/internal/reporter/graphql/generated"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
@@ -156,11 +156,14 @@ func (h *Handler) RegisterRoutes(router *gin.Engine, authMiddleware *authInterfa
 // graphqlHandler returns a Gin handler for GraphQL queries
 func (h *Handler) graphqlHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Add DataLoader middleware to context
 		ctx := c.Request.Context()
 
-		// Add loaders to context
-		ctx = context.WithValue(ctx, "loaders", h.resolver.loaders)
+		// Build dataloaders per request so their internal caches are
+		// scoped to a single HTTP request. A process-wide loader would
+		// cache the first result a key sees and serve it forever — which
+		// previously caused project stats to stick at zero whenever the
+		// first read happened before all test_runs had been inserted.
+		ctx = context.WithValue(ctx, "loaders", dataloader.NewLoaders(h.resolver.db))
 
 		// Add request metadata
 		ctx = context.WithValue(ctx, "request_id", c.GetString("request_id"))

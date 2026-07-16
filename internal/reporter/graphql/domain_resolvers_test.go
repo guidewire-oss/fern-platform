@@ -1347,7 +1347,7 @@ func TestAuthorizationNegativeCases(t *testing.T) {
 		resolver := NewResolver(nil, nil, nil, nil, nil, nil, db, logger)
 		queryResolver := &queryResolver{resolver}
 
-		result, err := queryResolver.TreemapData_domain(context.Background(), nil, nil)
+		result, err := queryResolver.TreemapData_domain(context.Background(), nil, nil, nil)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)

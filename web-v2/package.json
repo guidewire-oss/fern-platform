@@ -1,0 +1,100 @@
+{
+  "name": "fern-platform-web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Fern Platform v2 SPA (RFC-004). Replaces legacy /web at Phase 5.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "playwright": "playwright test",
+    "codegen": "graphql-codegen --config codegen.ts",
+    "size": "size-limit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.40.0",
+    "@tanstack/react-router": "^1.40.0",
+    "@tanstack/react-virtual": "^3.5.0",
+    "d3": "7",
+    "date-fns": "^3.6.0",
+    "graphql": "^16.8.0",
+    "graphql-request": "^6.1.0",
+    "lucide-react": "^0.400.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-hook-form": "^7.52.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.9.0",
+    "@graphql-codegen/cli": "^5.0.0",
+    "@graphql-codegen/typescript": "^4.0.0",
+    "@graphql-codegen/typescript-operations": "^4.2.0",
+    "@graphql-codegen/typescript-react-query": "^6.1.0",
+    "@playwright/test": "^1.45.0",
+    "@size-limit/preset-app": "^11.1.0",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/d3": "7",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-plugin-jsx-a11y": "^6.9.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.7",
+    "jsdom": "^24.1.0",
+    "msw": "^2.3.0",
+    "postcss": "^8.4.38",
+    "prettier": "^3.3.0",
+    "size-limit": "^11.1.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.3.0",
+    "vitest": "^3.2.6"
+  },
+  "size-limit": [
+    {
+      "name": "initial",
+      "path": "dist/assets/index-*.js",
+      "limit": "150 kB",
+      "gzip": true
+    },
+    {
+      "name": "total app",
+      "path": "dist/assets/*.js",
+      "limit": "600 kB",
+      "gzip": true
+    }
+  ],
+  "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "shell-quote@<1.8.4": ">=1.8.4"
+    },
+    "supportedArchitectures": {
+      "os": [
+        "linux",
+        "darwin",
+        "win32"
+      ],
+      "cpu": [
+        "x64",
+        "arm64"
+      ],
+      "libc": [
+        "glibc",
+        "musl"
+      ]
+    }
+  }
+}

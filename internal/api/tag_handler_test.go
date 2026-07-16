@@ -121,6 +121,20 @@ func (r *inMemoryTagRepo) AssignToTestRun(ctx context.Context, testRunID string,
 	return nil
 }
 
+func (r *inMemoryTagRepo) UsageCounts(ctx context.Context) (map[string]int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Derive counts from the recorded assigns so usage-stats tests
+	// can exercise the popularity ordering without a real DB.
+	out := map[string]int{}
+	for _, tagIDs := range r.assigns {
+		for _, id := range tagIDs {
+			out[string(id)]++
+		}
+	}
+	return out, nil
+}
+
 // --- Tests ---
 
 var _ = Describe("TagHandler & tag processing", func() {

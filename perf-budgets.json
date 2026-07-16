@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json.schemastore.org/perf-budgets",
+  "description": "Single source of truth for performance budgets across the v2 stack. Consumed by k6 thresholds (tests/perf/), Lighthouse CI (web-v2/.lighthouserc.json), and size-limit (web-v2/package.json). Keep these in sync.",
+  "version": 1,
+  "frontend": {
+    "core_web_vitals": {
+      "lcp_p75_ms":   { "good": 2500, "warning": 4000 },
+      "inp_p75_ms":   { "good": 200,  "warning": 500 },
+      "cls_p75":      { "good": 0.1,  "warning": 0.25 }
+    },
+    "lab": {
+      "tti_p75_ms":           1500,
+      "total_blocking_time_ms": 200,
+      "lighthouse_perf":      0.90,
+      "lighthouse_a11y":      0.95,
+      "lighthouse_best_practices": 0.95
+    },
+    "bundle_kb_gzip": {
+      "initial":     150,
+      "per_route":    80,
+      "total_app":   600
+    }
+  },
+  "backend": {
+    "slo_28d_rolling": {
+      "availability":           0.999,
+      "list_p95_ms":            500,
+      "list_p99_ms":            900,
+      "detail_p95_ms":          300,
+      "ingest_p95_ms":          250,
+      "treemap_p95_ms":         300,
+      "flaky_p95_ms":           500,
+      "graphql_error_rate":     0.005
+    },
+    "load_test_default_filter": {
+      "list_p95_ms":            500,
+      "list_p99_ms":            900,
+      "max_error_rate":         0.005,
+      "max_http_failure_rate":  0.01
+    },
+    "stress_200_vu": {
+      "max_error_rate":         0.05,
+      "recovery_within_minutes": 2
+    },
+    "soak_8h_30vu": {
+      "rss_growth_pct":         5,
+      "goroutine_drift_pct":    10
+    },
+    "spike_ingest": {
+      "burst_rps":              500,
+      "duration_seconds":       30,
+      "ingest_error_rate":      0.01
+    }
+  },
+  "alerts": {
+    "burn_rate": {
+      "fast_window_minutes":    5,
+      "fast_window_multiplier": 14,
+      "slow_window_hours":      1,
+      "slow_window_multiplier": 2
+    }
+  }
+}

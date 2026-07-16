@@ -19,8 +19,8 @@ type jiraSearchResponse struct {
 }
 
 type jiraSearchIssue struct {
-	Key    string           `json:"key"`
-	Fields jiraIssueFields  `json:"fields"`
+	Key    string          `json:"key"`
+	Fields jiraIssueFields `json:"fields"`
 }
 
 type jiraIssueFields struct {
@@ -38,7 +38,6 @@ type jiraIssueType struct {
 	Name    string `json:"name"`
 	Subtask bool   `json:"subtask,omitempty"`
 }
-
 
 func TestDefaultJiraClient_SearchIssues(t *testing.T) {
 	ctx := context.Background()
@@ -262,6 +261,40 @@ func TestDefaultJiraClient_GetEpicReleases(t *testing.T) {
 		}
 		if !strings.Contains(capturedJQL, "updated >= -52w") {
 			t.Errorf("expected JQL to scope to the past year (updated >= -52w), got %q", capturedJQL)
+		}
+		if !strings.Contains(capturedJQL, "cf[10077]") {
+			t.Errorf("custom field should use cf[10077] JQL, got %q", capturedJQL)
+		}
+	})
+
+	t.Run("standard Fix Version field uses `fixVersion` JQL and parses version names", func(t *testing.T) {
+		var capturedJQL string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedJQL = r.URL.Query().Get("jql")
+			w.Header().Set("Content-Type", "application/json")
+			// fixVersions is an array of version objects, not a string.
+			_, _ = w.Write([]byte(`{"issues":[
+				{"key":"E-1","fields":{"fixVersions":[{"name":"1.0"},{"name":"2.0"}]}},
+				{"key":"E-2","fields":{"fixVersions":[{"name":"1.0"}]}}
+			]}`))
+		}))
+		defer srv.Close()
+
+		releases, err := client.GetEpicReleases(ctx, srv.URL, "PROJ", "fixVersions", "u", "t", integrations.AuthTypeAPIToken)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Must NOT use cf[fixVersions] (the 400-causing bug); must use the
+		// standard `fixVersion` JQL clause.
+		if strings.Contains(capturedJQL, "cf[fixVersions]") {
+			t.Errorf("must not wrap a standard field in cf[...], got %q", capturedJQL)
+		}
+		if !strings.Contains(capturedJQL, "fixVersion is not EMPTY") {
+			t.Errorf("expected `fixVersion is not EMPTY` JQL, got %q", capturedJQL)
+		}
+		// Distinct, sorted version names across epics.
+		if len(releases) != 2 || releases[0] != "1.0" || releases[1] != "2.0" {
+			t.Errorf("expected [1.0 2.0], got %v", releases)
 		}
 	})
 }

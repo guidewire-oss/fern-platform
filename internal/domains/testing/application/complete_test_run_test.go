@@ -43,6 +43,18 @@ func (m *mockTestRunRepo) GetRecent(ctx context.Context, limit int) ([]*domain.T
 func (m *mockTestRunRepo) GetDashboardStats(ctx context.Context) (*domain.DashboardStatsResult, error) {
 	return &domain.DashboardStatsResult{}, nil
 }
+func (m *mockTestRunRepo) AggregateProjectsInRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.ProjectAggregate, error) {
+	return nil, nil
+}
+func (m *mockTestRunRepo) AggregateSuitesInRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*domain.SuiteAggregate, error) {
+	return nil, nil
+}
+func (m *mockTestRunRepo) AggregateSpecsForSuiteInRange(ctx context.Context, projectID, suiteName string, startDate, endDate time.Time) ([]*domain.SpecAggregate, error) {
+	return nil, nil
+}
+func (m *mockTestRunRepo) AggregateDailyByProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.DailyProjectAggregate, error) {
+	return nil, nil
+}
 func (m *mockTestRunRepo) GetByRunID(ctx context.Context, runID string) (*domain.TestRun, error) {
 	args := m.Called(ctx, runID)
 	return args.Get(0).(*domain.TestRun), args.Error(1)

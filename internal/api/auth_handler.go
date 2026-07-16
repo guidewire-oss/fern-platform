@@ -4,8 +4,10 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
@@ -14,13 +16,17 @@ import (
 type AuthHandler struct {
 	*BaseHandler
 	authMiddleware *interfaces.AuthMiddlewareAdapter
+	userRepo       authDomain.UserRepository
 }
 
-// NewAuthHandler creates a new auth handler
-func NewAuthHandler(authMiddleware *interfaces.AuthMiddlewareAdapter, logger *logging.Logger) *AuthHandler {
+// NewAuthHandler creates a new auth handler. The userRepo argument is
+// optional — when nil, the admin user-management endpoints fall back
+// to their original stub responses (empty list, ok messages).
+func NewAuthHandler(authMiddleware *interfaces.AuthMiddlewareAdapter, userRepo authDomain.UserRepository, logger *logging.Logger) *AuthHandler {
 	return &AuthHandler{
 		BaseHandler:    NewBaseHandler(logger),
 		authMiddleware: authMiddleware,
+		userRepo:       userRepo,
 	}
 }
 
@@ -71,43 +77,6 @@ func (h *AuthHandler) getCurrentUser(c *gin.Context) {
 	h.respondWithJSON(c, http.StatusOK, response)
 }
 
-// getUserPreferences handles GET /api/v1/user/preferences
-func (h *AuthHandler) getUserPreferences(c *gin.Context) {
-	userID := h.getUserID(c)
-
-	// TODO: Implement user preferences storage and retrieval
-	// For now, return default preferences
-	preferences := gin.H{
-		"user_id": userID,
-		"theme":   "light",
-		"notifications": gin.H{
-			"email":   true,
-			"in_app":  true,
-			"desktop": false,
-		},
-		"dashboard": gin.H{
-			"default_view":     "grid",
-			"items_per_page":   20,
-			"show_failed_only": false,
-		},
-	}
-
-	h.respondWithJSON(c, http.StatusOK, preferences)
-}
-
-// updateUserPreferences handles PUT /api/v1/user/preferences
-func (h *AuthHandler) updateUserPreferences(c *gin.Context) {
-	var preferences map[string]interface{}
-	if err := c.ShouldBindJSON(&preferences); err != nil {
-		h.respondWithError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// TODO: Implement user preferences storage
-	// For now, just echo back the preferences
-	h.respondWithJSON(c, http.StatusOK, preferences)
-}
-
 // getUserProjects handles GET /api/v1/user/projects
 func (h *AuthHandler) getUserProjects(c *gin.Context) {
 	userID := h.getUserID(c)
@@ -125,41 +94,152 @@ func (h *AuthHandler) getUserProjects(c *gin.Context) {
 
 // Admin user management endpoints
 
+// userDTO is the wire shape returned by the admin user endpoints.
+type userDTO struct {
+	UserID    string `json:"userId"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	Status    string `json:"status"`
+	LastLogin string `json:"lastLogin,omitempty"`
+}
+
+func toUserDTO(u *authDomain.User) userDTO {
+	dto := userDTO{
+		UserID: u.UserID,
+		Email:  u.Email,
+		Name:   u.Name,
+		Role:   string(u.Role),
+		Status: string(u.Status),
+	}
+	if u.LastLoginAt != nil {
+		dto.LastLogin = u.LastLoginAt.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return dto
+}
+
 // listUsers handles GET /api/v1/admin/users
 func (h *AuthHandler) listUsers(c *gin.Context) {
-	// TODO: Implement user listing from auth service
-	h.respondWithJSON(c, http.StatusOK, gin.H{"items": []gin.H{}, "total": 0})
+	if h.userRepo == nil {
+		h.respondWithJSON(c, http.StatusOK, gin.H{"items": []gin.H{}, "total": 0})
+		return
+	}
+	limit := 50
+	offset := 0
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		}
+	}
+	users, total, err := h.userRepo.List(c.Request.Context(), limit, offset)
+	if err != nil {
+		h.respondWithError(c, http.StatusInternalServerError, "list users: "+err.Error())
+		return
+	}
+	items := make([]userDTO, len(users))
+	for i, u := range users {
+		items[i] = toUserDTO(u)
+	}
+	h.respondWithJSON(c, http.StatusOK, gin.H{
+		"items":  items,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // getUser handles GET /api/v1/admin/users/:userId
 func (h *AuthHandler) getUser(c *gin.Context) {
 	userID := c.Param("userId")
-	// TODO: Implement get user from auth service
-	h.respondWithJSON(c, http.StatusOK, gin.H{"id": userID})
+	if h.userRepo == nil {
+		h.respondWithJSON(c, http.StatusOK, gin.H{"id": userID})
+		return
+	}
+	u, err := h.userRepo.FindByID(c.Request.Context(), userID)
+	if err != nil {
+		h.respondWithError(c, http.StatusNotFound, "user not found")
+		return
+	}
+	h.respondWithJSON(c, http.StatusOK, toUserDTO(u))
 }
 
 // updateUserRole handles PUT /api/v1/admin/users/:userId/role
 func (h *AuthHandler) updateUserRole(c *gin.Context) {
-	// TODO: Implement update user role
-	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "Role updated successfully"})
+	if h.userRepo == nil {
+		h.respondWithJSON(c, http.StatusOK, gin.H{"message": "Role updated successfully"})
+		return
+	}
+	userID := c.Param("userId")
+	var body struct {
+		Role string `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		h.respondWithError(c, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	role := authDomain.UserRole(body.Role)
+	switch role {
+	case authDomain.RoleAdmin, authDomain.RoleManager, authDomain.RoleUser:
+	default:
+		h.respondWithError(c, http.StatusBadRequest, "role must be admin, manager, or user")
+		return
+	}
+	if err := h.userRepo.UpdateRole(c.Request.Context(), userID, role); err != nil {
+		h.respondWithError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondWithJSON(c, http.StatusOK, gin.H{"userId": userID, "role": string(role)})
 }
 
 // suspendUser handles POST /api/v1/admin/users/:userId/suspend
 func (h *AuthHandler) suspendUser(c *gin.Context) {
-	// TODO: Implement suspend user
-	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User suspended successfully"})
+	if h.userRepo == nil {
+		// No-DB testing path. Matches updateUserRole's pattern above.
+		h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User suspended successfully"})
+		return
+	}
+	userID := c.Param("userId")
+	if err := h.userRepo.UpdateStatus(c.Request.Context(), userID, authDomain.StatusSuspended); err != nil {
+		h.respondWithError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondWithJSON(c, http.StatusOK, gin.H{"userId": userID, "status": string(authDomain.StatusSuspended)})
 }
 
 // activateUser handles POST /api/v1/admin/users/:userId/activate
 func (h *AuthHandler) activateUser(c *gin.Context) {
-	// TODO: Implement activate user
-	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User activated successfully"})
+	if h.userRepo == nil {
+		h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User activated successfully"})
+		return
+	}
+	userID := c.Param("userId")
+	if err := h.userRepo.UpdateStatus(c.Request.Context(), userID, authDomain.StatusActive); err != nil {
+		h.respondWithError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondWithJSON(c, http.StatusOK, gin.H{"userId": userID, "status": string(authDomain.StatusActive)})
 }
 
-// deleteUser handles DELETE /api/v1/admin/users/:userId
+// deleteUser handles DELETE /api/v1/admin/users/:userId. Soft-delete:
+// the row stays in the DB with deleted_at set, excluded from default
+// queries. Hard delete would cascade into saved_views, jira_connections,
+// user_scopes, etc. — soft is safer.
 func (h *AuthHandler) deleteUser(c *gin.Context) {
-	// TODO: Implement delete user
-	h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User deleted successfully"})
+	if h.userRepo == nil {
+		h.respondWithJSON(c, http.StatusOK, gin.H{"message": "User deleted successfully"})
+		return
+	}
+	userID := c.Param("userId")
+	if err := h.userRepo.SoftDelete(c.Request.Context(), userID); err != nil {
+		h.respondWithError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondWithJSON(c, http.StatusOK, gin.H{"userId": userID, "deleted": true})
 }
 
 // Helper methods
@@ -580,9 +660,11 @@ func (h *AuthHandler) RegisterRoutes(router *gin.Engine, authGroup, userGroup, a
 	authGroup.POST("/logout", h.authMiddleware.Logout())
 	authGroup.GET("/user", h.authMiddleware.RequireAuth(), h.getCurrentUser)
 
-	// User routes
-	userGroup.GET("/user/preferences", h.getUserPreferences)
-	userGroup.PUT("/user/preferences", h.updateUserPreferences)
+	// User routes. Note: /user/preferences was removed — v2 reads and
+	// writes preferences via GraphQL (`userPreferences` query +
+	// `updateUserPreferences` mutation). The legacy REST stubs were
+	// returning fake "default" responses and silently echoing PUTs
+	// without persisting; nothing in v1 or v2 called them.
 	userGroup.GET("/user/projects", h.getUserProjects)
 
 	// Admin routes for user management

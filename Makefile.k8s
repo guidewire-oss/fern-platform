@@ -1,7 +1,7 @@
 # Fern Platform - Kubernetes Makefile
 # Handles k3d cluster and Kubernetes deployments
 
-.PHONY: k3d-create k3d-delete k3d-status k8s-deploy k8s-delete k8s-status deploy-all deploy-quick
+.PHONY: k3d-create k3d-delete k3d-status k8s-deploy k8s-delete k8s-status deploy-all deploy-quick deploy-all-v2 deploy-quick-v2 build-and-load-image-v2
 
 # K3D cluster management
 k3d-create: ## Create k3d cluster for fern-platform
@@ -51,7 +51,7 @@ k8s-status: ## Check Kubernetes deployment status
 	@echo "   http://fern-platform.local:8080 (via Traefik ingress)"
 
 # Deployment automation
-deploy-all: ## Complete automated deployment (k3d + prerequisites + build + deploy)
+deploy-all: ## Complete automated deployment (k3d + prerequisites + build + deploy) [v1 web]
 	@echo "🚀 Starting complete automated deployment of Fern Platform..."
 	@echo ""
 	@echo "This will:"
@@ -59,6 +59,8 @@ deploy-all: ## Complete automated deployment (k3d + prerequisites + build + depl
 	@echo "2. Install prerequisites (KubeVela, CNPG)"
 	@echo "3. Build Docker image via Dagger"
 	@echo "4. Deploy application with KubeVela"
+	@echo ""
+	@echo "ℹ️  To deploy with the v2 SPA frontend, use: make deploy-all-v2"
 	@echo ""
 	@$(MAKE) -f Makefile.k8s check-or-create-cluster
 	@$(MAKE) -f Makefile.k8s check-and-install-prerequisites
@@ -74,11 +76,47 @@ deploy-all: ## Complete automated deployment (k3d + prerequisites + build + depl
 	@echo ""
 	@echo "🌐 Application is now accessible at: http://fern-platform.local:8080"
 
-deploy-quick: ## Quick deployment (assumes cluster and prerequisites exist)
+deploy-quick: ## Quick deployment (assumes cluster and prerequisites exist) [v1 web]
 	@echo "🚀 Quick deployment (assumes cluster exists)..."
 	@$(MAKE) -f Makefile.k8s build-and-load-image
 	@$(MAKE) -f Makefile.k8s deploy-and-verify
 	@echo "🎉 Quick deployment completed!"
+
+deploy-all-v2: ## Complete automated deployment with v2 SPA frontend (k3d + prerequisites + build + deploy)
+	@echo "🚀 Starting complete automated deployment of Fern Platform (v2 SPA)..."
+	@echo ""
+	@echo "This will:"
+	@echo "1. Check/create k3d cluster"
+	@echo "2. Install prerequisites (KubeVela, CNPG)"
+	@echo "3. Build Docker image (Node/pnpm SPA + Go binary)"
+	@echo "4. Deploy application with KubeVela"
+	@echo ""
+	@$(MAKE) -f Makefile.k8s check-or-create-cluster
+	@$(MAKE) -f Makefile.k8s check-and-install-prerequisites
+	@$(MAKE) -f Makefile.k8s build-and-load-image-v2
+	@$(MAKE) -f Makefile.k8s deploy-and-verify
+	@echo ""
+	@echo "🎉 Fern Platform (v2) deployment completed successfully!"
+	@echo ""
+	@echo "⚠️  IMPORTANT: Add these entries to your /etc/hosts file:"
+	@echo "   127.0.0.1 fern-platform.local"
+	@echo "   127.0.0.1 keycloak"
+	@echo ""
+	@echo "🌐 Application is now accessible at: http://fern-platform.local:8080"
+
+deploy-quick-v2: ## Quick deployment with v2 SPA frontend (assumes cluster and prerequisites exist)
+	@echo "🚀 Quick deployment with v2 SPA (assumes cluster exists)..."
+	@$(MAKE) -f Makefile.k8s build-and-load-image-v2
+	@$(MAKE) -f Makefile.k8s deploy-and-verify
+	@echo "🎉 Quick v2 deployment completed!"
+
+build-and-load-image-v2: ## Build Docker image with v2 SPA (Node/pnpm + Go) and load into k3d cluster
+	@echo "🐳 Building and loading Docker image (v2 SPA)..."
+	@echo "📦 Building image using Dockerfile (web-v2 → Go → runtime)..."
+	@docker build -t fern-platform:latest .
+	@echo "📥 Importing image into k3d cluster..."
+	@k3d image import fern-platform:latest -c fern-platform
+	@echo "✅ Image built and loaded successfully"
 
 # Internal helpers for deploy-all
 check-or-create-cluster: ## Check if k3d cluster exists, create if not

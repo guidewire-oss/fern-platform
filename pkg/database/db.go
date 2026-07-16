@@ -104,12 +104,23 @@ func (db *DB) Migrate(migrationsPath string) error {
 	// Enable verbose logging
 	m.Log = &VerboseLogger{verbose: true}
 
-	// Log current version before migration
+	// Log current version before migration. A "dirty" schema means a
+	// previous migration ran partway and failed — applying further
+	// migrations on top is unsafe. Fail-fast so the operator sees the
+	// problem instead of the app limping along with a broken schema.
 	version, dirty, err := m.Version()
 	if err != nil && err != migrate.ErrNilVersion {
 		log.Printf("[MIGRATE] Failed to get current version: %v\n", err)
 	} else {
 		log.Printf("[MIGRATE] Current migration version: %d, dirty: %v\n", version, dirty)
+		if dirty {
+			return fmt.Errorf(
+				"migrations are in dirty state at version %d — a prior migration failed midway. "+
+					"Fix manually: connect to the DB, finish or revert the partial migration, "+
+					"then `UPDATE schema_migrations SET dirty = false`",
+				version,
+			)
+		}
 	}
 
 	log.Printf("[MIGRATE] Starting migrations from path: %s\n", migrationsPath)
@@ -122,6 +133,20 @@ func (db *DB) Migrate(migrationsPath string) error {
 		log.Printf("[MIGRATE] No migrations to apply\n")
 	} else {
 		log.Printf("[MIGRATE] Migrations completed successfully\n")
+	}
+
+	// Final version check — verifies the schema is at the highest
+	// embedded migration after Up() completed. Belt-and-suspenders
+	// against a race where another replica writes to schema_migrations
+	// between our Version() call above and Up() finishing.
+	finalVersion, finalDirty, vErr := m.Version()
+	if vErr != nil && vErr != migrate.ErrNilVersion {
+		log.Printf("[MIGRATE] Post-migration version check failed: %v\n", vErr)
+	} else {
+		log.Printf("[MIGRATE] Schema now at version %d (dirty=%v)\n", finalVersion, finalDirty)
+		if finalDirty {
+			return fmt.Errorf("post-migration check: schema is dirty at version %d", finalVersion)
+		}
 	}
 
 	return nil

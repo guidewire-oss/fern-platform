@@ -39,6 +39,13 @@ internal/reporter/graphql/generated/* linguist-generated=true
 web/build/* linguist-generated=true
 vendor/* linguist-vendored=true
 
+# The v2 SPA bundle is committed because //go:embed all:dist needs it
+# on disk at Go-build time. Mark it generated so PR diffs collapse the
+# minified JS/CSS and sourcemaps by default, language-stats ignore it,
+# and `git log -p` treats it as opaque.
+internal/web/dist/** linguist-generated=true
+internal/web/dist/** binary
+
 # Mark documentation
 docs/* linguist-documentation=true
 *.md linguist-documentation=true

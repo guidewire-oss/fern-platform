@@ -1,0 +1,2 @@
+function f(r){if(r==null||!Number.isFinite(r)||r<0)return"0ms";const o=Math.round(r);if(o<1e3)return`${o}ms`;const e=o/1e3;if(e<60)return`${e.toFixed(1)}s`;let t=Math.floor(e/60),n=Math.round(e%60);if(n===60&&(t+=1,n=0),t<60)return n===0?`${t}m 0s`:`${t}m ${n}s`;const i=Math.floor(t/60),u=t%60;let s=`${i}h${u>0?` ${u}m`:" 0m"}`;return i<24&&n>0&&(s+=` ${n}s`),s}export{f};
+//# sourceMappingURL=duration-BdrzOpKg.js.map

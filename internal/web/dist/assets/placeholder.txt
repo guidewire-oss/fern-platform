@@ -1,0 +1,1 @@
+embed cache-header test fixture — served under /assets/* with long immutable caching (see internal/web/embed_test.go). Emitted from public/ so it survives SPA rebuilds and the check-embed-fresh drift check.

@@ -169,6 +169,31 @@ func (r *GormTagRepository) AssignToTestRun(ctx context.Context, testRunID strin
 	})
 }
 
+// UsageCounts returns a per-tag count of how many test_run_tags rows
+// reference each tag. Single GROUP BY query — used by the tags
+// listing and popular-tags endpoints so they don't fan out per-row
+// lookups. Returns string-keyed map so callers don't have to import
+// the domain.TagID type just to look up a count.
+func (r *GormTagRepository) UsageCounts(ctx context.Context) (map[string]int, error) {
+	type row struct {
+		TagID int64
+		N     int
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("test_run_tags").
+		Select("tag_id, COUNT(*) AS n").
+		Group("tag_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, r := range rows {
+		out[fmt.Sprintf("%d", r.TagID)] = r.N
+	}
+	return out, nil
+}
+
 // toDomainModel converts a database model to a domain model
 func (r *GormTagRepository) toDomainModel(dbTag *database.Tag) (*domain.Tag, error) {
 	// Use ReconstructTag to create domain model with all fields from database

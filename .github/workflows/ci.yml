@@ -102,6 +102,70 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
+  web-v2:
+    # v2 SPA (Vite + React + TypeScript) lives at web-v2/. Its built
+    # output is embedded into the Go binary via //go:embed all:dist,
+    # so the Go test/build jobs above don't catch a broken TypeScript
+    # source — the pre-checked-in dist/ keeps embedding cleanly. This
+    # job is the source-side safety net: typecheck, lint, unit tests,
+    # production build, and a schema-drift check between the GraphQL
+    # SDL the Go backend exposes and the copy web-v2 codegen consumes.
+    #
+    # No untrusted user input flows into run: blocks. The only ${{ }}
+    # expression is github.workspace, which is GitHub-controlled.
+    name: Web v2 (typecheck · lint · test · build · schema check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Read-only token: this job only checks out and builds. Keeps the
+    # blast radius minimal if a dependency in the build is compromised.
+    permissions:
+      contents: read
+    steps:
+      # Actions pinned to full commit SHAs (not moving tags) so an action
+      # owner cannot silently repoint a tag at malicious code in our runner.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: GraphQL schema drift check
+        # Backend SDL is the source of truth; web-v2 keeps a synced
+        # copy so its codegen produces typed clients. Fail loudly if
+        # they ever diverge.
+        run: |
+          diff -q internal/reporter/graphql/schema.graphql \
+                  web-v2/src/gql/schema.graphql \
+            || { echo "::error::GraphQL schema drift between backend and web-v2 copy. Sync the two files."; exit 1; }
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web-v2/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web-v2
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web-v2
+        run: pnpm typecheck
+
+      - name: Lint
+        working-directory: web-v2
+        run: pnpm lint
+
+      - name: Unit tests
+        working-directory: web-v2
+        run: pnpm test:run
+
+      - name: Build production bundle
+        working-directory: web-v2
+        run: pnpm build
+
   security-scan:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
@@ -144,6 +208,16 @@ jobs:
     - uses: actions/dependency-review-action@v4.7.1
       with:
         fail-on-severity: moderate
+        # Allow-list of advisories confined to the web-v2 dev/build/test
+        # toolchain (babel, esbuild, vite, ws, lodash, form-data, immutable,
+        # js-yaml — pulled via graphql-codegen / jsdom / vite). None reach the
+        # shipped production bundle (verified: no runtime dependency path), and
+        # several have no in-place patch on the pinned major (e.g. vite's
+        # server.fs.deny fix lands only in 6.x). fail-on-scopes can't filter
+        # these because GitHub's dependency graph carries no dev/runtime scope
+        # for the pnpm lockfile. Runtime deps stay fully enforced at moderate+.
+        # Revisit when the web-v2 toolchain is upgraded.
+        allow-ghsas: GHSA-4x5r-pxfx-6jf8,GHSA-67mh-4wv8-2f99,GHSA-hmw2-7cc7-3qxx,GHSA-wf6x-7x77-mvgw,GHSA-h67p-54hq-rp68,GHSA-r5fr-rjxr-66jc,GHSA-f23m-r3pf-42rh,GHSA-4w7w-66w2-5vf9,GHSA-v6wh-96g9-6wx3,GHSA-fx2h-pf6j-xcff,GHSA-96hv-2xvq-fx4p
 
   build:
     name: Build Images

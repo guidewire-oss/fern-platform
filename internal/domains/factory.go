@@ -9,6 +9,7 @@ import (
 
 	// Auth domain
 	authApp "github.com/guidewire-oss/fern-platform/internal/domains/auth/application"
+	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
 	authInfra "github.com/guidewire-oss/fern-platform/internal/domains/auth/infrastructure"
 	authInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/auth/interfaces"
 
@@ -54,6 +55,7 @@ type DomainFactory struct {
 	authService    *authApp.AuthenticationService
 	authzService   *authApp.AuthorizationService
 	authMiddleware *authInterfaces.AuthMiddlewareAdapter
+	userRepo       authDomain.UserRepository
 
 	// Analytics domain
 	flakyDetectionService *analyticsApp.FlakyDetectionService
@@ -74,9 +76,9 @@ type DomainFactory struct {
 	summaryHandler *summaryInterfaces.SummaryHandler
 
 	// Integrations domain
-	jiraConnectionService    *integrations.JiraConnectionService
-	jiraFieldMappingService  *integrations.JiraFieldMappingService
-	coverageService          *integrations.CoverageService
+	jiraConnectionService   *integrations.JiraConnectionService
+	jiraFieldMappingService *integrations.JiraFieldMappingService
+	coverageService         *integrations.CoverageService
 }
 
 // NewDomainFactory creates a new domain factory
@@ -195,11 +197,18 @@ func (f *DomainFactory) GetSummaryHandler() *summaryInterfaces.SummaryHandler {
 	return f.summaryHandler
 }
 
+// GetUserRepository exposes the auth user repository for handlers that
+// need to list / update users without going through the auth service.
+func (f *DomainFactory) GetUserRepository() authDomain.UserRepository {
+	return f.userRepo
+}
+
 // initAuthDomain initializes the auth domain components
 func (f *DomainFactory) initAuthDomain() {
 	// Create repositories
 	userRepo := authInfra.NewGormUserRepository(f.db)
 	sessionRepo := authInfra.NewGormSessionRepository(f.db)
+	f.userRepo = userRepo
 
 	// Create application services
 	f.authService = authApp.NewAuthenticationService(userRepo, sessionRepo)
@@ -276,12 +285,11 @@ func (f *DomainFactory) initIntegrationsDomain() {
 		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
 	}
 
-	// Create JIRA connection service
-	f.jiraConnectionService = integrations.NewJiraConnectionService(
-		jiraConnRepo,
-		jiraClient,
-		encryptionKey,
-	)
+	// Create the JIRA connection service. Without this assignment the
+	// service stays nil and every /integrations/jira/connections request
+	// panics with a nil-pointer deref (regression from the
+	// JIRA_ENCRYPTION_KEY revert in 56cc682).
+	f.jiraConnectionService = integrations.NewJiraConnectionService(jiraConnRepo, jiraClient, encryptionKey)
 
 	// Create JIRA field mapping repo and service
 	jiraFieldMappingRepo := integrationsInfra.NewGormJiraFieldMappingRepository(f.db)

@@ -79,16 +79,17 @@ func (s *CoverageService) Build(ctx context.Context, projectID, releaseValue str
 		return nil, err
 	}
 
-	// JQL uses cf[numericID]; the fields parameter uses the full customfield_NNNNN form.
-	numericFieldID := extractNumericFieldID(releaseFieldID)
+	// The mapped release field can be a custom field (cf[NNNNN]) or a
+	// standard field such as Fix Version (JQL clause `fixVersion`).
+	jqlField := releaseJQLField(releaseFieldID)
 
 	baseURL := conn.JiraURL()
 	username := conn.Username()
 	authType := conn.AuthenticationType()
 	fields := []string{"summary", "status", "issuetype", "parent"}
 
-	// Phase 1 — Epics matching the release custom field value.
-	phase1JQL := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] = %q ORDER BY key`, conn.ProjectKey(), numericFieldID, releaseValue)
+	// Phase 1 — Epics matching the release field value.
+	phase1JQL := fmt.Sprintf(`project = %q AND issuetype = Epic AND %s = %q ORDER BY key`, conn.ProjectKey(), jqlField, releaseValue)
 	epicIssues, err := s.jiraClient.SearchIssues(ctx, baseURL, username, credential, authType, phase1JQL, fields)
 	if err != nil {
 		return nil, fmt.Errorf("coverage: Phase 1 (Epics) search failed: %w", err)
@@ -184,6 +185,21 @@ func (s *CoverageService) getReleaseFieldID(ctx context.Context, projectID strin
 
 // extractNumericFieldID converts a JIRA field ID to the numeric form used in JQL (cf[N]).
 // Accepts: "customfield_10077" → "10077", "cf[10077]" → "10077", "10077" → "10077".
+// releaseJQLField returns the JQL clause for the mapped release field.
+// Custom fields are referenced as cf[NNNNN]; the standard Fix Version
+// field is `fixVersion` in JQL (note: its REST/field id is the plural
+// `fixVersions`). Other standard fields are used by their id as-is.
+func releaseJQLField(jiraFieldID string) string {
+	switch jiraFieldID {
+	case "fixVersions", "fixVersion":
+		return "fixVersion"
+	}
+	if strings.HasPrefix(jiraFieldID, "customfield_") || strings.HasPrefix(jiraFieldID, "cf[") {
+		return fmt.Sprintf("cf[%s]", extractNumericFieldID(jiraFieldID))
+	}
+	return jiraFieldID
+}
+
 func extractNumericFieldID(jiraFieldID string) string {
 	if strings.HasPrefix(jiraFieldID, "customfield_") {
 		return strings.TrimPrefix(jiraFieldID, "customfield_")

@@ -86,6 +86,17 @@ func (s *TagService) ListTags(ctx context.Context) ([]*domain.Tag, error) {
 	return tags, nil
 }
 
+// UsageCounts returns a map of tag-ID → number of test_run_tags rows
+// referencing that tag. Used by the popular-tags and usage-stats
+// endpoints. Single SQL aggregate, no per-tag fan-out.
+func (s *TagService) UsageCounts(ctx context.Context) (map[string]int, error) {
+	counts, err := s.tagRepo.UsageCounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute tag usage counts: %w", err)
+	}
+	return counts, nil
+}
+
 // DeleteTag deletes a tag
 func (s *TagService) DeleteTag(ctx context.Context, id domain.TagID) error {
 	// Check if tag exists
