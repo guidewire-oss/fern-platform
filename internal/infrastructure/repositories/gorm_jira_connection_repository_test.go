@@ -120,6 +120,7 @@ func TestGormJiraConnectionRepository_Create(t *testing.T) {
 		// compared against a uint primary key column -- it must reflect the
 		// real row id, not the throwaway UUID minted at construction time.
 		assert.Equal(t, "42", conn.ID())
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
 	t.Run("errors instead of stamping a zero ID when the driver returns no primary key", func(t *testing.T) {
