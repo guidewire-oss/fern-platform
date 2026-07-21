@@ -32,6 +32,7 @@
 
 ### Configuration
 - [OAuth Setup](./configuration/oauth.md) - Authentication configuration
+- [JIRA Integration](./configuration/jira-integration.md) - Set up JIRA integration (optional)
 - [Permissions System](./configuration/scope-based-permissions.md) - Role-based access control
 - [Permission Examples](./configuration/scope-examples.md) - Common permission scenarios
 - [Test Users](./configuration/test-users.md) - Pre-configured test accounts

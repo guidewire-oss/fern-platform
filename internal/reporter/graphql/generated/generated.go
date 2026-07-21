@@ -265,6 +265,7 @@ type ComplexityRoot struct {
 		JiraFieldMapping        func(childComplexity int, projectID string) int
 		JiraFields              func(childComplexity int, connectionID string) int
 		JiraFixVersions         func(childComplexity int, projectID string) int
+		JiraIntegrationEnabled  func(childComplexity int) int
 		PopularTags             func(childComplexity int, limit *int) int
 		Project                 func(childComplexity int, id string) int
 		ProjectByProjectID      func(childComplexity int, projectID string) int
@@ -546,6 +547,7 @@ type QueryResolver interface {
 	RecentlyAddedFlakyTests(ctx context.Context, projectID *string, days *int, limit *int) ([]*model.FlakyTest, error)
 	JiraConnection(ctx context.Context, id string) (*model.JiraConnection, error)
 	JiraConnections(ctx context.Context, projectID string) ([]*model.JiraConnection, error)
+	JiraIntegrationEnabled(ctx context.Context) (bool, error)
 	JiraFieldMapping(ctx context.Context, projectID string) (*model.JiraFieldMapping, error)
 	JiraFields(ctx context.Context, connectionID string) ([]*model.JiraFieldGql, error)
 	JiraFixVersions(ctx context.Context, projectID string) ([]*model.JiraRelease, error)
@@ -1781,6 +1783,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.JiraFixVersions(childComplexity, args["projectId"].(string)), true
+
+	case "Query.jiraIntegrationEnabled":
+		if e.complexity.Query.JiraIntegrationEnabled == nil {
+			break
+		}
+
+		return e.complexity.Query.JiraIntegrationEnabled(childComplexity), true
 
 	case "Query.popularTags":
 		if e.complexity.Query.PopularTags == nil {
@@ -3685,6 +3694,9 @@ type Query {
   # JIRA Connections
   jiraConnection(id: ID!): JiraConnection
   jiraConnections(projectId: String!): [JiraConnection!]!
+  # True when the server has JIRA_ENCRYPTION_KEY configured. Clients should
+  # use this to gate "Add JIRA Connection" UI before the user opens the form.
+  jiraIntegrationEnabled: Boolean!
 
   # JIRA Field Mapping
   jiraFieldMapping(projectId: String!): JiraFieldMapping!
@@ -13255,6 +13267,50 @@ func (ec *executionContext) fieldContext_Query_jiraConnections(ctx context.Conte
 	if fc.Args, err = ec.field_Query_jiraConnections_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_jiraIntegrationEnabled(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_jiraIntegrationEnabled(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().JiraIntegrationEnabled(rctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_jiraIntegrationEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -24935,6 +24991,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_jiraConnections(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "jiraIntegrationEnabled":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_jiraIntegrationEnabled(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

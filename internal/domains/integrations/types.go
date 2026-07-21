@@ -190,3 +190,9 @@ var (
 	ErrUnknownFernField          = errors.New("unknown Fern field")
 	ErrUnknownReductionStrategy  = errors.New("unknown reduction strategy")
 )
+
+// ErrJiraDisabled is returned by JiraConnectionService mutating methods when
+// JIRA_ENCRYPTION_KEY is not configured. Callers (e.g. GraphQL resolvers) can
+// check for it with errors.Is to distinguish "integration not configured"
+// from operation-specific failures (bad credentials, unreachable JIRA, etc).
+var ErrJiraDisabled = errors.New("JIRA integration is not configured; set JIRA_ENCRYPTION_KEY environment variable to enable it")
