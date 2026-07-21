@@ -31,6 +31,17 @@ sudo sh -c 'echo "127.0.0.1 keycloak" >> /etc/hosts'
 cat /etc/hosts | grep -E "fern-platform|keycloak"
 ```
 
+## Environment Configuration
+
+Before deploying, optionally set up JIRA integration (if using JIRA):
+
+```bash
+# Generate JIRA encryption key (only needed if using JIRA integration)
+export JIRA_ENCRYPTION_KEY=$(openssl rand -hex 32)
+
+# For production, store this securely and provide it to your deployment
+```
+
 ## Quick Start
 
 ### 1. Setup Script
@@ -46,6 +57,7 @@ This will:
 - Install all dependencies
 - Build and deploy Fern Platform
 - Configure networking
+- Set up JIRA integration (if JIRA_ENCRYPTION_KEY is configured)
 
 ### 2. Manual Setup
 

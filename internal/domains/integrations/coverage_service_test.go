@@ -146,6 +146,7 @@ func TestCoverageService_Build(t *testing.T) {
 			tags,
 			defaultMappingService(),
 			testEncryptionKey,
+			true,
 		)
 	}
 
@@ -408,10 +409,33 @@ func TestCoverageService_Build(t *testing.T) {
 			tags,
 			defaultMappingService(),
 			testEncryptionKey,
+			true,
 		)
 		_, err := svc.Build(ctx, "proj-id", "v1.0")
 		if err == nil {
 			t.Error("expected error when no connection found, got nil")
+		}
+	})
+
+	t.Run("returns ErrJiraDisabled instead of a raw crypto error when disabled", func(t *testing.T) {
+		// A connection created while JIRA was enabled can still exist after
+		// JIRA_ENCRYPTION_KEY is unset. Build must not reach DecryptCredential
+		// with a nil key.
+		jira := &mockCoverageJiraClient{}
+		tags := &mockCoverageTagRepo{data: map[string]tagsdomain.CoverageCount{}}
+		conn := makeTestConnection(t)
+
+		svc := integrations.NewCoverageService(
+			&fixedConnRepo{conn: conn},
+			jira,
+			tags,
+			defaultMappingService(),
+			nil,
+			false,
+		)
+		_, err := svc.Build(ctx, "proj-id", "v1.0")
+		if !errors.Is(err, integrations.ErrJiraDisabled) {
+			t.Errorf("expected ErrJiraDisabled, got: %v", err)
 		}
 	})
 
@@ -426,6 +450,7 @@ func TestCoverageService_Build(t *testing.T) {
 			tags,
 			&mockFieldMappingService{entries: nil}, // no mappings
 			testEncryptionKey,
+			true,
 		)
 		_, err := svc.Build(ctx, "proj-id", "v1.0")
 		if err == nil {
@@ -569,6 +594,7 @@ func TestCoverageService_GetReleasesForProject(t *testing.T) {
 			&mockCoverageTagRepo{},
 			defaultMappingService(),
 			testEncryptionKey,
+			true,
 		)
 		releases, err := svc.GetReleasesForProject(ctx, "proj-id")
 		if err != nil {
@@ -590,10 +616,28 @@ func TestCoverageService_GetReleasesForProject(t *testing.T) {
 			&mockCoverageTagRepo{},
 			defaultMappingService(),
 			testEncryptionKey,
+			true,
 		)
 		_, err := svc.GetReleasesForProject(ctx, "proj-id")
 		if err == nil {
 			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("returns ErrJiraDisabled instead of a raw crypto error when disabled", func(t *testing.T) {
+		jira := &mockCoverageJiraClient{}
+		conn := makeTestConnection(t)
+		svc := integrations.NewCoverageService(
+			&fixedConnRepo{conn: conn},
+			jira,
+			&mockCoverageTagRepo{},
+			defaultMappingService(),
+			nil,
+			false,
+		)
+		_, err := svc.GetReleasesForProject(ctx, "proj-id")
+		if !errors.Is(err, integrations.ErrJiraDisabled) {
+			t.Errorf("expected ErrJiraDisabled, got: %v", err)
 		}
 	})
 }

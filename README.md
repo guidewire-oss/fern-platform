@@ -57,6 +57,9 @@ Docker images will be available after the v0.1.0 release:
 - Docker Hub: `docker.io/guidewireoss/fern-platform:latest`
 
 ```bash
+# Generate JIRA encryption key (optional, only needed if using JIRA integration)
+JIRA_KEY=$(openssl rand -hex 32)
+
 # Future usage (not yet available):
 docker run -d \
   --name fern-platform \
@@ -66,6 +69,7 @@ docker run -d \
   -e DB_PASSWORD=yourpassword \
   -e DB_NAME=fern_platform \
   -e REDIS_HOST=host.docker.internal \
+  -e JIRA_ENCRYPTION_KEY=$JIRA_KEY \
   ghcr.io/guidewire-oss/fern-platform:latest
 ```
 

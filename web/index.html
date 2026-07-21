@@ -7429,9 +7429,12 @@
             const [testingConnection, setTestingConnection] = useState(null);
             const [showFieldMapping, setShowFieldMapping] = useState(false);
             const [mappingConnection, setMappingConnection] = useState(null);
+            const [jiraIntegrationEnabled, setJiraIntegrationEnabled] = useState(true);
+            const [jiraIntegrationEnabledLoaded, setJiraIntegrationEnabledLoaded] = useState(false);
 
             useEffect(() => {
                 fetchConnections();
+                fetchJiraIntegrationEnabled();
             }, [projectId]);
 
             const fetchConnections = async () => {
@@ -7443,6 +7446,20 @@
                     console.error('Failed to fetch JIRA connections:', err);
                 } finally {
                     setLoading(false);
+                }
+            };
+
+            const fetchJiraIntegrationEnabled = async () => {
+                try {
+                    const data = await graphqlClient.query(GRAPHQL_QUERIES.GET_JIRA_INTEGRATION_ENABLED);
+                    setJiraIntegrationEnabled(data.jiraIntegrationEnabled !== false);
+                } catch (err) {
+                    console.error('Failed to fetch JIRA integration status:', err);
+                    // Fail open: don't block the UI on this check failing; the
+                    // save/test calls themselves still enforce the real state.
+                    setJiraIntegrationEnabled(true);
+                } finally {
+                    setJiraIntegrationEnabledLoaded(true);
                 }
             };
 
@@ -7548,7 +7565,7 @@
                 );
             };
 
-            if (loading) {
+            if (loading || !jiraIntegrationEnabledLoaded) {
                 return (
                     <div style={{ padding: '2rem', textAlign: 'center' }}>
                         <div className="loading-spinner"></div>
@@ -7575,7 +7592,8 @@
                         </div>
                         <button
                             onClick={handleAddConnection}
-                            disabled={connections.length > 0}
+                            disabled={connections.length > 0 || !jiraIntegrationEnabled}
+                            title={!jiraIntegrationEnabled ? 'JIRA integration is not configured on this server' : undefined}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -7583,18 +7601,36 @@
                                 padding: '0.5rem 1rem',
                                 border: 'none',
                                 borderRadius: 'var(--radius-md)',
-                                background: connections.length > 0 ? 'var(--bg-tertiary)' : 'var(--primary)',
-                                color: connections.length > 0 ? 'var(--text-secondary)' : 'white',
-                                cursor: connections.length > 0 ? 'not-allowed' : 'pointer',
+                                background: (connections.length > 0 || !jiraIntegrationEnabled) ? 'var(--bg-tertiary)' : 'var(--primary)',
+                                color: (connections.length > 0 || !jiraIntegrationEnabled) ? 'var(--text-secondary)' : 'white',
+                                cursor: (connections.length > 0 || !jiraIntegrationEnabled) ? 'not-allowed' : 'pointer',
                                 fontWeight: '600',
                                 fontSize: '0.875rem',
-                                opacity: connections.length > 0 ? 0.6 : 1
+                                opacity: (connections.length > 0 || !jiraIntegrationEnabled) ? 0.6 : 1
                             }}
                         >
                             <i className="fas fa-plus-circle"></i>
                             Add JIRA Connection
                         </button>
                     </div>
+
+                    {!jiraIntegrationEnabled && (
+                        <div style={{
+                            marginBottom: '1.5rem',
+                            padding: '1rem',
+                            background: 'var(--warning)10',
+                            border: '1px solid var(--warning)30',
+                            borderRadius: 'var(--radius-md)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem'
+                        }}>
+                            <i className="fas fa-exclamation-triangle" style={{ color: 'var(--warning)' }}></i>
+                            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                JIRA integration is not configured on this server. Ask your administrator to set the <code>JIRA_ENCRYPTION_KEY</code> environment variable to enable it.
+                            </span>
+                        </div>
+                    )}
 
                     {connections.length === 0 ? (
                         <div style={{
@@ -7611,14 +7647,17 @@
                             </p>
                             <button
                                 onClick={handleAddConnection}
+                                disabled={!jiraIntegrationEnabled}
+                                title={!jiraIntegrationEnabled ? 'JIRA integration is not configured on this server' : undefined}
                                 style={{
                                     padding: '0.75rem 1.5rem',
                                     border: 'none',
                                     borderRadius: 'var(--radius-md)',
-                                    background: 'var(--primary)',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
+                                    background: !jiraIntegrationEnabled ? 'var(--bg-tertiary)' : 'var(--primary)',
+                                    color: !jiraIntegrationEnabled ? 'var(--text-secondary)' : 'white',
+                                    cursor: !jiraIntegrationEnabled ? 'not-allowed' : 'pointer',
+                                    fontWeight: '600',
+                                    opacity: !jiraIntegrationEnabled ? 0.6 : 1
                                 }}
                             >
                                 Add Your First Connection

@@ -180,6 +180,7 @@ func (m *AuthMiddlewareAdapter) RequireAuth() gin.HandlerFunc {
 
 				// Set the service account user in context
 				c.Set("user", serviceAccountUser)
+				c.Set("user_id", userID)
 				c.Set("is_service_account", true)
 				c.Next()
 				return

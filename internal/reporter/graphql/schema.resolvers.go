@@ -7,6 +7,7 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -396,6 +397,11 @@ func (r *mutationResolver) TestJiraConnection(ctx context.Context, id string) (b
 	r.logger.Infof("Testing JIRA connection %s for project %s", id, connection.ProjectID())
 	if err := r.jiraConnectionService.TestConnection(ctx, id); err != nil {
 		r.logger.Errorf("TestJiraConnection failed: %v", err)
+		if errors.Is(err, integrations.ErrJiraDisabled) {
+			// Not a credential/connectivity failure -- the client needs the real
+			// message, so surface it as an error instead of a silent false.
+			return false, err
+		}
 		return false, nil // Return false but no error so GraphQL returns the boolean
 	}
 
@@ -884,6 +890,11 @@ func (r *queryResolver) JiraConnections(ctx context.Context, projectID string) (
 	}
 
 	return models, nil
+}
+
+// JiraIntegrationEnabled is the resolver for the jiraIntegrationEnabled field.
+func (r *queryResolver) JiraIntegrationEnabled(ctx context.Context) (bool, error) {
+	return r.jiraConnectionService.IsEnabled(), nil
 }
 
 // JiraFieldMapping is the resolver for the jiraFieldMapping field.

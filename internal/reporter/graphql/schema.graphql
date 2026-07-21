@@ -594,6 +594,9 @@ type Query {
   # JIRA Connections
   jiraConnection(id: ID!): JiraConnection
   jiraConnections(projectId: String!): [JiraConnection!]!
+  # True when the server has JIRA_ENCRYPTION_KEY configured. Clients should
+  # use this to gate "Add JIRA Connection" UI before the user opens the form.
+  jiraIntegrationEnabled: Boolean!
 
   # JIRA Field Mapping
   jiraFieldMapping(projectId: String!): JiraFieldMapping!
