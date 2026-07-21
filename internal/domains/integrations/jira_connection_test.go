@@ -152,7 +152,9 @@ func TestNewJiraConnection(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				require.NotNil(t, conn)
-				assert.NotEmpty(t, conn.ID())
+				// An unsaved connection has no identity yet -- the repository
+				// assigns the real numeric ID on Create and calls SetID.
+				assert.Empty(t, conn.ID())
 				assert.Equal(t, tt.projectID, conn.ProjectID())
 				assert.Equal(t, tt.connName, conn.Name())
 				assert.Equal(t, tt.jiraURL, conn.JiraURL())

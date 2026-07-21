@@ -11,6 +11,10 @@ import (
 // connection. The credential is decrypted before being forwarded to the JIRA
 // client; if decryption fails an error is logged and returned.
 func (s *JiraConnectionService) ListJiraFields(ctx context.Context, connectionID string) ([]JiraField, error) {
+	if !s.enabled {
+		return nil, ErrJiraDisabled
+	}
+
 	conn, err := s.repo.FindByID(ctx, connectionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find connection: %w", err)

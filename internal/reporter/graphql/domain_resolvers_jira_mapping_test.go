@@ -298,13 +298,60 @@ func buildDefaultSnapshot(projectID string) *integrations.JiraFieldMappingSnapsh
 }
 
 // ---------------------------------------------------------------------------
+// TestJiraIntegrationEnabledResolver (query)
+// ---------------------------------------------------------------------------
+
+func TestJiraIntegrationEnabledResolver(t *testing.T) {
+	t.Run("reports true when JIRA_ENCRYPTION_KEY is configured", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
+
+		resolver := newTestResolverWithJiraMapping(t, nil, connSvc)
+		qr := &queryResolver{resolver}
+
+		result, err := qr.JiraIntegrationEnabled(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("reports false when JIRA_ENCRYPTION_KEY is not configured", func(t *testing.T) {
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, nil, false)
+
+		resolver := newTestResolverWithJiraMapping(t, nil, connSvc)
+		qr := &queryResolver{resolver}
+
+		result, err := qr.JiraIntegrationEnabled(context.Background())
+
+		require.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("does not require authentication", func(t *testing.T) {
+		// Unlike the connection/mapping resolvers, this is a public capability
+		// flag the UI needs before a user has necessarily authenticated against
+		// a project -- it must not require a user in context.
+		connRepo := &fakeConnRepo{}
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, nil, false)
+
+		resolver := newTestResolverWithJiraMapping(t, nil, connSvc)
+		qr := &queryResolver{resolver}
+
+		_, err := qr.JiraIntegrationEnabled(context.Background())
+
+		assert.NoError(t, err)
+	})
+}
+
+// ---------------------------------------------------------------------------
 // TestJiraFieldMappingResolver (query)
 // ---------------------------------------------------------------------------
 
 func TestJiraFieldMappingResolver(t *testing.T) {
 	t.Run("non-manager user is denied with authorization error", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingRepo := &fakeMappingRepo{}
 		mappingSvc := integrations.NewJiraFieldMappingService(mappingRepo, connRepo)
 
@@ -320,7 +367,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("manager user gets the mapping from service", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 
 		snap := buildDefaultSnapshot("proj-1")
 		// Build a persisted mapping aggregate
@@ -341,7 +388,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("admin user gets the mapping from service", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 
 		snap := buildDefaultSnapshot("proj-2")
 		mapping := integrations.ReconstructJiraFieldMapping("proj-2", snap.Entries, "admin-1", snap.CreatedAt, snap.UpdatedAt)
@@ -360,7 +407,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("service error is propagated", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingRepo := &fakeMappingRepo{getErr: errors.New("database unavailable")}
 		mappingSvc := integrations.NewJiraFieldMappingService(mappingRepo, connRepo)
 
@@ -375,7 +422,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("read-only user is allowed to read the mapping", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		snap := buildDefaultSnapshot("proj-1")
 		mapping := integrations.ReconstructJiraFieldMapping("proj-1", snap.Entries, "reader-1", snap.CreatedAt, snap.UpdatedAt)
 		mappingRepo := &fakeMappingRepo{mapping: mapping}
@@ -393,7 +440,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("admin with no permission row is allowed to read the mapping", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		snap := buildDefaultSnapshot("proj-1")
 		mapping := integrations.ReconstructJiraFieldMapping("proj-1", snap.Entries, "admin-no-row", snap.CreatedAt, snap.UpdatedAt)
 		mappingRepo := &fakeMappingRepo{mapping: mapping}
@@ -410,7 +457,7 @@ func TestJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("unauthenticated request is denied", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingRepo := &fakeMappingRepo{}
 		mappingSvc := integrations.NewJiraFieldMappingService(mappingRepo, connRepo)
 
@@ -434,7 +481,7 @@ func TestJiraFieldsResolver(t *testing.T) {
 		// Seed an active connection so the resolver gets past the
 		// connection-lookup and reaches the per-project auth check.
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{buildActiveConnection("proj-1")}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -457,7 +504,7 @@ func TestJiraFieldsResolver(t *testing.T) {
 
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -480,7 +527,7 @@ func TestJiraFieldsResolver(t *testing.T) {
 
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -496,7 +543,7 @@ func TestJiraFieldsResolver(t *testing.T) {
 	t.Run("connection not found returns error", func(t *testing.T) {
 		jiraClient := &fakeJiraClient{}
 		connRepo := &fakeConnRepo{err: errors.New("not found")}
-		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -530,7 +577,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("non-manager user is denied", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -547,7 +594,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 		// reader-1 has PermissionRead but not PermissionWrite; the write boundary must reject them.
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -564,7 +611,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 		// admin-no-row has no permission row but is admin; the bypass must allow them.
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -580,7 +627,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 	t.Run("valid input saves and returns the mapping", func(t *testing.T) {
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -597,7 +644,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 	t.Run("ErrNoJiraConnection maps to appropriate GraphQL error", func(t *testing.T) {
 		// No active connections → Save should fail with ErrNoJiraConnection
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -616,7 +663,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 		// Active connection present but required field is missing
 		activeConn := buildActiveConnection("proj-1")
 		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -641,7 +688,7 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("unauthenticated request is denied", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -655,13 +702,51 @@ func TestSaveJiraFieldMappingResolver(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// TestTestJiraConnectionResolver (mutation)
+// ---------------------------------------------------------------------------
+
+func TestTestJiraConnectionResolver(t *testing.T) {
+	t.Run("ErrJiraDisabled surfaces as a real GraphQL error, not a swallowed false", func(t *testing.T) {
+		activeConn := buildActiveConnection("proj-1")
+		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
+		// enabled=false: JIRA_ENCRYPTION_KEY not configured.
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, nil, false)
+
+		resolver := newTestResolverWithJiraMapping(t, nil, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.TestJiraConnection(managerCtxForMapping(), "conn-1")
+
+		assert.False(t, result)
+		require.Error(t, err, "a disabled integration must surface as an error, not a silent false")
+		assert.True(t, errors.Is(err, integrations.ErrJiraDisabled) || containsErrMsg(err, "not configured"),
+			"expected ErrJiraDisabled to be surfaced, got: %v", err)
+	})
+
+	t.Run("credential test failure still returns false with no error", func(t *testing.T) {
+		activeConn := buildActiveConnection("proj-1")
+		connRepo := &fakeConnRepo{connections: []*integrations.JiraConnection{activeConn}}
+		jiraClient := &fakeJiraClient{err: errors.New("401 unauthorized")}
+		connSvc := integrations.NewJiraConnectionService(connRepo, jiraClient, testEncryptionKey, true)
+
+		resolver := newTestResolverWithJiraMapping(t, nil, connSvc)
+		mr := &mutationResolver{resolver}
+
+		result, err := mr.TestJiraConnection(managerCtxForMapping(), "conn-1")
+
+		assert.False(t, result)
+		assert.NoError(t, err, "an ordinary credential/test failure must remain a false result, not a GraphQL error")
+	})
+}
+
+// ---------------------------------------------------------------------------
 // TestResetJiraFieldMappingResolver (mutation)
 // ---------------------------------------------------------------------------
 
 func TestResetJiraFieldMappingResolver(t *testing.T) {
 	t.Run("non-manager user is denied", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -676,7 +761,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("read-only user is denied the reset mutation", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -691,7 +776,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("admin with no permission row is allowed the reset mutation", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -706,7 +791,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("manager resets and gets default mapping back", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		// Repo has an existing mapping that will be deleted, returning defaults
 		existingMapping := integrations.ReconstructJiraFieldMapping(
 			"proj-1",
@@ -733,7 +818,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("admin resets and returns default mapping", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)
@@ -748,7 +833,7 @@ func TestResetJiraFieldMappingResolver(t *testing.T) {
 
 	t.Run("unauthenticated request is denied", func(t *testing.T) {
 		connRepo := &fakeConnRepo{}
-		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey)
+		connSvc := integrations.NewJiraConnectionService(connRepo, &fakeJiraClient{}, testEncryptionKey, true)
 		mappingSvc := integrations.NewJiraFieldMappingService(&fakeMappingRepo{}, connRepo)
 
 		resolver := newTestResolverWithJiraMapping(t, mappingSvc, connSvc)

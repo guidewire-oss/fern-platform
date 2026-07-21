@@ -28,6 +28,7 @@ type CoverageService struct {
 	tagRepo        CoverageTagRepository
 	mappingService fieldMappingLookup
 	encryptionKey  []byte
+	enabled        bool
 }
 
 // NewCoverageService wires up a CoverageService with its dependencies.
@@ -37,6 +38,7 @@ func NewCoverageService(
 	tagRepo CoverageTagRepository,
 	mappingService fieldMappingLookup,
 	encryptionKey []byte,
+	enabled bool,
 ) *CoverageService {
 	return &CoverageService{
 		connRepo:       connRepo,
@@ -44,6 +46,7 @@ func NewCoverageService(
 		tagRepo:        tagRepo,
 		mappingService: mappingService,
 		encryptionKey:  encryptionKey,
+		enabled:        enabled,
 	}
 }
 
@@ -152,6 +155,10 @@ func (s *CoverageService) GetSpecRunsByJiraTag(ctx context.Context, projectID, i
 
 // resolveConnection fetches the active JIRA connection and decrypts its credential.
 func (s *CoverageService) resolveConnection(ctx context.Context, projectID string) (*JiraConnection, string, error) {
+	if !s.enabled {
+		return nil, "", ErrJiraDisabled
+	}
+
 	conns, err := s.connRepo.FindActiveByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, "", fmt.Errorf("coverage: failed to find JIRA connection: %w", err)

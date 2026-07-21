@@ -264,16 +264,20 @@ func (f *DomainFactory) initIntegrationsDomain() {
 	// Create JIRA client
 	jiraClient := integrations.NewDefaultJiraClient()
 
+	var encryptionKey []byte
 	keyHex := os.Getenv("JIRA_ENCRYPTION_KEY")
+
 	if keyHex == "" {
-		panic("JIRA_ENCRYPTION_KEY environment variable is not set; generate with: openssl rand -hex 32")
-	}
-	encryptionKey, err := hex.DecodeString(keyHex)
-	if err != nil {
-		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY is not valid hex: %v", err))
-	}
-	if len(encryptionKey) != 32 {
-		panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
+		f.logger.Warn("JIRA_ENCRYPTION_KEY environment variable is not set; JIRA integration is disabled")
+	} else {
+		var err error
+		encryptionKey, err = hex.DecodeString(keyHex)
+		if err != nil {
+			panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY is not valid hex: %v", err))
+		}
+		if len(encryptionKey) != 32 {
+			panic(fmt.Sprintf("JIRA_ENCRYPTION_KEY must decode to exactly 32 bytes, got %d", len(encryptionKey)))
+		}
 	}
 
 	// Create JIRA connection service
@@ -281,6 +285,7 @@ func (f *DomainFactory) initIntegrationsDomain() {
 		jiraConnRepo,
 		jiraClient,
 		encryptionKey,
+		keyHex != "", // enabled flag: true if encryption key is set
 	)
 
 	// Create JIRA field mapping repo and service
@@ -289,7 +294,7 @@ func (f *DomainFactory) initIntegrationsDomain() {
 
 	// Create coverage service (reuses the same connection repo, JIRA client, and encryption key)
 	tagRepo := tagsInfra.NewGormTagRepository(f.db)
-	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, f.jiraFieldMappingService, encryptionKey)
+	f.coverageService = integrations.NewCoverageService(jiraConnRepo, jiraClient, tagRepo, f.jiraFieldMappingService, encryptionKey, keyHex != "")
 }
 
 // GetJiraConnectionService returns the JIRA connection service
