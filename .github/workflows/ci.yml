@@ -217,7 +217,7 @@ jobs:
         # these because GitHub's dependency graph carries no dev/runtime scope
         # for the pnpm lockfile. Runtime deps stay fully enforced at moderate+.
         # Revisit when the web-v2 toolchain is upgraded.
-        allow-ghsas: GHSA-4x5r-pxfx-6jf8,GHSA-67mh-4wv8-2f99,GHSA-hmw2-7cc7-3qxx,GHSA-wf6x-7x77-mvgw,GHSA-h67p-54hq-rp68,GHSA-r5fr-rjxr-66jc,GHSA-f23m-r3pf-42rh,GHSA-4w7w-66w2-5vf9,GHSA-v6wh-96g9-6wx3,GHSA-fx2h-pf6j-xcff,GHSA-96hv-2xvq-fx4p
+        allow-ghsas: GHSA-4x5r-pxfx-6jf8,GHSA-67mh-4wv8-2f99,GHSA-hmw2-7cc7-3qxx,GHSA-wf6x-7x77-mvgw,GHSA-h67p-54hq-rp68,GHSA-r5fr-rjxr-66jc,GHSA-f23m-r3pf-42rh,GHSA-4w7w-66w2-5vf9,GHSA-v6wh-96g9-6wx3,GHSA-fx2h-pf6j-xcff,GHSA-96hv-2xvq-fx4p,GHSA-v56q-mh7h-f735,GHSA-xvcm-6775-5m9r
 
   build:
     name: Build Images
