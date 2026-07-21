@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/integrations"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
@@ -19,23 +20,42 @@ func NewGormJiraConnectionRepository(db *gorm.DB) integrations.JiraConnectionRep
 
 // Create saves a new JIRA connection
 func (r *GormJiraConnectionRepository) Create(ctx context.Context, connection *integrations.JiraConnection) error {
-	model := r.toModel(connection)
-	
+	// A brand-new connection's domain ID is empty (see NewJiraConnection),
+	// so toModel already leaves model.ID at 0 here. The explicit reset is a
+	// defensive guard, not a no-op: it ensures Create never lets any
+	// pre-existing ID reach the insert, even from a mis-constructed domain
+	// object (e.g. the throwaway UUID a prior version of NewJiraConnection
+	// used to mint) -- the database always assigns the real primary key.
+	model, _ := r.toModel(connection)
+	model.ID = 0
+
 	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
 		return fmt.Errorf("failed to create JIRA connection: %w", err)
 	}
-	
+
+	if model.ID == 0 {
+		return fmt.Errorf("JIRA connection created but no row ID was returned by the database")
+	}
+
+	connection.SetID(fmt.Sprintf("%d", model.ID))
+
 	return nil
 }
 
 // Update updates an existing JIRA connection
 func (r *GormJiraConnectionRepository) Update(ctx context.Context, connection *integrations.JiraConnection) error {
-	model := r.toModel(connection)
-	
+	model, err := r.toModel(connection)
+	if err != nil {
+		return fmt.Errorf("failed to update JIRA connection: %w", err)
+	}
+	if model.ID == 0 {
+		return fmt.Errorf("cannot update JIRA connection with unset row ID")
+	}
+
 	if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
 		return fmt.Errorf("failed to update JIRA connection: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -94,8 +114,11 @@ func (r *GormJiraConnectionRepository) FindActiveByProjectID(ctx context.Context
 	return connections, nil
 }
 
-// toModel converts a domain entity to a database model
-func (r *GormJiraConnectionRepository) toModel(conn *integrations.JiraConnection) *database.JiraConnection {
+// toModel converts a domain entity to a database model. A non-empty domain
+// ID must be a valid numeric row ID -- callers that don't yet have a real
+// row ID (e.g. Create, before the DB assigns one) should discard the error
+// and force model.ID to 0 themselves.
+func (r *GormJiraConnectionRepository) toModel(conn *integrations.JiraConnection) (*database.JiraConnection, error) {
 	snapshot := conn.Snapshot()
 	model := &database.JiraConnection{
 		ProjectID:           snapshot.ProjectID,
@@ -110,21 +133,23 @@ func (r *GormJiraConnectionRepository) toModel(conn *integrations.JiraConnection
 		VersionFilter:       snapshot.VersionFilter,
 		LastTestedAt:        snapshot.LastTestedAt,
 	}
-	
-	// CRITICAL: Set the ID to ensure updates work correctly
-	// Convert string ID to uint (assuming numeric IDs)
-	if id := snapshot.ID; id != "" {
-		var numericID uint
-		if _, err := fmt.Sscanf(id, "%d", &numericID); err == nil {
-			model.ID = numericID
-		}
-	}
-	
-	// Set timestamps if they exist
+
 	model.CreatedAt = snapshot.CreatedAt
 	model.UpdatedAt = snapshot.UpdatedAt
-	
-	return model
+
+	if id := snapshot.ID; id != "" {
+		// Parse at uint's actual bit width (32 on a 32-bit platform), not a
+		// hardcoded 64: ParseUint(..., 64) always returns a uint64, and
+		// converting that down to uint would silently wrap an out-of-range
+		// value instead of rejecting it.
+		numericID, err := strconv.ParseUint(id, 10, strconv.IntSize)
+		if err != nil {
+			return model, fmt.Errorf("invalid JIRA connection ID %q: %w", id, err)
+		}
+		model.ID = uint(numericID)
+	}
+
+	return model, nil
 }
 
 // toDomain converts a database model to a domain entity
