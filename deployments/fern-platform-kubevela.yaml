@@ -783,6 +783,14 @@ spec:
           - name: REDIS_PORT
             value: "6379"
 
+          # RFC-004 v2 frontend / REST surface. Off by default so
+          # `helm upgrade` to a v2-capable image is a no-op for the
+          # running UI. Set to "true" once parity is verified and you
+          # want users hitting /v2/ and integrators hitting /api/v2/*.
+          # See docs/specs/frontend-modernization/migration-guide.md.
+          - name: FERN_V2_UI_ENABLED
+            value: "false"
+
           # Core Authentication Configuration
           - name: AUTH_ENABLED
             value: "true"
@@ -829,6 +837,17 @@ spec:
           # Debug OAuth issues
           - name: DEBUG_OAUTH
             value: "true"
+
+          # Jira credential encryption key — 32 bytes base64-encoded.
+          # MUST come from a k8s Secret; do NOT inline the value here.
+          # Provision before applying this manifest:
+          #   kubectl create secret generic fern-platform-secrets \
+          #     --from-literal=JIRA_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          - name: JIRA_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: fern-platform-secrets
+                key: JIRA_ENCRYPTION_KEY
 
           # Admin User and Group Configuration
           - name: OAUTH_ADMIN_USERS

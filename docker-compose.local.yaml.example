@@ -1,0 +1,38 @@
+# Local compose overlay — opt-in via `make docker-test-up-local`.
+#
+# Copy this to docker-compose.local.yaml (which is gitignored) and edit
+# to taste. The overlay bind-mounts your personal
+# config/config.local.yaml over the image's baked-in
+# config/config.yaml so the running binary reads your overrides.
+#
+# Two YAMLs, two schemas — don't mix them:
+#   - docker-compose.yml / docker-compose.local.yaml → Docker schema
+#     (services: <container-name>: image:, build:, volumes:, ports:, …)
+#   - config/config.yaml / config/config.local.yaml → Fern schema
+#     (services: reporter: host:, port:, url: + auth:, database:, …)
+# This file is a docker-compose overlay, so only Docker-schema content
+# belongs here.
+#
+# Reminder on precedence: env vars in docker-compose.yml (DB_HOST,
+# AUTH_ENABLED, etc.) still override YAML values because of Viper's
+# precedence (env > yaml > defaults). If your config.local.yaml sets a
+# value that conflicts with a hard-coded env var in docker-compose.yml,
+# the env var wins. To let the YAML win, blank the env var in the
+# `environment:` block below.
+
+services:
+  fern:
+    volumes:
+      # The container's CMD is `./fern-platform -config config/config.yaml`,
+      # so we mount our local file over that exact path. The source path
+      # `./config/config.local.yaml` is relative to the repo root (the
+      # project directory determined by the first -f compose file).
+      - ./config/config.local.yaml:/app/config/config.yaml:ro
+
+    # Example: blank a docker-compose.yml env var so the YAML value
+    # wins. Uncomment whichever lines you need. (Editing
+    # docker-compose.yml directly would affect everyone; doing it here
+    # keeps the override per-contributor.)
+    # environment:
+    #   AUTH_ENABLED: ""
+    #   OAUTH_CLIENT_ID: ""

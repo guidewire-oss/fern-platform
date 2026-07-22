@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -213,8 +214,24 @@ func (h *TagHandler) listTags(c *gin.Context) {
 
 // getTagUsageStats handles GET /api/v1/tags/usage-stats
 func (h *TagHandler) getTagUsageStats(c *gin.Context) {
-	// TODO: Implement tag usage stats in domain service
-	c.JSON(http.StatusOK, []gin.H{})
+	tags, err := h.tagService.ListTags(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	counts, err := h.tagService.UsageCounts(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	out := make([]gin.H, len(tags))
+	for i, tag := range tags {
+		out[i] = gin.H{
+			"tag":        h.convertTagToAPI(tag),
+			"usageCount": counts[string(tag.ID())],
+		}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // getPopularTags handles GET /api/v1/tags/popular
@@ -229,27 +246,41 @@ func (h *TagHandler) getPopularTags(c *gin.Context) {
 		}
 	}
 
-	// For now, return top N tags from all tags
 	tags, err := h.tagService.ListTags(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	// Limit results
-	if len(tags) > limit {
-		tags = tags[:limit]
+	counts, err := h.tagService.UsageCounts(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	// Convert to usage format
-	popularTags := make([]gin.H, len(tags))
-	for i, tag := range tags {
-		popularTags[i] = gin.H{
-			"tag":        h.convertTagToAPI(tag),
-			"usageCount": 0, // TODO: Implement usage counting
-		}
+	// Build the usage rows and rank descending by count.
+	type row struct {
+		tag   gin.H
+		count int
+	}
+	rows := make([]row, 0, len(tags))
+	for _, tag := range tags {
+		rows = append(rows, row{
+			tag:   h.convertTagToAPI(tag),
+			count: counts[string(tag.ID())],
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].count > rows[j].count })
+
+	// Truncate to the caller's limit *after* ranking so we always
+	// return the actual top-N (not a random N then sorted).
+	if len(rows) > limit {
+		rows = rows[:limit]
 	}
 
+	popularTags := make([]gin.H, len(rows))
+	for i, r := range rows {
+		popularTags[i] = gin.H{"tag": r.tag, "usageCount": r.count}
+	}
 	c.JSON(http.StatusOK, popularTags)
 }
 

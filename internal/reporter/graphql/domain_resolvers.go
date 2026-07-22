@@ -919,36 +919,38 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 		}
 	}
 
-	// Get projects with pagination
-	projects, totalCount, err := r.projectService.ListProjects(ctx, pageSize, offset)
+	// Fetch a large batch and filter by access BEFORE paginating.
+	// Filtering only the fetched page (the previous behavior) silently
+	// hid every project that sorted past that page: a non-admin whose
+	// team's projects landed beyond row `pageSize` saw an empty list, and
+	// the per-page totalCount broke hasNextPage so the client never paged
+	// far enough to reach them. Mirrors getAccessibleProjectSnapshots.
+	const maxScan = 1000
+	projects, rawTotal, err := r.projectService.ListProjects(ctx, maxScan, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
+	if rawTotal > maxScan {
+		r.logger.Warn("Projects_domain: project count exceeds scan cap; some projects may be hidden from non-admin views")
+	}
 
-	// Filter projects based on user's team access
+	// Filter to projects the caller may access (admins see all).
 	var filteredProjects []*projectsDomain.Project
 	if user.Role == authDomain.RoleAdmin {
-		// Admins can see all projects
 		filteredProjects = projects
 	} else {
-		// Get user's teams
 		teamMap := buildTeamMap(getUserTeamsFromContext(ctx))
-
-		// Filter projects by team
 		for _, project := range projects {
 			if userCanAccessProject(project.ToSnapshot(), teamMap) {
 				filteredProjects = append(filteredProjects, project)
 			}
 		}
-
-		// Update total count to reflect filtered results
-		totalCount = int64(len(filteredProjects))
 	}
 
 	// Apply search filter if provided
 	if filter != nil && filter.Search != nil && *filter.Search != "" {
 		searchLower := strings.ToLower(*filter.Search)
-		searchFiltered := make([]*projectsDomain.Project, 0)
+		searchFiltered := make([]*projectsDomain.Project, 0, len(filteredProjects))
 		for _, project := range filteredProjects {
 			snapshot := project.ToSnapshot()
 			if strings.Contains(strings.ToLower(snapshot.Name), searchLower) ||
@@ -957,29 +959,39 @@ func (r *queryResolver) Projects_domain(ctx context.Context, filter *model.Proje
 			}
 		}
 		filteredProjects = searchFiltered
-		totalCount = int64(len(filteredProjects))
 	}
 
 	// Apply active filter if provided
 	if filter != nil && filter.ActiveOnly != nil && *filter.ActiveOnly {
-		activeFiltered := make([]*projectsDomain.Project, 0)
+		activeFiltered := make([]*projectsDomain.Project, 0, len(filteredProjects))
 		for _, project := range filteredProjects {
 			if project.ToSnapshot().IsActive {
 				activeFiltered = append(activeFiltered, project)
 			}
 		}
 		filteredProjects = activeFiltered
-		totalCount = int64(len(filteredProjects))
 	}
 
-	hasMore := offset+len(filteredProjects) < int(totalCount)
+	// Paginate the filtered set in memory so the page reflects only
+	// accessible projects and totalCount/hasNextPage stay consistent.
+	totalCount := int64(len(filteredProjects))
+	start := offset
+	if start > len(filteredProjects) {
+		start = len(filteredProjects)
+	}
+	end := start + pageSize
+	if end > len(filteredProjects) {
+		end = len(filteredProjects)
+	}
+	pageItems := filteredProjects[start:end]
+	hasMore := end < len(filteredProjects)
 
 	// Build edges
-	edges := make([]*model.ProjectEdge, len(filteredProjects))
-	for i, project := range filteredProjects {
+	edges := make([]*model.ProjectEdge, len(pageItems))
+	for i, project := range pageItems {
 		edges[i] = &model.ProjectEdge{
 			Node:   r.convertProjectToGraphQL(ctx, project),
-			Cursor: fmt.Sprintf("%d", offset+i), // Simple cursor
+			Cursor: fmt.Sprintf("%d", start+i), // Simple index cursor
 		}
 	}
 
@@ -1052,15 +1064,26 @@ func (r *queryResolver) DashboardSummary_domain(ctx context.Context) (*model.Das
 	}, nil
 }
 
-// TreemapData implementation using domain service
-func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *string, days *int) (*model.TreemapData, error) {
-	// Default to 7 days if not specified
+// TreemapData implementation using domain service.
+//
+// Two code paths:
+//
+//   - Top view (projectID nil or "") -- one SQL aggregate per project,
+//     no suite hydration. Suites are intentionally left empty; the
+//     front-end never reads them at this level.
+//   - Drill view (projectID set) -- adds a second SQL aggregate per
+//     suite for that one project. Spec level is still skipped.
+//
+// The legacy path (GetTestRunsForProjectsInDateRange) hydrated every
+// test_run + its suite_runs and aggregated in Go, then threw most of
+// it away. At 500 projects × 30 days × 100 runs/day that was ~1.5M
+// rows over the wire. The aggregate path returns ~500 rows top, ~50
+// rows on drill.
+func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *string, suiteName *string, days *int) (*model.TreemapData, error) {
 	daysToQuery := 7
 	if days != nil && *days > 0 {
 		daysToQuery = *days
 	}
-
-	// Calculate date range
 	endTime := time.Now()
 	startTime := endTime.AddDate(0, 0, -daysToQuery)
 
@@ -1069,7 +1092,21 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 		return nil, fmt.Errorf("user not authenticated")
 	}
 
-	// Get all projects then filter to those the current user can access (same logic as Projects_domain)
+	drillKey := ""
+	if projectID != nil {
+		drillKey = *projectID
+	}
+	suiteKey := ""
+	if suiteName != nil {
+		suiteKey = *suiteName
+	}
+	cacheKey := user.UserID + "|" + drillKey + "|" + suiteKey + "|" + strconv.Itoa(daysToQuery)
+	if r.treemap != nil {
+		if cached, ok := r.treemap.get(ctx, cacheKey); ok {
+			return cached, nil
+		}
+	}
+
 	allProjects, _, err := r.projectService.ListProjects(ctx, 1000, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch projects: %w", err)
@@ -1087,12 +1124,10 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 		}
 	}
 
-	// Build project lookup map and ID list for the batch query
 	projectMap := make(map[string]*projectsDomain.Project, len(accessibleProjects))
 	projectIDs := make([]string, 0, len(accessibleProjects))
 	for _, p := range accessibleProjects {
 		pid := string(p.ProjectID())
-		// Apply single-project filter if requested
 		if projectID != nil && *projectID != "" && pid != *projectID {
 			continue
 		}
@@ -1104,128 +1139,154 @@ func (r *queryResolver) TreemapData_domain(ctx context.Context, projectID *strin
 		return &model.TreemapData{Projects: []*model.ProjectTreemapNode{}}, nil
 	}
 
-	// Fetch all test runs for the accessible projects within the date range in one query
-	allTestRuns, err := r.testingService.GetTestRunsForProjectsInDateRange(ctx, projectIDs, startTime, endTime)
+	aggs, err := r.testingService.AggregateProjectsInRange(ctx, projectIDs, startTime, endTime)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch test runs: %w", err)
+		return nil, fmt.Errorf("failed to aggregate projects: %w", err)
 	}
 
-	// Group test runs by project
-	projectRuns := make(map[string][]*testingDomain.TestRun)
-	for _, run := range allTestRuns {
-		if _, ok := projectMap[run.ProjectID]; ok {
-			projectRuns[run.ProjectID] = append(projectRuns[run.ProjectID], run)
+	// Suite aggregation only happens when the user has drilled into a
+	// single project. The top view's suite list is empty by design.
+	drillSuites := []*testingDomain.SuiteAggregate(nil)
+	if projectID != nil && *projectID != "" && len(projectIDs) == 1 {
+		drillSuites, err = r.testingService.AggregateSuitesInRange(ctx, projectIDs[0], startTime, endTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to aggregate suites: %w", err)
 		}
 	}
 
-	// Build treemap data
-	var projectNodes []*model.ProjectTreemapNode
-	totalDuration := 0
-	totalTests := 0
-	totalPassed := 0
+	// Spec aggregation only happens when the user has drilled into
+	// (project, suite). Results are capped at 500 rows by the
+	// repository to honor FR-16's treemap node budget.
+	drillSpecs := []*testingDomain.SpecAggregate(nil)
+	if projectID != nil && *projectID != "" && suiteName != nil && *suiteName != "" && len(projectIDs) == 1 {
+		drillSpecs, err = r.testingService.AggregateSpecsForSuiteInRange(ctx, projectIDs[0], *suiteName, startTime, endTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to aggregate specs: %w", err)
+		}
+	}
 
-	for projectID, runs := range projectRuns {
-		project, ok := projectMap[projectID]
+	projectNodes := make([]*model.ProjectTreemapNode, 0, len(aggs))
+	var totalDuration, totalTests, totalPassed int
+
+	for _, agg := range aggs {
+		project, ok := projectMap[agg.ProjectID]
 		if !ok {
 			continue
 		}
-
-		// Convert to GraphQL project model
 		gqlProject := r.convertProjectToGraphQL(ctx, project)
 
-		// Aggregate suite data across all runs for this project
-		suiteMap := make(map[string]*model.SuiteTreemapNode)
-		projectDuration := 0
-		projectTests := 0
-		projectPassed := 0
+		passRate := float64(0)
+		if agg.TotalTests > 0 {
+			passRate = float64(agg.PassedTests) / float64(agg.TotalTests)
+		}
 
-		for _, run := range runs {
-			for _, suite := range run.SuiteRuns {
-				key := suite.Name
-
-				if node, exists := suiteMap[key]; exists {
-					// Update existing suite node
-					node.TotalDuration += int(suite.Duration.Milliseconds())
-					node.TotalSpecs += suite.TotalTests
-					node.PassedSpecs += suite.PassedTests
-					node.FailedSpecs += suite.FailedTests
-				} else {
-					// Create new suite node
-					gqlSuite := &model.SuiteRun{
-						ID:           strconv.FormatUint(uint64(suite.ID), 10),
-						TestRunID:    strconv.FormatUint(uint64(suite.TestRunID), 10),
-						SuiteName:    suite.Name,
-						Status:       suite.Status,
-						StartTime:    suite.StartTime,
-						EndTime:      suite.EndTime,
-						TotalSpecs:   suite.TotalTests,
-						PassedSpecs:  suite.PassedTests,
-						FailedSpecs:  suite.FailedTests,
-						SkippedSpecs: suite.SkippedTests,
-						Duration:     int(suite.Duration.Milliseconds()),
-					}
-
-					suiteMap[key] = &model.SuiteTreemapNode{
-						Suite:         gqlSuite,
-						Specs:         []*model.SpecTreemapNode{}, // Not including spec level for performance
-						TotalDuration: int(suite.Duration.Milliseconds()),
-						TotalSpecs:    suite.TotalTests,
-						PassedSpecs:   suite.PassedTests,
-						FailedSpecs:   suite.FailedTests,
-						PassRate:      0,
+		var suiteNodes []*model.SuiteTreemapNode
+		if len(drillSuites) > 0 && agg.ProjectID == projectIDs[0] {
+			suiteNodes = make([]*model.SuiteTreemapNode, 0, len(drillSuites))
+			for _, s := range drillSuites {
+				sp := float64(0)
+				if s.TotalTests > 0 {
+					sp = float64(s.PassedTests) / float64(s.TotalTests)
+				}
+				// Specs only populate on the matching suite during a
+				// project+suite drill. Other suites get an empty list
+				// so the GraphQL schema's non-null `[SpecTreemapNode!]!`
+				// is satisfied without paying the aggregation cost for
+				// suites the user isn't looking at.
+				var specNodes []*model.SpecTreemapNode
+				if suiteName != nil && *suiteName != "" && s.SuiteName == *suiteName && len(drillSpecs) > 0 {
+					specNodes = make([]*model.SpecTreemapNode, 0, len(drillSpecs))
+					for _, sp := range drillSpecs {
+						// `status` is the *majority* outcome across the
+						// window — used as a label/badge, not as the
+						// driver of tile color. Color is driven by the
+						// continuous passRate (PassedRuns/TotalRuns)
+						// below so a spec that's 99% green renders the
+						// same shade as its 99%-green parent suite.
+						var status string
+						switch {
+						case sp.PassedRuns >= sp.FailedRuns && sp.PassedRuns >= sp.SkippedRuns:
+							status = "passed"
+						case sp.FailedRuns >= sp.SkippedRuns:
+							status = "failed"
+						default:
+							status = "skipped"
+						}
+						passRate := float64(0)
+						if sp.TotalRuns > 0 {
+							passRate = float64(sp.PassedRuns) / float64(sp.TotalRuns)
+						}
+						specNodes = append(specNodes, &model.SpecTreemapNode{
+							Spec: &model.SpecRun{
+								SpecName: sp.SpecName,
+								Status:   status,
+								Duration: int(sp.DurationMs),
+								IsFlaky:  sp.IsFlaky,
+							},
+							Duration:    int(sp.DurationMs),
+							Status:      status,
+							IsFlaky:     sp.IsFlaky,
+							TotalRuns:   sp.TotalRuns,
+							PassedRuns:  sp.PassedRuns,
+							FailedRuns:  sp.FailedRuns,
+							SkippedRuns: sp.SkippedRuns,
+							PassRate:    passRate,
+						})
 					}
 				}
+				if specNodes == nil {
+					specNodes = []*model.SpecTreemapNode{}
+				}
+				suiteNodes = append(suiteNodes, &model.SuiteTreemapNode{
+					Suite: &model.SuiteRun{
+						SuiteName:    s.SuiteName,
+						TotalSpecs:   s.TotalTests,
+						PassedSpecs:  s.PassedTests,
+						FailedSpecs:  s.FailedTests,
+						SkippedSpecs: s.SkippedTests,
+						Duration:     int(s.DurationMs),
+					},
+					Specs:         specNodes,
+					TotalDuration: int(s.DurationMs),
+					TotalSpecs:    s.TotalTests,
+					PassedSpecs:   s.PassedTests,
+					FailedSpecs:   s.FailedTests,
+					PassRate:      sp,
+				})
 			}
-
-			projectDuration += int(run.Duration.Milliseconds())
-			projectTests += run.TotalTests
-			projectPassed += run.PassedTests
 		}
 
-		// Convert suite map to slice and calculate pass rates
-		var suiteNodes []*model.SuiteTreemapNode
-		for _, node := range suiteMap {
-			if node.TotalSpecs > 0 {
-				node.PassRate = float64(node.PassedSpecs) / float64(node.TotalSpecs)
-			}
-			suiteNodes = append(suiteNodes, node)
-		}
-
-		// Calculate project pass rate
-		projectPassRate := float64(0)
-		if projectTests > 0 {
-			projectPassRate = float64(projectPassed) / float64(projectTests)
-		}
-
-		projectNode := &model.ProjectTreemapNode{
+		projectNodes = append(projectNodes, &model.ProjectTreemapNode{
 			Project:       gqlProject,
 			Suites:        suiteNodes,
-			TotalDuration: projectDuration,
-			TotalTests:    projectTests,
-			PassedTests:   projectPassed,
-			FailedTests:   projectTests - projectPassed,
-			PassRate:      projectPassRate,
-			TotalRuns:     len(runs), // Add the count of test runs for this project within the time range
-		}
+			TotalDuration: int(agg.DurationMs),
+			TotalTests:    agg.TotalTests,
+			PassedTests:   agg.PassedTests,
+			FailedTests:   agg.FailedTests,
+			PassRate:      passRate,
+			TotalRuns:     agg.TotalRuns,
+		})
 
-		projectNodes = append(projectNodes, projectNode)
-		totalDuration += projectDuration
-		totalTests += projectTests
-		totalPassed += projectPassed
+		totalDuration += int(agg.DurationMs)
+		totalTests += agg.TotalTests
+		totalPassed += agg.PassedTests
 	}
 
-	// Calculate overall pass rate
 	overallPassRate := float64(0)
 	if totalTests > 0 {
 		overallPassRate = float64(totalPassed) / float64(totalTests)
 	}
 
-	return &model.TreemapData{
+	out := &model.TreemapData{
 		Projects:        projectNodes,
 		TotalDuration:   totalDuration,
 		TotalTests:      totalTests,
 		OverallPassRate: overallPassRate,
-	}, nil
+	}
+	if r.treemap != nil {
+		r.treemap.set(ctx, cacheKey, out)
+	}
+	return out, nil
 }
 
 // TestRuns implementation using domain service with pagination

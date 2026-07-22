@@ -1,0 +1,59 @@
+# Fern Platform - Web (v2) Makefile
+# Builds the web-v2 SPA and stages it for Go //go:embed.
+#
+# Strangler note: during the migration period the new SPA lives in
+# web-v2/. At Phase 5 cutover it is renamed to web/ and these targets
+# move with it.
+
+WEB_DIR        := web-v2
+WEB_DIST_DIR   := $(WEB_DIR)/dist
+EMBED_DIST_DIR := internal/web/dist
+PNPM           ?= pnpm
+GQL_SCHEMA_SRC := internal/reporter/graphql/schema.graphql
+
+.PHONY: web-deps web-codegen web-dev web-build web-test web-typecheck web-lint web-size sync-schema web-stage web-clean
+
+web-deps: ## Install web dependencies (pnpm install)
+	@echo "📦 Installing web dependencies..."
+	cd $(WEB_DIR) && $(PNPM) install --frozen-lockfile
+
+web-codegen: ## Regenerate GraphQL types/hooks from the synced schema
+	cd $(WEB_DIR) && $(PNPM) codegen
+
+web-dev: ## Run Vite dev server (proxies /api, /graphql, /auth to :8080)
+	cd $(WEB_DIR) && $(PNPM) dev
+
+web-typecheck: ## Type-check the web project
+	cd $(WEB_DIR) && $(PNPM) typecheck
+
+web-lint: ## Lint the web project
+	cd $(WEB_DIR) && $(PNPM) lint
+
+web-test: ## Run web unit tests (vitest)
+	cd $(WEB_DIR) && $(PNPM) test:run
+
+web-size: ## Verify bundle size budgets
+	cd $(WEB_DIR) && $(PNPM) size
+
+web-build: web-typecheck web-lint web-test ## Build production bundle (typecheck + lint + test + vite build)
+	@echo "🌿 Building Fern web SPA..."
+	cd $(WEB_DIR) && $(PNPM) build
+	$(MAKE) web-stage
+
+web-stage: ## Copy dist/ into internal/web/dist/ so go:embed picks it up
+	@echo "📂 Staging dist/ into $(EMBED_DIST_DIR)..."
+	rm -rf $(EMBED_DIST_DIR)
+	mkdir -p $(EMBED_DIST_DIR)
+	cp -R $(WEB_DIST_DIR)/. $(EMBED_DIST_DIR)/
+
+sync-schema: ## Mirror the server GraphQL schema into the web project
+	@if [ ! -f "$(GQL_SCHEMA_SRC)" ]; then \
+		echo "⚠️  $(GQL_SCHEMA_SRC) not found — schema sync skipped"; \
+		exit 0; \
+	fi
+	cp $(GQL_SCHEMA_SRC) $(WEB_DIR)/src/gql/schema.graphql
+	@echo "✅ Schema synced"
+
+web-clean: ## Clean web build artifacts
+	rm -rf $(WEB_DIR)/dist $(WEB_DIR)/node_modules $(WEB_DIR)/coverage
+	rm -rf $(EMBED_DIST_DIR)/* || true

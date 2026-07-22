@@ -60,6 +60,82 @@ type TestRunRepository interface {
 
 	// GetDashboardStats returns platform-wide aggregate stats in a single query.
 	GetDashboardStats(ctx context.Context) (*DashboardStatsResult, error)
+
+	// AggregateProjectsInRange returns one row per project_id with summed
+	// counts and run-count for the time window. Used by the treemap top
+	// view, which only needs totals — no individual runs, no suites.
+	AggregateProjectsInRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*ProjectAggregate, error)
+
+	// AggregateSuitesInRange returns one row per suite_name for a single
+	// project in the window. Used by the treemap drill-down view.
+	AggregateSuitesInRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*SuiteAggregate, error)
+
+	// AggregateSpecsForSuiteInRange returns one row per spec_name inside
+	// a single (project, suite) pair for the window. Used by the treemap
+	// third-level drill (project → suite → specs). Results capped at 500
+	// rows by area (DurationMs DESC) to honor the treemap node budget.
+	AggregateSpecsForSuiteInRange(ctx context.Context, projectID, suiteName string, startDate, endDate time.Time) ([]*SpecAggregate, error)
+
+	// AggregateDailyByProjects returns one row per (project_id, day) for
+	// the window. Used by the Test Summaries page's trend cards, which
+	// previously fanned out N parallel /api/v2/test-runs requests — one
+	// per project — to compute the same sparkline data client-side.
+	// This collapses to a single SQL GROUP BY.
+	AggregateDailyByProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*DailyProjectAggregate, error)
+}
+
+// ProjectAggregate is the per-project row returned by
+// AggregateProjectsInRange. Values are sums over the window — there is
+// no individual run-level data here by design.
+type ProjectAggregate struct {
+	ProjectID    string
+	TotalRuns    int
+	TotalTests   int
+	PassedTests  int
+	FailedTests  int
+	SkippedTests int
+	DurationMs   int64
+}
+
+// SuiteAggregate is the per-suite row returned by
+// AggregateSuitesInRange.
+type SuiteAggregate struct {
+	SuiteName    string
+	TotalTests   int
+	PassedTests  int
+	FailedTests  int
+	SkippedTests int
+	DurationMs   int64
+}
+
+// SpecAggregate is the per-spec row returned by
+// AggregateSpecsForSuiteInRange. PassRate is computed as
+// PassedRuns / TotalRuns when the caller needs it; for the treemap
+// the boolean IsFlaky is also surfaced so flaky specs can be styled
+// distinctly from steady-failing ones.
+type SpecAggregate struct {
+	SpecName    string
+	TotalRuns   int
+	PassedRuns  int
+	FailedRuns  int
+	SkippedRuns int
+	IsFlaky     bool
+	DurationMs  int64
+}
+
+// DailyProjectAggregate is the per-(project_id, day) row returned by
+// AggregateDailyByProjects. `Day` is the UTC-truncated day boundary
+// (00:00:00 UTC). Buckets are sparse — days with no runs are absent
+// from the result; callers fill gaps client-side.
+type DailyProjectAggregate struct {
+	ProjectID    string
+	Day          time.Time
+	TotalRuns    int
+	TotalTests   int
+	PassedTests  int
+	FailedTests  int
+	SkippedTests int
+	DurationMs   int64
 }
 
 // SuiteRunRepository defines the interface for suite run persistence

@@ -1,0 +1,113 @@
+# Local Docker test stack for Fern Platform.
+#
+# Brings up Postgres + Redis + the platform binary built from this
+# checkout. Intended for sanity-checking changes without standing up
+# the full k3d cluster.
+#
+# Usage:
+#   make docker-test-up        # build image, start stack, follow logs
+#   make docker-test-down      # stop + remove everything (incl. volumes)
+#   make docker-test-curl      # quick smoke probe (/healthz, /readyz, /api/v1/health)
+#
+# Auth is disabled by default so the v1 ingestion + v2 list endpoints
+# can be exercised without a Keycloak realm. To exercise OAuth, use
+# `make deploy-all` (k3d) instead.
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       fern_platform
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fern_platform"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - fern_pg_data:/var/lib/postgresql/data
+
+  # One-shot: create the `app` role that a handful of legacy
+  # migrations grant ownership to (a k3d/CNPG convention baked into
+  # the SQL). Runs after postgres is healthy and before fern starts.
+  # We tolerate the role already existing (49P04 duplicate_object) so
+  # restarts on the same volume don't fail.
+  postgres-init:
+    image: postgres:14-alpine
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: postgres
+    command:
+      - sh
+      - -c
+      - >
+        psql -h postgres -U postgres -d fern_platform -c "CREATE ROLE app NOLOGIN;" 2>&1 | grep -v "already exists" || true;
+        psql -h postgres -U postgres -d fern_platform -v ON_ERROR_STOP=1 -c "GRANT app TO postgres;"
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  fern:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:      { condition: service_healthy }
+      redis:         { condition: service_healthy }
+      postgres-init: { condition: service_completed_successfully }
+    environment:
+      # DB
+      DB_HOST:        postgres
+      # Disable the k3d ".fern-platform" suffix that the config layer
+      # appends by default; in compose, `postgres` is the service name
+      # and Docker's embedded DNS resolves it directly.
+      DB_HOST_SUFFIX: ""
+      DB_PORT:        "5432"
+      DB_USER:        postgres
+      DB_PASSWORD:    postgres
+      DB_NAME:        fern_platform
+      DB_SSLMODE:     disable
+      # Redis
+      REDIS_HOST:  redis
+      REDIS_PORT:  "6379"
+      # Auth off for local smoke. Use k3d for OAuth flows.
+      AUTH_ENABLED: "true"
+      # Jira credential encryption key — 32 bytes, base64. Required;
+      # no default. Fails compose with a clear message if unset.
+      # Generate a stable per-developer key once:
+      #   make jira-key            # generates + persists to ~/.fern/jira-key
+      #   source <(make jira-key)  # exports JIRA_ENCRYPTION_KEY into shell
+      # Then `make docker-test-up` reads it from the env.
+      JIRA_ENCRYPTION_KEY: "${JIRA_ENCRYPTION_KEY:?required: 32-byte base64 — run `make jira-key` to generate}"
+      # v2 ON — mounts both the SPA at /v2/ and the /api/v2/* surface.
+      FERN_V2_UI_ENABLED:     "true"
+      # v1 deprecation OFF until v2 is GA — keeps clean smoke output
+      FERN_V1_DEPRECATED:     "false"
+      # CSP extras (none for local)
+      FERN_CSP_EXTRA_CONNECT_SRC: ""
+      # Server
+      PORT: "8080"
+      HOST: "0.0.0.0"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  fern_pg_data:

@@ -283,7 +283,7 @@ type ComplexityRoot struct {
 		TestRunByRunID          func(childComplexity int, runID string) int
 		TestRunStats            func(childComplexity int, projectID *string, days *int) int
 		TestRuns                func(childComplexity int, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) int
-		TreemapData             func(childComplexity int, projectID *string, days *int) int
+		TreemapData             func(childComplexity int, projectID *string, suiteName *string, days *int) int
 		UserPreferences         func(childComplexity int) int
 	}
 
@@ -322,10 +322,15 @@ type ComplexityRoot struct {
 	}
 
 	SpecTreemapNode struct {
-		Duration func(childComplexity int) int
-		IsFlaky  func(childComplexity int) int
-		Spec     func(childComplexity int) int
-		Status   func(childComplexity int) int
+		Duration    func(childComplexity int) int
+		FailedRuns  func(childComplexity int) int
+		IsFlaky     func(childComplexity int) int
+		PassRate    func(childComplexity int) int
+		PassedRuns  func(childComplexity int) int
+		SkippedRuns func(childComplexity int) int
+		Spec        func(childComplexity int) int
+		Status      func(childComplexity int) int
+		TotalRuns   func(childComplexity int) int
 	}
 
 	StatusCount struct {
@@ -527,7 +532,7 @@ type QueryResolver interface {
 	SystemConfig(ctx context.Context) (*model.SystemConfig, error)
 	DashboardSummary(ctx context.Context) (*model.DashboardSummary, error)
 	Health(ctx context.Context) (*model.HealthStatus, error)
-	TreemapData(ctx context.Context, projectID *string, days *int) (*model.TreemapData, error)
+	TreemapData(ctx context.Context, projectID *string, suiteName *string, days *int) (*model.TreemapData, error)
 	TestRun(ctx context.Context, id string) (*model.TestRun, error)
 	TestRunByRunID(ctx context.Context, runID string) (*model.TestRun, error)
 	TestRuns(ctx context.Context, filter *model.TestRunFilter, first *int, after *string, orderBy *string, orderDirection *model.OrderDirection) (*model.TestRunConnection, error)
@@ -1995,7 +2000,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.TreemapData(childComplexity, args["projectId"].(*string), args["days"].(*int)), true
+		return e.complexity.Query.TreemapData(childComplexity, args["projectId"].(*string), args["suiteName"].(*string), args["days"].(*int)), true
 
 	case "Query.userPreferences":
 		if e.complexity.Query.UserPreferences == nil {
@@ -2165,12 +2170,40 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.SpecTreemapNode.Duration(childComplexity), true
 
+	case "SpecTreemapNode.failedRuns":
+		if e.complexity.SpecTreemapNode.FailedRuns == nil {
+			break
+		}
+
+		return e.complexity.SpecTreemapNode.FailedRuns(childComplexity), true
+
 	case "SpecTreemapNode.isFlaky":
 		if e.complexity.SpecTreemapNode.IsFlaky == nil {
 			break
 		}
 
 		return e.complexity.SpecTreemapNode.IsFlaky(childComplexity), true
+
+	case "SpecTreemapNode.passRate":
+		if e.complexity.SpecTreemapNode.PassRate == nil {
+			break
+		}
+
+		return e.complexity.SpecTreemapNode.PassRate(childComplexity), true
+
+	case "SpecTreemapNode.passedRuns":
+		if e.complexity.SpecTreemapNode.PassedRuns == nil {
+			break
+		}
+
+		return e.complexity.SpecTreemapNode.PassedRuns(childComplexity), true
+
+	case "SpecTreemapNode.skippedRuns":
+		if e.complexity.SpecTreemapNode.SkippedRuns == nil {
+			break
+		}
+
+		return e.complexity.SpecTreemapNode.SkippedRuns(childComplexity), true
 
 	case "SpecTreemapNode.spec":
 		if e.complexity.SpecTreemapNode.Spec == nil {
@@ -2185,6 +2218,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SpecTreemapNode.Status(childComplexity), true
+
+	case "SpecTreemapNode.totalRuns":
+		if e.complexity.SpecTreemapNode.TotalRuns == nil {
+			break
+		}
+
+		return e.complexity.SpecTreemapNode.TotalRuns(childComplexity), true
 
 	case "StatusCount.count":
 		if e.complexity.StatusCount.Count == nil {
@@ -3629,8 +3669,13 @@ type SuiteTreemapNode {
 type SpecTreemapNode {
   spec: SpecRun!
   duration: Int!
-  status: String!
+  status: String!          # majority status across runs (passed / failed / skipped)
   isFlaky: Boolean!
+  totalRuns: Int!
+  passedRuns: Int!
+  failedRuns: Int!
+  skippedRuns: Int!
+  passRate: Float!         # PassedRuns / TotalRuns, same math as suite/project levels
 }
 
 # Query Root
@@ -3644,8 +3689,11 @@ type Query {
   dashboardSummary: DashboardSummary!
   health: HealthStatus!
   
-  # Treemap Visualization
-  treemapData(projectId: String, days: Int = 7): TreemapData!
+  # Treemap Visualization. Three-level drill:
+  #   no args                                 → top: one tile per project
+  #   projectId: "X"                          → middle: one tile per suite of X
+  #   projectId: "X", suiteName: "Y"          → bottom: one tile per spec of X/Y
+  treemapData(projectId: String, suiteName: String, days: Int = 7): TreemapData!
   # Test Runs
   testRun(id: ID!): TestRun
   testRunByRunId(runId: String!): TestRun
@@ -4420,11 +4468,16 @@ func (ec *executionContext) field_Query_treemapData_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["projectId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "days", ec.unmarshalOInt2ᚖint)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "suiteName", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["days"] = arg1
+	args["suiteName"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "days", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["days"] = arg2
 	return args, nil
 }
 
@@ -11802,7 +11855,7 @@ func (ec *executionContext) _Query_treemapData(ctx context.Context, field graphq
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().TreemapData(rctx, fc.Args["projectId"].(*string), fc.Args["days"].(*int))
+		return ec.resolvers.Query().TreemapData(rctx, fc.Args["projectId"].(*string), fc.Args["suiteName"].(*string), fc.Args["days"].(*int))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -14990,6 +15043,226 @@ func (ec *executionContext) fieldContext_SpecTreemapNode_isFlaky(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _SpecTreemapNode_totalRuns(ctx context.Context, field graphql.CollectedField, obj *model.SpecTreemapNode) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SpecTreemapNode_totalRuns(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.TotalRuns, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SpecTreemapNode_totalRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SpecTreemapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SpecTreemapNode_passedRuns(ctx context.Context, field graphql.CollectedField, obj *model.SpecTreemapNode) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SpecTreemapNode_passedRuns(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.PassedRuns, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SpecTreemapNode_passedRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SpecTreemapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SpecTreemapNode_failedRuns(ctx context.Context, field graphql.CollectedField, obj *model.SpecTreemapNode) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SpecTreemapNode_failedRuns(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.FailedRuns, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SpecTreemapNode_failedRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SpecTreemapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SpecTreemapNode_skippedRuns(ctx context.Context, field graphql.CollectedField, obj *model.SpecTreemapNode) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SpecTreemapNode_skippedRuns(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.SkippedRuns, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(int)
+	fc.Result = res
+	return ec.marshalNInt2int(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SpecTreemapNode_skippedRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SpecTreemapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SpecTreemapNode_passRate(ctx context.Context, field graphql.CollectedField, obj *model.SpecTreemapNode) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_SpecTreemapNode_passRate(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.PassRate, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(float64)
+	fc.Result = res
+	return ec.marshalNFloat2float64(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_SpecTreemapNode_passRate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SpecTreemapNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _StatusCount_status(ctx context.Context, field graphql.CollectedField, obj *model.StatusCount) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_StatusCount_status(ctx, field)
 	if err != nil {
@@ -16539,6 +16812,16 @@ func (ec *executionContext) fieldContext_SuiteTreemapNode_specs(_ context.Contex
 				return ec.fieldContext_SpecTreemapNode_status(ctx, field)
 			case "isFlaky":
 				return ec.fieldContext_SpecTreemapNode_isFlaky(ctx, field)
+			case "totalRuns":
+				return ec.fieldContext_SpecTreemapNode_totalRuns(ctx, field)
+			case "passedRuns":
+				return ec.fieldContext_SpecTreemapNode_passedRuns(ctx, field)
+			case "failedRuns":
+				return ec.fieldContext_SpecTreemapNode_failedRuns(ctx, field)
+			case "skippedRuns":
+				return ec.fieldContext_SpecTreemapNode_skippedRuns(ctx, field)
+			case "passRate":
+				return ec.fieldContext_SpecTreemapNode_passRate(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SpecTreemapNode", field.Name)
 		},
@@ -25431,6 +25714,31 @@ func (ec *executionContext) _SpecTreemapNode(ctx context.Context, sel ast.Select
 			}
 		case "isFlaky":
 			out.Values[i] = ec._SpecTreemapNode_isFlaky(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalRuns":
+			out.Values[i] = ec._SpecTreemapNode_totalRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "passedRuns":
+			out.Values[i] = ec._SpecTreemapNode_passedRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "failedRuns":
+			out.Values[i] = ec._SpecTreemapNode_failedRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skippedRuns":
+			out.Values[i] = ec._SpecTreemapNode_skippedRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "passRate":
+			out.Values[i] = ec._SpecTreemapNode_passRate(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

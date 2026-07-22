@@ -112,6 +112,84 @@ func (r *GormUserRepository) UpdateLastLogin(ctx context.Context, userID string,
 	return r.db.WithContext(ctx).Model(&database.User{}).Where("user_id = ?", userID).Update("last_login_at", loginTime).Error
 }
 
+// List returns a page of users ordered by name plus the total count.
+// limit is clamped to [1, 200]; offset must be non-negative.
+func (r *GormUserRepository) List(ctx context.Context, limit, offset int) ([]*domain.User, int64, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&database.User{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count users: %w", err)
+	}
+	var rows []database.User
+	if err := r.db.WithContext(ctx).
+		Order("name ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list users: %w", err)
+	}
+	out := make([]*domain.User, len(rows))
+	for i, row := range rows {
+		u := r.toDomainUser(&row)
+		out[i] = u
+	}
+	return out, total, nil
+}
+
+// UpdateRole sets a user's role column.
+func (r *GormUserRepository) UpdateRole(ctx context.Context, userID string, role domain.UserRole) error {
+	res := r.db.WithContext(ctx).
+		Model(&database.User{}).
+		Where("user_id = ?", userID).
+		Update("role", string(role))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+	return nil
+}
+
+// UpdateStatus sets a user's status column (active/suspended/inactive).
+func (r *GormUserRepository) UpdateStatus(ctx context.Context, userID string, status domain.UserStatus) error {
+	res := r.db.WithContext(ctx).
+		Model(&database.User{}).
+		Where("user_id = ?", userID).
+		Update("status", string(status))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+	return nil
+}
+
+// SoftDelete sets deleted_at on a user. GORM's soft-delete semantics
+// mean the row stays in the DB but is excluded from default queries
+// that don't go through Unscoped().
+func (r *GormUserRepository) SoftDelete(ctx context.Context, userID string) error {
+	res := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&database.User{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+	return nil
+}
+
 // SetUserGroups sets the user's group memberships
 func (r *GormUserRepository) SetUserGroups(ctx context.Context, userID string, groups []string) error {
 	// Start transaction

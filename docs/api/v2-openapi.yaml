@@ -1,0 +1,297 @@
+openapi: 3.1.0
+info:
+  title: Fern Platform API v2
+  version: 2.0.0
+  description: |
+    The v2 REST surface introduced by RFC-004. Adds server-side
+    filtering, cursor-based pagination, faceted counts, saved views,
+    and Core Web Vitals ingestion.
+
+    The v1 surface remains available unchanged for at least 12 months
+    after v2 GA; see [migration-guide](../specs/frontend-modernization/migration-guide.md).
+  contact:
+    name: Fern Platform Maintainers
+    url: https://github.com/guidewire-oss/fern-platform
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: /api/v2
+    description: Same-origin (preferred)
+  - url: http://fern-platform.local:8080/api/v2
+    description: Local dev (k3d)
+
+tags:
+  - name: test-runs
+    description: Filtered, paginated, faceted access to test runs.
+  - name: saved-views
+    description: User-scoped filter presets.
+  - name: telemetry
+    description: Core Web Vitals ingestion (browser-emitted).
+
+paths:
+  /test-runs:
+    get:
+      tags: [test-runs]
+      summary: List test runs with filters, pagination, and facets.
+      operationId: listTestRuns
+      parameters:
+        - name: project
+          in: query
+          description: Filter by project id. Repeatable; values OR together.
+          schema: { type: array, items: { type: string } }
+          explode: true
+        - name: status
+          in: query
+          description: Filter by run status. Repeatable.
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [passed, failed, flaky, running, skipped]
+          explode: true
+        - name: branch
+          in: query
+          description: Filter by branch. Repeatable.
+          schema: { type: array, items: { type: string } }
+          explode: true
+        - name: tag
+          in: query
+          description: Filter by tag. Repeatable.
+          schema: { type: array, items: { type: string } }
+          explode: true
+        - name: tagMode
+          in: query
+          description: |
+            How to combine multiple `tag` values. `OR` (default) matches
+            runs with any of the tags; `AND` matches runs that carry
+            every tag.
+          schema:
+            type: string
+            enum: [OR, AND]
+            default: OR
+        - name: commit
+          in: query
+          description: Exact git commit SHA.
+          schema: { type: string }
+        - name: q
+          in: query
+          description: Full-text search over spec name + error message.
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Inclusive lower bound on `start_time` (RFC 3339).
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Inclusive upper bound on `start_time` (RFC 3339).
+          schema: { type: string, format: date-time }
+        - name: durationGte
+          in: query
+          description: Inclusive lower bound on `duration_ms`.
+          schema: { type: integer, minimum: 0 }
+        - name: durationLte
+          in: query
+          description: Inclusive upper bound on `duration_ms`.
+          schema: { type: integer, minimum: 0 }
+        - name: first
+          in: query
+          description: Page size. Default 50, clamped to 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: after
+          in: query
+          description: Opaque cursor returned in a previous response's `pageInfo.endCursor`.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Filtered, paginated test runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRunConnection' }
+        '400':
+          description: |
+            Malformed query. Examples: non-integer `first`, invalid
+            timestamp, inverted date or duration range.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me/saved-views:
+    get:
+      tags: [saved-views]
+      summary: List the calling user's saved filter views.
+      operationId: listSavedViews
+      parameters:
+        - name: page
+          in: query
+          description: Restrict to views for this list page (e.g. `test-runs`).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Saved views for the calling user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [views]
+                properties:
+                  views:
+                    type: array
+                    items: { $ref: '#/components/schemas/SavedView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [saved-views]
+      summary: Create a saved view.
+      operationId: createSavedView
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [page, name, filter]
+              properties:
+                page:   { type: string, minLength: 1 }
+                name:   { type: string, minLength: 1, maxLength: 255 }
+                filter: { type: object, description: Opaque filter payload. }
+      responses:
+        '201':
+          description: Saved view created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SavedView' }
+        '400': { description: Missing required fields. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: A view with the same (page, name) already exists for this user.
+
+  /me/saved-views/{id}:
+    delete:
+      tags: [saved-views]
+      summary: Delete one of the calling user's saved views.
+      operationId: deleteSavedView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '204': { description: Deleted. }
+        '400': { description: id is not a positive integer. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: |
+            Either the view does not exist, or it belongs to a
+            different user. Both cases return 404 to avoid leaking
+            existence.
+
+  /telemetry/vitals:
+    post:
+      tags: [telemetry]
+      summary: Ingest a single Core Web Vitals measurement.
+      description: |
+        Emitted by the SPA via the `web-vitals` library on a 10 %
+        sample. Server records into Prometheus histograms keyed by
+        metric name and route pattern.
+      operationId: recordWebVital
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebVital' }
+      responses:
+        '202': { description: Accepted. }
+        '400': { description: Unknown metric, out-of-range value, or missing route. }
+
+components:
+  responses:
+    Unauthorized:
+      description: No authenticated user on the request.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    TestRun:
+      type: object
+      properties:
+        id:            { type: integer }
+        run_id:        { type: string }
+        project_id:    { type: string }
+        branch:        { type: string }
+        git_commit:    { type: string }
+        status:        { type: string, enum: [passed, failed, flaky, running, skipped] }
+        start_time:    { type: string, format: date-time }
+        end_time:      { type: string, format: date-time, nullable: true }
+        total_tests:   { type: integer }
+        passed_tests:  { type: integer }
+        failed_tests:  { type: integer }
+        skipped_tests: { type: integer }
+        environment:   { type: string }
+
+    TestRunEdge:
+      type: object
+      properties:
+        cursor: { type: string }
+        node:   { $ref: '#/components/schemas/TestRun' }
+
+    PageInfo:
+      type: object
+      properties:
+        hasNextPage: { type: boolean }
+        endCursor:   { type: string }
+
+    FacetCount:
+      type: object
+      properties:
+        value: { type: string }
+        count: { type: integer, format: int64 }
+
+    TestRunFacets:
+      type: object
+      properties:
+        byStatus:  { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        byBranch:  { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        byTag:     { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+        byProject: { type: array, items: { $ref: '#/components/schemas/FacetCount' } }
+
+    TestRunConnection:
+      type: object
+      properties:
+        edges:                { type: array, items: { $ref: '#/components/schemas/TestRunEdge' } }
+        pageInfo:             { $ref: '#/components/schemas/PageInfo' }
+        totalCount:           { type: integer, format: int64 }
+        totalCountIsEstimate: { type: boolean }
+        facets:               { $ref: '#/components/schemas/TestRunFacets' }
+
+    SavedView:
+      type: object
+      properties:
+        id:     { type: integer }
+        page:   { type: string }
+        name:   { type: string }
+        filter: { type: object }
+
+    WebVital:
+      type: object
+      required: [name, value, route]
+      properties:
+        name:   { type: string, enum: [LCP, INP, CLS, FCP, TTFB] }
+        value:  { type: number }
+        rating: { type: string, enum: [good, needs-improvement, poor] }
+        route:  { type: string, maxLength: 256 }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: OAuth2 JWT issued by the Keycloak realm.
+
+security:
+  - bearerAuth: []

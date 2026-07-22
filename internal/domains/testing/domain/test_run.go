@@ -84,13 +84,19 @@ type TestRunSummary struct {
 }
 
 // ProjectStatsResult holds all stats needed for the GraphQL ProjectStats type,
-// computed in a single SQL aggregation query.
+// computed in a single SQL aggregation query. TotalTests / PassedTests are the
+// canonical inputs for the project success rate displayed in the UI — they
+// match the treemap's definition (passed_tests / total_tests) so the Projects
+// list and the treemap show the same number. PassedRuns is kept for callers
+// that still want a green-run count.
 type ProjectStatsResult struct {
-	TotalRuns       int64
-	AvgDurationMs   float64
-	PassedRuns      int64
-	UniqueBranches  int64
-	LastRunTime     *time.Time
+	TotalRuns      int64
+	AvgDurationMs  float64
+	PassedRuns     int64
+	TotalTests     int64
+	PassedTests    int64
+	UniqueBranches int64
+	LastRunTime    *time.Time
 }
 
 // DashboardStatsResult holds platform-wide aggregates for the DashboardSummary query.

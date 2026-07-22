@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/GoogleChrome/lighthouse-ci/main/docs/configuration.md",
+  "//": "Thresholds mirror perf-budgets.json at the repo root. Keep in sync.",
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:8080/",
+        "http://localhost:8080/test-runs",
+        "http://localhost:8080/flaky",
+        "http://localhost:8080/treemap"
+      ],
+      "numberOfRuns": 5,
+      "settings": {
+        "preset": "desktop",
+        "throttlingMethod": "simulate"
+      }
+    },
+    "assert": {
+      "preset": "lighthouse:no-pwa",
+      "assertions": {
+        "categories:performance":            ["error", { "minScore": 0.90 }],
+        "categories:accessibility":          ["error", { "minScore": 0.95 }],
+        "categories:best-practices":         ["error", { "minScore": 0.95 }],
+        "largest-contentful-paint":          ["error", { "maxNumericValue": 2500 }],
+        "cumulative-layout-shift":           ["error", { "maxNumericValue": 0.1 }],
+        "total-blocking-time":               ["error", { "maxNumericValue": 200 }],
+        "interactive":                       ["error", { "maxNumericValue": 1500 }],
+        "speed-index":                       ["warn",  { "maxNumericValue": 3000 }],
+        "first-contentful-paint":            ["warn",  { "maxNumericValue": 1500 }],
+        "uses-text-compression":             "error",
+        "uses-rel-preconnect":               "warn",
+        "color-contrast":                    "error",
+        "image-alt":                         "error",
+        "label":                             "error",
+        "tap-targets":                       "error"
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

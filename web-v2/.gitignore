@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.turbo/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.local
+src/gql/generated.ts

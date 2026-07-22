@@ -96,13 +96,14 @@ func (c *DefaultJiraClient) searchPaginated(
 // in the project, sorted alphabetically. jiraFieldID is the full custom field ID
 // (e.g. "customfield_10077"); the numeric part is extracted internally for JQL.
 func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projectKey, jiraFieldID, username, credential string, authType AuthenticationType) ([]string, error) {
-	numericID := extractNumericFieldID(jiraFieldID)
-	// Scope to epics touched within the past year. The release field is a free-text
-	// string with no date semantics, so we filter on the epic's `updated` timestamp:
-	// this both shrinks the dropdown to current/active releases and cuts the number of
-	// epics paginated, which is the dominant cost of building the picker.
-	jql := fmt.Sprintf(`project = %q AND issuetype = Epic AND cf[%s] is not EMPTY AND updated >= -52w ORDER BY cf[%s] ASC`, projectKey, numericID, numericID)
-	fieldParam := jiraFieldID // e.g. "customfield_10077" for the fields parameter
+	jqlField := releaseJQLField(jiraFieldID)
+	// Scope to epics touched within the past year. The release field has no
+	// date semantics, so we filter on the epic's `updated` timestamp: this
+	// both shrinks the dropdown to current/active releases and cuts the
+	// number of epics paginated, which is the dominant cost of building the
+	// picker.
+	jql := fmt.Sprintf(`project = %q AND issuetype = Epic AND %s is not EMPTY AND updated >= -52w ORDER BY %s ASC`, projectKey, jqlField, jqlField)
+	fieldParam := jiraFieldID // REST field id for the `fields` parameter (e.g. "customfield_10077" or "fixVersions")
 
 	seen := make(map[string]bool)
 	start := time.Now()
@@ -124,11 +125,9 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 				if !ok || string(raw) == "null" {
 					continue
 				}
-				var val string
-				if err := json.Unmarshal(raw, &val); err != nil || val == "" {
-					continue
+				for _, val := range extractReleaseValues(jiraFieldID, raw) {
+					seen[val] = true
 				}
-				seen[val] = true
 			}
 			return page.NextPageToken, len(page.Issues), nil
 		})
@@ -143,6 +142,35 @@ func (c *DefaultJiraClient) GetEpicReleases(ctx context.Context, baseURL, projec
 	sort.Strings(releases)
 	log.Printf("[CoverageJiraClient] GetEpicReleases: found %d distinct releases project=%s duration=%dms", len(releases), projectKey, time.Since(start).Milliseconds())
 	return releases, nil
+}
+
+// extractReleaseValues pulls the release value(s) from an Epic's mapped
+// field JSON. The standard Fix Version field is an array of version
+// objects ([{ "name": "1.0" }, …]); a custom release field is a plain
+// string. Returns all non-empty values found.
+func extractReleaseValues(jiraFieldID string, raw json.RawMessage) []string {
+	switch jiraFieldID {
+	case "fixVersions", "fixVersion":
+		var versions []struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &versions); err != nil {
+			return nil
+		}
+		out := make([]string, 0, len(versions))
+		for _, v := range versions {
+			if v.Name != "" {
+				out = append(out, v.Name)
+			}
+		}
+		return out
+	default:
+		var val string
+		if err := json.Unmarshal(raw, &val); err != nil || val == "" {
+			return nil
+		}
+		return []string{val}
+	}
 }
 
 // SearchIssues executes a JQL query against JIRA and returns all matching issues, paginating as needed.

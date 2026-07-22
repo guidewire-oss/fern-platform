@@ -63,6 +63,29 @@ func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, userID string,
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*domain.User, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*domain.User), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockUserRepository) UpdateRole(ctx context.Context, userID string, role domain.UserRole) error {
+	args := m.Called(ctx, userID, role)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) UpdateStatus(ctx context.Context, userID string, status domain.UserStatus) error {
+	args := m.Called(ctx, userID, status)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) SoftDelete(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
 func (m *MockUserRepository) SetUserGroups(ctx context.Context, userID string, groups []string) error {
 	args := m.Called(ctx, userID, groups)
 	return args.Error(0)

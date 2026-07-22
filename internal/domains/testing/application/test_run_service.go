@@ -214,6 +214,31 @@ func (s *TestRunService) GetTestRunsForProjectsInDateRange(ctx context.Context, 
 	return s.testRunRepo.FindByDateRangeForProjects(ctx, projectIDs, startDate, endDate)
 }
 
+// AggregateProjectsInRange returns per-project sums for the window.
+// Treemap-friendly: no test-run or suite-run hydration.
+func (s *TestRunService) AggregateProjectsInRange(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.ProjectAggregate, error) {
+	return s.testRunRepo.AggregateProjectsInRange(ctx, projectIDs, startDate, endDate)
+}
+
+// AggregateSuitesInRange returns per-suite sums for one project in the window.
+func (s *TestRunService) AggregateSuitesInRange(ctx context.Context, projectID string, startDate, endDate time.Time) ([]*domain.SuiteAggregate, error) {
+	return s.testRunRepo.AggregateSuitesInRange(ctx, projectID, startDate, endDate)
+}
+
+// AggregateSpecsForSuiteInRange returns per-spec sums for one
+// (project, suite) pair in the window. Used by the treemap
+// third-level drill (project → suite → specs).
+func (s *TestRunService) AggregateSpecsForSuiteInRange(ctx context.Context, projectID, suiteName string, startDate, endDate time.Time) ([]*domain.SpecAggregate, error) {
+	return s.testRunRepo.AggregateSpecsForSuiteInRange(ctx, projectID, suiteName, startDate, endDate)
+}
+
+// AggregateDailyByProjects returns per-(project,day) sums for the trend
+// cards on /v2/summaries. One SQL query replaces what was previously
+// N parallel HTTP requests, one per project.
+func (s *TestRunService) AggregateDailyByProjects(ctx context.Context, projectIDs []string, startDate, endDate time.Time) ([]*domain.DailyProjectAggregate, error) {
+	return s.testRunRepo.AggregateDailyByProjects(ctx, projectIDs, startDate, endDate)
+}
+
 // GetTestRunSummary retrieves test run summary for a project
 func (s *TestRunService) GetTestRunSummary(ctx context.Context, projectID string) (*domain.TestRunSummary, error) {
 	return s.testRunRepo.GetTestRunSummary(ctx, projectID)

@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,11 +26,11 @@ import (
 
 var _ = Describe("DomainResolvers", func() {
 	var (
-		resolver  *Resolver
-		logger    *logging.Logger
-		db        *gorm.DB
-		ctx       context.Context
-		adminCtx  context.Context
+		resolver *Resolver
+		logger   *logging.Logger
+		db       *gorm.DB
+		ctx      context.Context
+		adminCtx context.Context
 	)
 
 	BeforeEach(func() {
@@ -214,9 +215,9 @@ var _ = Describe("DomainResolvers", func() {
 
 	Describe("GetProject_domain", func() {
 		var (
-			mockRepo        *testhelpers.MockProjectRepository
-			mockPermRepo    *testhelpers.MockProjectPermissionRepository
-			projectService  *projectsApp.ProjectService
+			mockRepo       *testhelpers.MockProjectRepository
+			mockPermRepo   *testhelpers.MockProjectPermissionRepository
+			projectService *projectsApp.ProjectService
 		)
 
 		BeforeEach(func() {
@@ -786,13 +787,47 @@ var _ = Describe("DomainResolvers", func() {
 				projects := []*projectsDomain.Project{proj1, proj2}
 
 				first := 20
-				mockRepo.On("FindAll", mock.Anything, first, 0).Return(projects, int64(2), nil)
+				// The resolver fetches a large batch and filters by team
+				// BEFORE paginating, so it must scan with the 1000 cap —
+				// not the page size. Filtering the page (limit=first) hid
+				// any accessible project sorted past the first page.
+				mockRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(2), nil)
 
 				result, err := resolver.Query().(*queryResolver).Projects_domain(authCtx, nil, &first, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
 				Expect(result.Edges).To(HaveLen(2))
+				mockRepo.AssertExpectations(GinkgoT())
+			})
+
+			It("returns an accessible project that sorts past the requested page size", func() {
+				// Regression: a non-admin's team project appears late in
+				// the unfiltered ordering. With filter-after-pagination it
+				// was silently dropped; filter-before-pagination keeps it.
+				var projects []*projectsDomain.Project
+				for i := 0; i < 24; i++ {
+					p, _ := projectsDomain.NewProject(
+						projectsDomain.ProjectID(fmt.Sprintf("other-%02d", i)),
+						fmt.Sprintf("Other %d", i),
+						projectsDomain.Team("other-team"),
+					)
+					projects = append(projects, p)
+				}
+				mine, _ := projectsDomain.NewProject(projectsDomain.ProjectID("mine-1"), "Mine", projectsDomain.Team("team1"))
+				projects = append(projects, mine) // 25th, past a page size of 20
+
+				first := 20
+				mockRepo.On("FindAll", mock.Anything, 1000, 0).Return(projects, int64(len(projects)), nil)
+
+				result, err := resolver.Query().(*queryResolver).Projects_domain(authCtx, nil, &first, nil)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Edges).To(HaveLen(1))
+				Expect(result.Edges[0].Node.ProjectID).To(Equal("mine-1"))
+				Expect(result.TotalCount).To(Equal(1))
+				Expect(result.PageInfo.HasNextPage).To(BeFalse())
 				mockRepo.AssertExpectations(GinkgoT())
 			})
 		})
@@ -996,19 +1031,23 @@ var _ = Describe("DomainResolvers", func() {
 
 				project, _ := projectsDomain.NewProject(projectsDomain.ProjectID(projectID), "Project 1", projectsDomain.Team("team1"))
 
-				testRuns := []*testingDomain.TestRun{
+				projectAggs := []*testingDomain.ProjectAggregate{
 					{
-						ID:        1,
-						RunID:     "run-1",
-						ProjectID: projectID,
-						Status:    "completed",
-						StartTime: time.Now(),
-						SuiteRuns: []testingDomain.SuiteRun{
-							{
-								ID:   1,
-								Name: "Suite 1",
-							},
-						},
+						ProjectID:   projectID,
+						TotalRuns:   1,
+						TotalTests:  10,
+						PassedTests: 9,
+						FailedTests: 1,
+						DurationMs:  1000,
+					},
+				}
+				suiteAggs := []*testingDomain.SuiteAggregate{
+					{
+						SuiteName:   "Suite 1",
+						TotalTests:  10,
+						PassedTests: 9,
+						FailedTests: 1,
+						DurationMs:  1000,
 					},
 				}
 
@@ -1016,9 +1055,10 @@ var _ = Describe("DomainResolvers", func() {
 				adminCtx := context.WithValue(ctx, "user", adminUser)
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{project}, int64(1), nil)
-				mockRepo.On("FindByDateRangeForProjects", mock.Anything, []string{projectID}, mock.Anything, mock.Anything).Return(testRuns, nil)
+				mockRepo.On("AggregateProjectsInRange", mock.Anything, []string{projectID}, mock.Anything, mock.Anything).Return(projectAggs, nil)
+				mockRepo.On("AggregateSuitesInRange", mock.Anything, projectID, mock.Anything, mock.Anything).Return(suiteAggs, nil)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, &projectID, &days)
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, &projectID, nil, &days)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())
@@ -1032,7 +1072,7 @@ var _ = Describe("DomainResolvers", func() {
 
 				mockProjectRepo.On("FindAll", mock.Anything, 1000, 0).Return([]*projectsDomain.Project{}, int64(0), nil)
 
-				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, nil, nil)
+				result, err := resolver.Query().(*queryResolver).TreemapData_domain(adminCtx, nil, nil, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).NotTo(BeNil())

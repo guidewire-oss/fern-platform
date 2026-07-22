@@ -288,10 +288,15 @@ type SpecRun struct {
 }
 
 type SpecTreemapNode struct {
-	Spec     *SpecRun `json:"spec"`
-	Duration int      `json:"duration"`
-	Status   string   `json:"status"`
-	IsFlaky  bool     `json:"isFlaky"`
+	Spec        *SpecRun `json:"spec"`
+	Duration    int      `json:"duration"`
+	Status      string   `json:"status"`
+	IsFlaky     bool     `json:"isFlaky"`
+	TotalRuns   int      `json:"totalRuns"`
+	PassedRuns  int      `json:"passedRuns"`
+	FailedRuns  int      `json:"failedRuns"`
+	SkippedRuns int      `json:"skippedRuns"`
+	PassRate    float64  `json:"passRate"`
 }
 
 type StatusCount struct {

@@ -281,20 +281,17 @@ func (m *OAuthMiddleware) StartOAuthFlow() gin.HandlerFunc {
 		c.SetSameSite(http.SameSiteLaxMode)
 		c.SetCookie("oauth_state", "", -1, "/", cookieDomain, isSecure, true)
 
-		// Set SameSite to None for cross-site requests when using HTTPS
-		// Use Lax for HTTP to maintain CSRF protection
-		if isSecure {
-			c.SetSameSite(http.SameSiteNoneMode)
-		} else {
-			c.SetSameSite(http.SameSiteLaxMode)
-		}
+		// Set SameSite per environment (see pickSameSiteMode).
+		c.SetSameSite(m.pickSameSiteMode(c))
 
 		// Set the new state cookie with explicit path
 		c.SetCookie("oauth_state", state, 600, "/", cookieDomain, isSecure, true) // 10 minutes
 
-		// For debugging: also set a backup cookie without HttpOnly to check via JavaScript
+		// For debugging: also set a backup state cookie. Kept HttpOnly
+		// (the callback reads it server-side via c.Cookie); a non-HttpOnly
+		// variant would expose the CSRF state token to page JavaScript.
 		if os.Getenv("DEBUG_OAUTH") == "true" {
-			c.SetCookie("oauth_state_debug", state, 600, "/", cookieDomain, isSecure, false)
+			c.SetCookie("oauth_state_debug", state, 600, "/", cookieDomain, isSecure, true)
 
 			// Additional debug logging
 			m.logger.WithFields(map[string]interface{}{
@@ -348,14 +345,15 @@ func (m *OAuthMiddleware) HandleOAuthCallback() gin.HandlerFunc {
 		expectedState, err := c.Cookie("oauth_state")
 		if err != nil {
 			// Log all cookies for debugging
+			// Note: the raw Cookie header is deliberately NOT logged — it
+			// carries session tokens (clear-text-logging of sensitive data).
 			debugInfo := map[string]interface{}{
-				"all_cookies":       c.Request.Header.Get("Cookie"),
+				"cookie_count":      len(c.Request.Cookies()),
 				"host":              c.Request.Host,
 				"x_forwarded_host":  c.GetHeader("X-Forwarded-Host"),
 				"x_forwarded_proto": c.GetHeader("X-Forwarded-Proto"),
-				"referer":           c.GetHeader("Referer"),
-				"state_param":       state,
-				"request_url":       c.Request.URL.String(),
+				"state_param_len":   len(state),
+				"request_path":      c.Request.URL.Path,
 			}
 
 			// Check if debug cookie exists
@@ -371,14 +369,13 @@ func (m *OAuthMiddleware) HandleOAuthCallback() gin.HandlerFunc {
 		}
 
 		if state != expectedState {
+			// Log only lengths / a match flag — never the raw state (CSRF
+			// token) or the Cookie header (session tokens).
 			debugInfo := map[string]interface{}{
-				"state":           state,
-				"expected":        expectedState,
 				"state_length":    len(state),
 				"expected_length": len(expectedState),
-				"all_cookies":     c.Request.Header.Get("Cookie"),
+				"cookie_count":    len(c.Request.Cookies()),
 				"host":            c.Request.Host,
-				"referer":         c.GetHeader("Referer"),
 			}
 
 			// Check debug cookie in case of mismatch
@@ -482,12 +479,8 @@ func (m *OAuthMiddleware) Logout() gin.HandlerFunc {
 		isSecure := m.shouldUseSecureCookie(c)
 		cookieDomain := m.getCookieDomain()
 
-		// Match the SameSite setting used during login
-		if isSecure {
-			c.SetSameSite(http.SameSiteNoneMode)
-		} else {
-			c.SetSameSite(http.SameSiteLaxMode)
-		}
+		// Match the SameSite setting used during login.
+		c.SetSameSite(m.pickSameSiteMode(c))
 
 		c.SetCookie("session_id", "", -1, "/", cookieDomain, isSecure, true)
 		c.SetCookie("oauth_state", "", -1, "/", cookieDomain, isSecure, true) // Clear any residual state
@@ -1009,6 +1002,26 @@ func (m *OAuthMiddleware) updateUserLastLogin(userID string) {
 
 func (m *OAuthMiddleware) invalidateSession(sessionID string) {
 	m.db.Model(&database.UserSession{}).Where("session_id = ?", sessionID).Update("is_active", false)
+}
+
+// pickSameSiteMode returns the SameSite mode to use for a cookie set
+// in the current request context. Centralizes the policy that was
+// duplicated as `if isSecure { None } else { Lax }` across ~10 call
+// sites:
+//
+//	HTTPS / secure cookie  → SameSiteNone (needed for OAuth pop-up
+//	                          redirects that come back via cross-site)
+//	HTTP  / insecure       → SameSiteLax  (CSRF protection by default)
+//
+// Don't change the call-site dual-clear pattern (clear under None then
+// Lax) — that's intentional defense against the mode flipping during
+// a session (HTTP→HTTPS migration, etc.). This helper picks the mode
+// for the *new* cookie being set.
+func (m *OAuthMiddleware) pickSameSiteMode(c *gin.Context) http.SameSite {
+	if m.shouldUseSecureCookie(c) {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
 }
 
 // shouldUseSecureCookie determines if secure cookies should be used

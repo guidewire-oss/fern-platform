@@ -804,13 +804,14 @@ var _ = Describe("Schema Resolvers - Ginkgo Tests", func() {
 		})
 
 		Context("TestRunStats", func() {
-			It("should return test run stats", func() {
+			It("should require authentication", func() {
+				// TestRunStats now scopes by user role (admins see all,
+				// non-admins see only accessible projects). Without a
+				// user in the context, it returns "not authenticated".
 				ctx := context.Background()
 				qry := &queryResolver{resolver}
-				result, err := qry.TestRunStats(ctx, nil, nil)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result).ToNot(BeNil())
-				Expect(result.TotalRuns).To(Equal(0))
+				_, err := qry.TestRunStats(ctx, nil, nil)
+				Expect(err).To(HaveOccurred())
 			})
 		})
 
@@ -1171,7 +1172,7 @@ var _ = Describe("Schema Resolvers - Ginkgo Tests", func() {
 						// Panic is acceptable
 					}
 				}()
-				_, _ = qr.TreemapData(ctx, nil, nil)
+				_, _ = qr.TreemapData(ctx, nil, nil, nil)
 			})
 		})
 
