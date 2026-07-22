@@ -11,6 +11,33 @@ import (
 	"github.com/guidewire-oss/fern-platform/acceptance/helpers"
 )
 
+// postTestRun ingests a test run through the public REST endpoint using the
+// browser's authenticated session — exactly what a framework reporter sends on
+// the wire. Returns the HTTP status so callers can assert the ingest succeeded.
+func postTestRun(page playwright.Page, payload map[string]any) (int, error) {
+	result, err := page.Evaluate(`async (payload) => {
+		const resp = await fetch('/api/v1/test-runs', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+		return resp.status;
+	}`, payload)
+	if err != nil {
+		return 0, err
+	}
+	switch v := result.(type) {
+	case int:
+		return v, nil
+	case int64:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	default:
+		return 0, fmt.Errorf("unexpected status type %T: %v", result, result)
+	}
+}
+
 var _ = Describe("JIRA Requirement Coverage", Label("acceptance", "jira", "coverage", "e2e"), func() {
 	var (
 		browser   playwright.Browser
@@ -342,6 +369,82 @@ var _ = Describe("JIRA Requirement Coverage", Label("acceptance", "jira", "cover
 					Expect(visible).To(BeFalse(), "covered story row %d should be hidden", i)
 				}
 			}
+		})
+	})
+
+	// --- Scenario: tagged runs mark a story covered (the ingest -> coverage seam) ---
+	//
+	// This is the end-to-end demonstration of "tag a test with jira:<KEY> and see
+	// coverage light up": ingest a passing run tagged jira:PROJ-10 through the same
+	// REST endpoint a reporter uses, then confirm PROJ-10 renders covered while the
+	// untagged PROJ-11 stays uncovered.
+
+	Describe("Coverage reflects jira-tagged test runs", func() {
+		BeforeEach(func() {
+			configureVersionsAndIssues()
+			addJiraConnection()
+
+			By("Ingesting a passing test run tagged jira:PROJ-10 (what a reporter sends)")
+			iso := time.Now().UTC().Format(time.RFC3339)
+			status, err := postTestRun(page, map[string]any{
+				"test_project_id": projectID,
+				"git_branch":      "main",
+				"environment":     "ci",
+				"suite_runs": []any{map[string]any{
+					"suite_name": "checkout",
+					"start_time": iso,
+					"end_time":   iso,
+					"spec_runs": []any{map[string]any{
+						"spec_description": "covers PROJ-10",
+						"status":           "passed",
+						"start_time":       iso,
+						"end_time":         iso,
+						"tags":             []any{map[string]any{"name": "jira:PROJ-10"}},
+					}},
+				}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(status).To(BeNumerically("<", 300), "ingest via POST /api/v1/test-runs should succeed")
+
+			navigateToIntegrations()
+
+			By("Selecting v2.0 and waiting for the tree")
+			coverageHeading := page.Locator("h3:has-text('Requirement Coverage'), h2:has-text('Requirement Coverage')")
+			Expect(coverageHeading.WaitFor(playwright.LocatorWaitForOptions{Timeout: playwright.Float(5000)})).To(Succeed())
+			picker := page.Locator("#coverage-version-picker")
+			Expect(picker.WaitFor(playwright.LocatorWaitForOptions{Timeout: playwright.Float(5000)})).To(Succeed())
+			Expect(picker.SelectOption(playwright.SelectOptionValues{Values: playwright.StringSlice("v2.0")})).To(Succeed())
+			time.Sleep(2 * time.Second)
+			Expect(page.Locator(".coverage-story-row").First().WaitFor(
+				playwright.LocatorWaitForOptions{Timeout: playwright.Float(5000)})).To(Succeed())
+		})
+
+		It("marks the tagged story (PROJ-10) as covered", func() {
+			row := page.Locator(".coverage-story-row:has-text('PROJ-10')").First()
+			Expect(row.WaitFor(playwright.LocatorWaitForOptions{Timeout: playwright.Float(5000)})).To(Succeed())
+			cls, err := row.GetAttribute("class")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cls).To(ContainSubstring("covered"),
+				"PROJ-10 was tagged by a passing run and should render covered")
+		})
+
+		It("hides the covered story but keeps the untagged one under 'uncovered only'", func() {
+			By("Checking the uncovered-only toggle")
+			toggle := page.Locator("#coverage-uncovered-only")
+			Expect(toggle.Check()).To(Succeed())
+			time.Sleep(300 * time.Millisecond)
+
+			By("PROJ-10 (covered) is hidden")
+			covered := page.Locator(".coverage-story-row:has-text('PROJ-10')").First()
+			Eventually(func() bool {
+				v, _ := covered.IsVisible()
+				return v
+			}, 3*time.Second, 200*time.Millisecond).Should(BeFalse(),
+				"covered PROJ-10 should be hidden when uncovered-only is checked")
+
+			By("PROJ-11 (untagged, uncovered) is still visible")
+			uncovered := page.Locator(".coverage-story-row:has-text('PROJ-11')").First()
+			Expect(uncovered.IsVisible()).To(BeTrue())
 		})
 	})
 

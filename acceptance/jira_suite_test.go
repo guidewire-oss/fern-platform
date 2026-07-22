@@ -46,6 +46,13 @@ func TestJiraConnection(t *testing.T) {
 var _ = BeforeSuite(func() {
 	var err error
 
+	// playwright-go v0.50 still defaults to the retired playwright.azureedge.net
+	// CDN, so driver/browser downloads 404. Point them at the current mirror
+	// unless the caller already set an override.
+	if os.Getenv("PLAYWRIGHT_DOWNLOAD_HOST") == "" {
+		_ = os.Setenv("PLAYWRIGHT_DOWNLOAD_HOST", "https://cdn.playwright.dev/dbazure/download/playwright")
+	}
+
 	// Install playwright browsers if needed
 	err = playwright.Install()
 	Expect(err).NotTo(HaveOccurred())

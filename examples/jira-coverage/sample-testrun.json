@@ -1,0 +1,36 @@
+{
+  "test_project_id": "REPLACE_WITH_YOUR_FERN_PROJECT_ID",
+  "git_branch": "main",
+  "git_sha": "example",
+  "environment": "ci",
+  "suite_runs": [
+    {
+      "suite_name": "checkout",
+      "start_time": "2026-01-01T00:00:00Z",
+      "end_time": "2026-01-01T00:00:10Z",
+      "spec_runs": [
+        {
+          "spec_description": "completes a guest checkout",
+          "status": "passed",
+          "start_time": "2026-01-01T00:00:00Z",
+          "end_time": "2026-01-01T00:00:02Z",
+          "tags": [{ "name": "jira:GWCP-1234" }]
+        },
+        {
+          "spec_description": "applies a discount code",
+          "status": "failed",
+          "start_time": "2026-01-01T00:00:02Z",
+          "end_time": "2026-01-01T00:00:05Z",
+          "tags": [{ "name": "jira:GWCP-1235" }]
+        },
+        {
+          "spec_description": "shows tax for a multi-item cart",
+          "status": "passed",
+          "start_time": "2026-01-01T00:00:05Z",
+          "end_time": "2026-01-01T00:00:08Z",
+          "tags": [{ "name": "jira:GWCP-1234" }, { "name": "jira:GWCP-1236" }]
+        }
+      ]
+    }
+  ]
+}
