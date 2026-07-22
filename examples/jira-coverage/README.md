@@ -46,13 +46,13 @@ covered & passing, `GWCP-1235` covered & failing.
 > Replace the `GWCP-####` keys with real issue keys from one of your releases, or nothing
 > will match the release tree.
 
-## A runnable version
+## A Ginkgo example
 
-Prefer a real test over a raw payload? [`ginkgo/`](ginkgo/) is a standalone,
-runnable Ginkgo suite with `Label("jira:...")` and the `fern-ginkgo-client`
-reporter wired in — `go test` it against a live Fern and watch coverage light up.
+Prefer a real test over a raw payload? [`ginkgo/`](ginkgo/) is a copy-paste
+Ginkgo example with `Label("jira:...")` and the `fern-ginkgo-client` reporter
+wired in — drop it into your own suite and watch coverage light up.
 
 ## Files
 - `sample-testrun.json` — the ingest payload (jira: tags at the spec level)
 - `send.sh` — POSTs it to `POST /api/v1/test-runs`
-- `ginkgo/` — a runnable Ginkgo suite demonstrating idiomatic `jira:` tagging
+- `ginkgo/` — a copy-paste Ginkgo example demonstrating idiomatic `jira:` tagging

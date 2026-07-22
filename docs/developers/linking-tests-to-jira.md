@@ -50,7 +50,7 @@ Notes:
 
 See [`examples/jira-coverage/`](../../examples/jira-coverage/) for a copy‑paste sample,
 or [`examples/jira-coverage/ginkgo/`](../../examples/jira-coverage/ginkgo/) for a
-**runnable** Ginkgo suite you can `go test` against a live Fern.
+copy‑paste Ginkgo example (label + reporter wiring) to drop into your own suite.
 
 ## Step 2 — Report the run
 
@@ -128,5 +128,5 @@ back to JIRA.
 
 - Wire contract & tag namespacing: [`adr/test-correlation/tag-schema.md`](../../adr/test-correlation/tag-schema.md)
 - Raw-payload example (curl): [`examples/jira-coverage/`](../../examples/jira-coverage/)
-- Runnable Ginkgo suite: [`examples/jira-coverage/ginkgo/`](../../examples/jira-coverage/ginkgo/)
+- Ginkgo example (copy-paste): [`examples/jira-coverage/ginkgo/`](../../examples/jira-coverage/ginkgo/)
 - Building a reporter for a new framework: [Integration Guide](integration-guide.md#building-your-own-client-library)
