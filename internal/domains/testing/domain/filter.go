@@ -38,7 +38,19 @@ type DateTimeRange struct {
 // All fields are optional. Empty slices and nil pointers mean "no
 // constraint on this field". Validate() must be called before use.
 type TestRunFilter struct {
+	// ProjectIDs is the caller's own project selection — what they
+	// ticked in the UI. Facet computation clears it so the project
+	// facet can offer values the caller has not selected yet.
 	ProjectIDs []string
+
+	// AllowedProjectIDs is the authorization boundary: the projects the
+	// caller may read at all. It is deliberately a separate field from
+	// ProjectIDs, because facet computation clears the selection and
+	// would otherwise clear the boundary with it — leaking every
+	// project's id, run count, and name into a non-admin's project
+	// facet. Empty means unrestricted (admins, or auth disabled).
+	AllowedProjectIDs []string
+
 	Status     []string
 	Branches   []string
 	Tags       []string
@@ -138,9 +150,15 @@ type PageInfo struct {
 }
 
 // FacetCount is one (value, count) pair in a faceted response.
+//
+// Label is an optional human-readable rendering of Value. Only the
+// project facet sets it (Value stays the project_id so filters and
+// saved views keep working); status, branch, and tag facets leave it
+// empty because their values are already what the user reads.
 type FacetCount struct {
 	Value string
 	Count int64
+	Label string
 }
 
 // TestRunFacets groups facet counts by field, scoped to the current

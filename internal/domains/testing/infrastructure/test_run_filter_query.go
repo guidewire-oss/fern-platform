@@ -23,6 +23,12 @@ func BuildTestRunWhere(f domain.TestRunFilter) ([]string, []any) {
 		clauses = append(clauses, "test_runs.project_id IN ?")
 		args = append(args, f.ProjectIDs)
 	}
+	// Authorization boundary, ANDed with the caller's own selection.
+	// Survives facet exclusion — see TestRunFilter.AllowedProjectIDs.
+	if len(f.AllowedProjectIDs) > 0 {
+		clauses = append(clauses, "test_runs.project_id IN ?")
+		args = append(args, f.AllowedProjectIDs)
+	}
 	if len(f.Status) > 0 {
 		clauses = append(clauses, "test_runs.status IN ?")
 		args = append(args, f.Status)

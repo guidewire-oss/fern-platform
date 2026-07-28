@@ -11,9 +11,11 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDuration } from '@/lib/duration';
+import type { TestRunNode } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { useTestRuns, type TestRunsFilter } from './hooks';
 import { FilterSidebar } from './FilterSidebar';
+import { LabeledValue } from './LabeledValue';
 import {
   TEST_RUNS_PAGE,
   useCreateSavedView,
@@ -57,6 +59,28 @@ function loadPageSize(): number {
 function persistPageSize(n: number) {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(PAGE_SIZE_KEY, String(n));
+}
+
+// runDuration renders a run's wall-clock time.
+//
+// The server's recorded duration_ms wins: it is authoritative, and it is
+// the only source for a run with no end_time (still running, or ended
+// abnormally) — those used to render as an em dash. The end - start
+// fallback keeps the column populated against a backend that predates
+// duration_ms on this endpoint.
+//
+// A zero duration_ms is treated as "not recorded", not as a zero-length
+// run: the field has no omitempty, so an unset duration arrives as 0,
+// and rendering "0ms" for a run that is still going would be worse than
+// falling back.
+function runDuration(node: TestRunNode): string {
+  if (node.duration_ms) return formatDuration(node.duration_ms);
+  if (node.end_time) {
+    return formatDuration(
+      new Date(node.end_time).getTime() - new Date(node.start_time).getTime(),
+    );
+  }
+  return '—';
 }
 
 export default function TestRunsList() {
@@ -193,7 +217,10 @@ export default function TestRunsList() {
                           params={{ projectId: node.project_id }}
                           className="text-foreground hover:text-primary"
                         >
-                          {node.project_id}
+                          <LabeledValue
+                            value={node.project_id}
+                            label={node.project_name}
+                          />
                         </Link>
                       </TD>
                       <TD>
@@ -221,12 +248,7 @@ export default function TestRunsList() {
                       </TD>
                       <TD><StatusBadge status={node.status} /></TD>
                       <TD className="text-right tabular-nums">
-                        {node.end_time
-                          ? formatDuration(
-                              new Date(node.end_time).getTime() -
-                                new Date(node.start_time).getTime(),
-                            )
-                          : '—'}
+                        {runDuration(node)}
                       </TD>
                       <TD className="text-xs text-muted">
                         {new Date(node.start_time).toLocaleString()}

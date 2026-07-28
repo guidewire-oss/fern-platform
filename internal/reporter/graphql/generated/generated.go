@@ -427,6 +427,7 @@ type ComplexityRoot struct {
 		Metadata     func(childComplexity int) int
 		PassedTests  func(childComplexity int) int
 		ProjectID    func(childComplexity int) int
+		ProjectName  func(childComplexity int) int
 		RunID        func(childComplexity int) int
 		SkippedTests func(childComplexity int) int
 		StartTime    func(childComplexity int) int
@@ -2687,6 +2688,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.TestRun.ProjectID(childComplexity), true
 
+	case "TestRun.projectName":
+		if e.complexity.TestRun.ProjectName == nil {
+			break
+		}
+
+		return e.complexity.TestRun.ProjectName(childComplexity), true
+
 	case "TestRun.runId":
 		if e.complexity.TestRun.RunID == nil {
 			break
@@ -3156,6 +3164,13 @@ scalar JSON
 type TestRun {
   id: ID!
   projectId: String!
+  # Display name from project_details. Null when the project has no
+  # record or no name — clients fall back to projectId.
+  #
+  # Populated only by the single-run queries (testRun, testRunByRunId).
+  # The list queries leave it null on purpose: filling it there needs a
+  # batched lookup, and no client reads it from a list today.
+  projectName: String
   runId: String!
   branch: String
   commitSha: String
@@ -8191,6 +8206,8 @@ func (ec *executionContext) fieldContext_Mutation_createTestRun(ctx context.Cont
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -8286,6 +8303,8 @@ func (ec *executionContext) fieldContext_Mutation_updateTestRunStatus(ctx contex
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -8436,6 +8455,8 @@ func (ec *executionContext) fieldContext_Mutation_assignTagsToTestRun(ctx contex
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -11946,6 +11967,8 @@ func (ec *executionContext) fieldContext_Query_testRun(ctx context.Context, fiel
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -12038,6 +12061,8 @@ func (ec *executionContext) fieldContext_Query_testRunByRunId(ctx context.Contex
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -12261,6 +12286,8 @@ func (ec *executionContext) fieldContext_Query_recentTestRuns(ctx context.Contex
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -15613,6 +15640,8 @@ func (ec *executionContext) fieldContext_Subscription_testRunCreated(ctx context
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -15722,6 +15751,8 @@ func (ec *executionContext) fieldContext_Subscription_testRunUpdated(ctx context
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -15831,6 +15862,8 @@ func (ec *executionContext) fieldContext_Subscription_testRunStatusChanged(ctx c
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -18040,6 +18073,47 @@ func (ec *executionContext) fieldContext_TestRun_projectId(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _TestRun_projectName(ctx context.Context, field graphql.CollectedField, obj *model.TestRun) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_TestRun_projectName(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ProjectName, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_TestRun_projectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TestRun_runId(ctx context.Context, field graphql.CollectedField, obj *model.TestRun) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_TestRun_runId(ctx, field)
 	if err != nil {
@@ -19233,6 +19307,8 @@ func (ec *executionContext) fieldContext_TestRunEdge_node(_ context.Context, fie
 				return ec.fieldContext_TestRun_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_TestRun_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_TestRun_projectName(ctx, field)
 			case "runId":
 				return ec.fieldContext_TestRun_runId(ctx, field)
 			case "branch":
@@ -26362,6 +26438,8 @@ func (ec *executionContext) _TestRun(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "projectName":
+			out.Values[i] = ec._TestRun_projectName(ctx, field, obj)
 		case "runId":
 			out.Values[i] = ec._TestRun_runId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

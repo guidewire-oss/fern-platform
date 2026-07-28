@@ -193,7 +193,11 @@ func main() {
 		// Facet aggregates over millions of suite_runs are expensive
 		// (large GROUP BYs). Cache aggressively — 5 min TTL.
 		facetCache := testingapp.NewMemoryFacetCache(5 * time.Minute)
-		queryService := testingapp.NewTestRunQueryService(queryRepo, facetCache)
+		// Test runs store only a project_id; the resolver batches the
+		// project_details lookup so the list and its project facet can
+		// show display names.
+		queryService := testingapp.NewTestRunQueryService(queryRepo, facetCache).
+			WithProjectNames(testinginfra.NewProjectNameRepo(db.DB))
 		savedViewRepo := testinginfra.NewGormSavedViewRepository(db.DB)
 
 		apiv2.MountV2(apiv2.MountOptions{

@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
 import { formatDuration } from '@/lib/duration';
+import { LabeledValue } from './LabeledValue';
 
 // v1-parity test-run detail with drill navigation:
 //   /v2/test-runs/:runId  →  suites table  →  click a suite  →  specs table
@@ -25,6 +26,7 @@ const GET_RUN = /* GraphQL */ `
     testRun(id: $id) {
       id
       projectId
+      projectName
       runId
       branch
       commitSha
@@ -127,6 +129,7 @@ interface SuiteLike {
 interface RunLike {
   id: string;
   projectId: string;
+  projectName: string | null;
   runId: string;
   branch: string | null;
   commitSha: string | null;
@@ -232,7 +235,7 @@ function RunHeader({ run }: { run: RunLike }) {
           params={{ projectId: run.projectId }}
           className="hover:text-foreground"
         >
-          {run.projectId}
+          <LabeledValue value={run.projectId} label={run.projectName ?? undefined} />
         </Link>{' '}
         · {run.branch || 'no branch'} · {new Date(run.startTime).toLocaleString()}
       </div>

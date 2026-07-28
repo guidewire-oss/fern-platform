@@ -700,6 +700,7 @@ func (r *queryResolver) TestRunByRunID(ctx context.Context, runID string) (*mode
 	}
 
 	graphqlTestRun := r.convertTestRunToGraphQL(testRun)
+	r.attachProjectName(ctx, graphqlTestRun)
 
 	return graphqlTestRun, nil
 }

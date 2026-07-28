@@ -82,6 +82,11 @@ func (h *TestRunHandler) list(c *gin.Context) {
 				return
 			}
 			filter.ProjectIDs = ids
+			// Record the boundary separately from the selection above.
+			// Facet computation clears ProjectIDs so the project facet can
+			// offer projects the caller has not selected; without this
+			// second field it would offer every project in the system.
+			filter.AllowedProjectIDs = allowedIDs(allowed)
 		}
 	}
 	// Default time window: when the client passes neither `from` nor
@@ -195,8 +200,28 @@ type connectionDTO struct {
 }
 
 type edgeDTO struct {
-	Cursor string          `json:"cursor"`
-	Node   *domain.TestRun `json:"node"`
+	Cursor string   `json:"cursor"`
+	Node   *nodeDTO `json:"node"`
+}
+
+// nodeDTO is the domain entity plus the wire-friendly fields the SPA
+// needs. It embeds the entity so every existing field keeps its current
+// JSON name and no field has to be restated here.
+//
+// DurationMs exists because domain.TestRun.Duration is a time.Duration,
+// which marshals as nanoseconds — the client works in milliseconds, and
+// deriving the value from end_time - start_time fails for runs that
+// have no end_time.
+type nodeDTO struct {
+	*domain.TestRun
+	DurationMs int64 `json:"duration_ms"`
+}
+
+func toNodeDTO(n *domain.TestRun) *nodeDTO {
+	if n == nil {
+		return nil
+	}
+	return &nodeDTO{TestRun: n, DurationMs: n.Duration.Milliseconds()}
 }
 
 type pageInfoDTO struct {
@@ -211,15 +236,19 @@ type facetsDTO struct {
 	ByProject []facetCountDTO `json:"byProject"`
 }
 
+// facetCountDTO carries an optional Label — the human-readable name for
+// Value, populated only for the project facet. `omitempty` keeps the key
+// off the status/branch/tag entries, whose values are already readable.
 type facetCountDTO struct {
 	Value string `json:"value"`
 	Count int64  `json:"count"`
+	Label string `json:"label,omitempty"`
 }
 
 func toConnectionDTO(p domain.TestRunPage) connectionDTO {
 	edges := make([]edgeDTO, len(p.Edges))
 	for i, e := range p.Edges {
-		edges[i] = edgeDTO{Cursor: e.Cursor, Node: e.Node}
+		edges[i] = edgeDTO{Cursor: e.Cursor, Node: toNodeDTO(e.Node)}
 	}
 	return connectionDTO{
 		Edges: edges,
@@ -241,7 +270,7 @@ func toConnectionDTO(p domain.TestRunPage) connectionDTO {
 func toFacetDTOs(in []domain.FacetCount) []facetCountDTO {
 	out := make([]facetCountDTO, len(in))
 	for i, fc := range in {
-		out[i] = facetCountDTO{Value: fc.Value, Count: fc.Count}
+		out[i] = facetCountDTO{Value: fc.Value, Count: fc.Count, Label: fc.Label}
 	}
 	return out
 }

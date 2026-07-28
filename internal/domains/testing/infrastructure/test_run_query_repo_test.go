@@ -322,3 +322,106 @@ func TestQuery_DateRangeFilter(t *testing.T) {
 		t.Errorf("date range: expected 2 edges, got %d", len(page.Edges))
 	}
 }
+
+// The v2 list previously dropped duration_ms on the way out of the
+// repository, leaving the UI to approximate the run time from
+// end_time - start_time (and to render nothing at all when a run had no
+// end_time). The read model must carry the stored duration.
+func TestQuery_CarriesStoredDuration(t *testing.T) {
+	db := openSQLite(t)
+	end := time.Now().UTC()
+	start := end.Add(-90 * time.Second)
+	if err := db.Create(&database.TestRun{
+		RunID:     "run-with-duration",
+		ProjectID: "proj-a",
+		Status:    "passed",
+		StartTime: start,
+		EndTime:   &end,
+		Duration:  90_000, // duration_ms
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	repo := infrastructure.NewTestRunQueryRepo(db)
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{}, domain.PageArgs{First: 10})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(page.Edges) != 1 {
+		t.Fatalf("got %d edges, want 1", len(page.Edges))
+	}
+	if got := page.Edges[0].Node.Duration; got != 90*time.Second {
+		t.Errorf("Duration = %v, want 90s", got)
+	}
+}
+
+// A run still in flight has no end_time, so the client cannot derive a
+// duration — the stored duration_ms is the only source.
+func TestQuery_CarriesDurationForRunWithoutEndTime(t *testing.T) {
+	db := openSQLite(t)
+	if err := db.Create(&database.TestRun{
+		RunID:     "run-in-flight",
+		ProjectID: "proj-a",
+		Status:    "running",
+		StartTime: time.Now().UTC().Add(-30 * time.Second),
+		Duration:  30_000,
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	repo := infrastructure.NewTestRunQueryRepo(db)
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{}, domain.PageArgs{First: 10})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if got := page.Edges[0].Node.Duration; got != 30*time.Second {
+		t.Errorf("Duration = %v, want 30s", got)
+	}
+}
+
+// The project facet clears the caller's own selection so they can
+// broaden it — but it must NOT clear the authorization boundary.
+// Without a separate AllowedProjectIDs field, a non-admin's project
+// facet enumerated every project in the system, complete with run
+// counts (and, once names were added, display names).
+func TestComputeFacets_ProjectFacetRespectsAuthorizationScope(t *testing.T) {
+	db := openSQLite(t)
+	seedRuns(t, db, 2, "mine", "passed", "main")
+	seedRuns(t, db, 3, "theirs", "passed", "main")
+
+	repo := infrastructure.NewTestRunQueryRepo(db)
+	facets, err := repo.ComputeFacets(context.Background(), domain.TestRunFilter{
+		AllowedProjectIDs: []string{"mine"},
+	})
+	if err != nil {
+		t.Fatalf("ComputeFacets: %v", err)
+	}
+	for _, f := range facets.ByProject {
+		if f.Value == "theirs" {
+			t.Errorf("project facet leaked an out-of-scope project: %+v", facets.ByProject)
+		}
+	}
+	if len(facets.ByProject) != 1 || facets.ByProject[0].Value != "mine" {
+		t.Errorf("ByProject = %+v, want only the allowed project", facets.ByProject)
+	}
+}
+
+// Within the boundary the facet still shows projects the caller has not
+// selected — that is the whole point of clearing ProjectIDs.
+func TestComputeFacets_ProjectFacetStillBroadensWithinScope(t *testing.T) {
+	db := openSQLite(t)
+	seedRuns(t, db, 2, "mine-a", "passed", "main")
+	seedRuns(t, db, 3, "mine-b", "passed", "main")
+
+	repo := infrastructure.NewTestRunQueryRepo(db)
+	facets, err := repo.ComputeFacets(context.Background(), domain.TestRunFilter{
+		ProjectIDs:        []string{"mine-a"},
+		AllowedProjectIDs: []string{"mine-a", "mine-b"},
+	})
+	if err != nil {
+		t.Fatalf("ComputeFacets: %v", err)
+	}
+	if len(facets.ByProject) != 2 {
+		t.Errorf("ByProject = %+v, want both in-scope projects", facets.ByProject)
+	}
+}

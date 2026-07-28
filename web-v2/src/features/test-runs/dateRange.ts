@@ -27,3 +27,38 @@ export function queryToRangeInputs(
     toDate: to ? to.slice(0, 10) : '',
   };
 }
+
+// Preset windows offered wherever a test-run list is scoped by time.
+// Shared so the test-runs sidebar and the project page offer the same
+// choices and label them identically.
+export const DATE_PRESETS: Array<{ label: string; days: number }> = [
+  { label: '24h', days: 1 },
+  { label: '7d', days: 7 },
+  { label: '30d', days: 30 },
+  { label: '90d', days: 90 },
+  { label: '180d', days: 180 },
+];
+
+// presetRange turns a day count into the RFC3339 bounds the API expects,
+// anchored at the moment it is called.
+export function presetRange(days: number, now: Date = new Date()): { from: string; to: string } {
+  return {
+    from: new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString(),
+    to: now.toISOString(),
+  };
+}
+
+// matchPresetDays returns the preset a from/to span corresponds to, or
+// null when the range is custom (or unset). Tolerates a minute of drift
+// so a range built a moment ago still lights up its button.
+export function matchPresetDays(
+  from: string | undefined,
+  to: string | undefined,
+): number | null {
+  if (!from || !to) return null;
+  const span = new Date(to).getTime() - new Date(from).getTime();
+  for (const p of DATE_PRESETS) {
+    if (Math.abs(span - p.days * 24 * 60 * 60 * 1000) < 60_000) return p.days;
+  }
+  return null;
+}

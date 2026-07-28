@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { graphqlFetch } from '@/lib/api';
 import { useCurrentUser } from '@/features/auth/useCurrentUser';
 import {
@@ -111,4 +111,39 @@ export function useProjects(): UseProjectsResult {
     isFetchingMore: q.isFetchingNextPage,
     error: (q.error as Error) ?? null,
   };
+}
+
+const GET_PROJECT_BY_PROJECT_ID = /* GraphQL */ `
+  query GetProjectByProjectId($projectId: String!) {
+    projectByProjectId(projectId: $projectId) {
+      projectId
+      name
+      team
+    }
+  }
+`;
+
+export interface ProjectSummary {
+  projectId: string;
+  name: string;
+  team: string | null;
+}
+
+// useProject fetches a single project by its projectId. Used where a
+// page only has the id from the URL but wants to show the display
+// name. Kept separate from useProjects so a detail page doesn't page
+// through every project just to name one.
+export function useProject(projectId: string) {
+  return useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const resp = await graphqlFetch<{ projectByProjectId: ProjectSummary | null }>(
+        GET_PROJECT_BY_PROJECT_ID,
+        { projectId },
+      );
+      return resp.projectByProjectId;
+    },
+    enabled: !!projectId,
+    staleTime: 5 * 60_000, // names change rarely
+  });
 }

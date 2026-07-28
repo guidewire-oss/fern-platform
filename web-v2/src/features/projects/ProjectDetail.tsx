@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useParams, useRouter } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
@@ -10,6 +11,30 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDuration } from '@/lib/duration';
 import { TestHistoryChart } from './TestHistoryChart';
+import { useProject } from './hooks';
+import { presetRange } from '../test-runs/dateRange';
+import { DateRangeFilter } from '../test-runs/DateRangeFilter';
+
+const DEFAULT_WINDOW_DAYS = 7;
+
+interface DateBounds {
+  from?: string | undefined;
+  to?: string | undefined;
+}
+
+// runsQuery builds the query string for the project's run list. Cleared
+// bounds mean all time, which must pass allTime=1: without it the v2
+// endpoint applies its own 7-day default whenever from/to are absent.
+function runsQuery(projectId: string, range: DateBounds): string {
+  const params = new URLSearchParams({ project: projectId, first: '20' });
+  if (!range.from && !range.to) {
+    params.set('allTime', '1');
+    return params.toString();
+  }
+  if (range.from) params.set('from', range.from);
+  if (range.to) params.set('to', range.to);
+  return params.toString();
+}
 
 export default function ProjectDetail() {
   const { projectId } = useParams({ from: '/projects/$projectId' });
@@ -20,11 +45,23 @@ export default function ProjectDetail() {
   const canGoBack = router.history.length > 1;
   const goBack = () => router.history.back();
 
+  // Name lookup is separate from the runs query and non-blocking: the
+  // page renders on the id alone if it fails or is still in flight.
+  const { data: project } = useProject(projectId);
+  const projectName = project?.name;
+
+  // Time window for both the history chart and the run list. Defaults
+  // to 7 days, which is what the v2 endpoint already clamped to when a
+  // client sent no bounds — the window was simply invisible before.
+  // `null` means all time, which needs an explicit opt-out of that
+  // server-side default.
+  const [range, setRange] = useState<DateBounds>(() => presetRange(DEFAULT_WINDOW_DAYS));
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['project-runs', projectId],
+    queryKey: ['project-runs', projectId, range.from, range.to],
     queryFn: () =>
       restFetch<TestRunConnection>(
-        `/api/v2/test-runs?project=${encodeURIComponent(projectId)}&first=20`,
+        `/api/v2/test-runs?${runsQuery(projectId, range)}`,
       ),
     staleTime: 30_000,
   });
@@ -69,8 +106,22 @@ export default function ProjectDetail() {
 
       <header className="flex items-baseline justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{projectId}</h1>
+          <h1 className="text-2xl font-semibold">{projectName || projectId}</h1>
+          {projectName && (
+            <p className="font-mono text-xs text-muted">{projectId}</p>
+          )}
           <p className="text-sm text-muted">Recent test runs</p>
+          <div className="mt-3 max-w-md">
+            <DateRangeFilter
+              from={range.from}
+              to={range.to}
+              idPrefix="project-range"
+              clearLabel="All time"
+              showHeading={false}
+              onChange={setRange}
+            />
+          </div>
+
         </div>
         <div className="flex items-center gap-2">
           <Link

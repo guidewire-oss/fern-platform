@@ -18,12 +18,22 @@ type TestRunPager interface {
 	ComputeFacets(ctx context.Context, filter domain.TestRunFilter) (domain.TestRunFacets, error)
 }
 
+// ProjectNameResolver maps project IDs to their display names.
+//
+// Test runs store only a project_id; the name lives in project_details.
+// Keeping this a narrow, consumer-owned port lets the service enrich
+// results without depending on the projects domain or on GORM.
+type ProjectNameResolver interface {
+	NamesByProjectID(ctx context.Context, ids []string) (map[string]string, error)
+}
+
 // TestRunQueryService composes the pager with a facet cache, exposing
 // the surface the v2 HTTP handler expects. Cache lookups happen on the
 // computed filter key; cache misses fall through to ComputeFacets.
 type TestRunQueryService struct {
 	pager TestRunPager
 	cache FacetCache
+	names ProjectNameResolver
 }
 
 // NewTestRunQueryService wires a pager and a cache.
@@ -38,6 +48,15 @@ func NewTestRunQueryService(p TestRunPager, c FacetCache) *TestRunQueryService {
 	return &TestRunQueryService{pager: p, cache: c}
 }
 
+// WithProjectNames attaches a resolver that fills in human-readable
+// project names on the returned runs and project facet. Returns the
+// service for chaining. Without it the service behaves exactly as
+// before — names are simply left empty.
+func (s *TestRunQueryService) WithProjectNames(r ProjectNameResolver) *TestRunQueryService {
+	s.names = r
+	return s
+}
+
 // Query satisfies the v2 HTTP handler's contract.
 func (s *TestRunQueryService) Query(ctx context.Context, filter domain.TestRunFilter, page domain.PageArgs) (domain.TestRunPage, error) {
 	res, err := s.pager.Query(ctx, filter, page)
@@ -45,19 +64,77 @@ func (s *TestRunQueryService) Query(ctx context.Context, filter domain.TestRunFi
 		return domain.TestRunPage{}, err
 	}
 
+	res.Facets = s.facetsFor(ctx, filter)
+	// Names resolve after facets attach — including on a cache hit — so a
+	// renamed project shows its new name without waiting for the cached
+	// facet set to expire.
+	s.applyProjectNames(ctx, &res)
+	return res, nil
+}
+
+// facetsFor returns the facets for a filter, preferring the cache and
+// falling back to computing (and caching) them. Facets are advisory: a
+// computation error yields an empty set rather than failing the page.
+func (s *TestRunQueryService) facetsFor(ctx context.Context, filter domain.TestRunFilter) domain.TestRunFacets {
 	key := CacheKeyForFilter(filter)
 	if facets, ok := s.cache.Get(ctx, key); ok {
-		res.Facets = facets
-		return res, nil
+		return facets
 	}
 	facets, err := s.pager.ComputeFacets(ctx, filter)
 	if err != nil {
-		// Facets are advisory; degrade gracefully rather than fail the page.
-		return res, nil
+		return domain.TestRunFacets{}
 	}
 	s.cache.Set(ctx, key, facets)
-	res.Facets = facets
-	return res, nil
+	return facets
+}
+
+// applyProjectNames fills ProjectName on every edge and Label on every
+// project facet entry, using one batched lookup for the union of both
+// sets of IDs (a facet may name a project with no run on this page).
+//
+// Names are advisory, like facets: a resolver failure leaves them empty
+// and the page is returned intact.
+func (s *TestRunQueryService) applyProjectNames(ctx context.Context, page *domain.TestRunPage) {
+	if s.names == nil {
+		return
+	}
+	ids := projectIDsIn(page)
+	if len(ids) == 0 {
+		return
+	}
+
+	byID, err := s.names.NamesByProjectID(ctx, ids)
+	if err != nil {
+		return
+	}
+	for _, e := range page.Edges {
+		if e.Node != nil {
+			e.Node.ProjectName = byID[e.Node.ProjectID]
+		}
+	}
+	// Safe to label in place: FacetCache hands back facets the caller
+	// owns (see the interface contract), so this never touches cached
+	// state.
+	for i := range page.Facets.ByProject {
+		page.Facets.ByProject[i].Label = byID[page.Facets.ByProject[i].Value]
+	}
+}
+
+// projectIDsIn collects every project id the page refers to — from the
+// runs themselves and from the project facet, which may name a project
+// with no run on this page. Duplicates are left in: NamesByProjectID
+// owns de-duplication.
+func projectIDsIn(page *domain.TestRunPage) []string {
+	ids := make([]string, 0, len(page.Edges)+len(page.Facets.ByProject))
+	for _, e := range page.Edges {
+		if e.Node != nil {
+			ids = append(ids, e.Node.ProjectID)
+		}
+	}
+	for _, f := range page.Facets.ByProject {
+		ids = append(ids, f.Value)
+	}
+	return ids
 }
 
 // CacheKeyForFilter derives a stable, opaque cache key from a filter.
@@ -92,6 +169,7 @@ func CacheKeyForFilter(f domain.TestRunFilter) string {
 func filterKeyView(f domain.TestRunFilter) any {
 	return struct {
 		ProjectIDs []string              `json:"p"`
+		AllowedIDs []string              `json:"ap"`
 		Status     []string              `json:"s"`
 		Branches   []string              `json:"b"`
 		Tags       []string              `json:"t"`
@@ -103,6 +181,7 @@ func filterKeyView(f domain.TestRunFilter) any {
 		Search     *string               `json:"q"`
 	}{
 		ProjectIDs: f.ProjectIDs,
+		AllowedIDs: f.AllowedProjectIDs,
 		Status:     f.Status,
 		Branches:   f.Branches,
 		Tags:       f.Tags,

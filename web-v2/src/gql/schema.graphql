@@ -8,6 +8,13 @@ scalar JSON
 type TestRun {
   id: ID!
   projectId: String!
+  # Display name from project_details. Null when the project has no
+  # record or no name — clients fall back to projectId.
+  #
+  # Populated only by the single-run queries (testRun, testRunByRunId).
+  # The list queries leave it null on purpose: filling it there needs a
+  # batched lookup, and no client reads it from a list today.
+  projectName: String
   runId: String!
   branch: String
   commitSha: String

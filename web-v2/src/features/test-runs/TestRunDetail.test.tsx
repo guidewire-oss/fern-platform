@@ -53,7 +53,7 @@ type SuiteLike = {
   tags: Tag[]; specRuns: SpecLike[];
 };
 type RunLike = {
-  id: string; projectId: string; runId: string;
+  id: string; projectId: string; projectName?: string | null; runId: string;
   branch: string | null; commitSha: string | null;
   status: string; startTime: string; endTime: string | null;
   duration: number;
@@ -342,5 +342,28 @@ describe('Run header (always visible)', () => {
   it('shows the Skipped stat card', () => {
     renderWith({ ...baseRun, totalTests: 10, passedTests: 7, failedTests: 1, skippedTests: 2 });
     expect(screen.getByText(/^skipped$/i)).toBeInTheDocument();
+  });
+});
+
+// Issue #216: the run header shows the project's display name and its
+// id, matching the Test Runs list. The id alone when no name resolved.
+describe('TestRunDetail project identification', () => {
+  afterEach(cleanup);
+
+  it('shows both the project name and the project id', () => {
+    renderWith({ ...baseRun, projectName: 'Flux System 1' });
+    expect(screen.getByText('Flux System 1')).toBeTruthy();
+    expect(screen.getByText('flux-system')).toBeTruthy();
+  });
+
+  it('shows the id alone when the run has no project name', () => {
+    renderWith({ ...baseRun, projectName: null });
+    expect(screen.getAllByText('flux-system')).toHaveLength(1);
+  });
+
+  it('keeps the project link pointing at the id', () => {
+    renderWith({ ...baseRun, projectName: 'Flux System 1' });
+    const link = screen.getByText('Flux System 1').closest('a');
+    expect(link?.getAttribute('data-to')).toBe('/projects/$projectId');
   });
 });

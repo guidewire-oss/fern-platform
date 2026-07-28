@@ -364,6 +364,10 @@ func toDomain(r database.TestRun) *domain.TestRun {
 		PassedTests:  r.PassedTests,
 		FailedTests:  r.FailedTests,
 		SkippedTests: r.SkippedTests,
-		Environment:  r.Environment,
+		// duration_ms is stored, not derived. Carrying it matters for
+		// runs with no end_time (still running, or ended abnormally),
+		// where the client cannot compute the elapsed time itself.
+		Duration:    time.Duration(r.Duration) * time.Millisecond,
+		Environment: r.Environment,
 	}
 }
