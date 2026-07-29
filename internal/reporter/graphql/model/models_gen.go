@@ -384,6 +384,7 @@ type TagUsage struct {
 type TestRun struct {
 	ID           string         `json:"id"`
 	ProjectID    string         `json:"projectId"`
+	ProjectName  *string        `json:"projectName,omitempty"`
 	RunID        string         `json:"runId"`
 	Branch       *string        `json:"branch,omitempty"`
 	CommitSha    *string        `json:"commitSha,omitempty"`

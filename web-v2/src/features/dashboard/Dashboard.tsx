@@ -209,8 +209,14 @@ function RecentRunsPanel({
           >
             <StatusBadge status={node.status} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{node.project_id}</div>
+              <div className="truncate text-sm font-medium">
+                {node.project_name || node.project_id}
+              </div>
               <div className="truncate text-xs text-muted">
+                {/* Keep the id on the row: it is what the project links
+                    and the ?project= filter are keyed on. Only shown as
+                    a separate token when a name took the line above. */}
+                {node.project_name && <>{node.project_id} · </>}
                 {node.branch || 'no branch'} ·{' '}
                 {new Date(node.start_time).toLocaleString()}
               </div>

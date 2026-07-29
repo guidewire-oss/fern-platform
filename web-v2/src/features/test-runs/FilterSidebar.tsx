@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/cn';
 import type { FacetCount } from '@/lib/types';
 import { useUserPreferences } from '../profile/hooks';
-import { customRangeToQuery, queryToRangeInputs } from './dateRange';
+import { LabeledValue } from './LabeledValue';
+import { DateRangeFilter } from './DateRangeFilter';
+import { displayText, naturalCompare } from './facetSort';
 import type { TestRunsFilter } from './hooks';
 
 interface Props {
@@ -29,28 +31,24 @@ const KNOWN_STATUSES = ['passed', 'failed', 'flaky', 'skipped', 'running'];
 // else is alphabetical so the list is predictable.
 const PRIORITY_BRANCHES = new Set(['main', 'master', 'develop', 'trunk']);
 
-function sortBranches(values: string[]): string[] {
-  return [...values].sort((a, b) => {
-    const ap = PRIORITY_BRANCHES.has(a) ? 0 : 1;
-    const bp = PRIORITY_BRANCHES.has(b) ? 0 : 1;
+function sortBranchFacets(entries: FacetCount[]): FacetCount[] {
+  return [...entries].sort((a, b) => {
+    const ap = PRIORITY_BRANCHES.has(a.value) ? 0 : 1;
+    const bp = PRIORITY_BRANCHES.has(b.value) ? 0 : 1;
     if (ap !== bp) return ap - bp;
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    return naturalCompare(a.value, b.value);
   });
 }
 
-function sortNatural(values: string[]): string[] {
-  return [...values].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
-  );
+// The status facet is rendered from a fixed, workflow-ordered list, so
+// statuses with no runs in the current result set still show as a
+// zero-count option the user can select.
+function knownStatusEntries(counts: FacetCount[]): FacetCount[] {
+  return KNOWN_STATUSES.map((value) => ({
+    value,
+    count: counts.find((c) => c.value === value)?.count ?? 0,
+  }));
 }
-
-const DATE_PRESETS: Array<{ label: string; days: number }> = [
-  { label: '24h', days: 1 },
-  { label: '7d',  days: 7 },
-  { label: '30d', days: 30 },
-  { label: '90d', days: 90 },
-  { label: '180d', days: 180 },
-];
 
 export function FilterSidebar({ filter, onChange, facets }: Props) {
   const prefs = useUserPreferences();
@@ -74,46 +72,6 @@ export function FilterSidebar({ filter, onChange, facets }: Props) {
       [key]: current.size ? Array.from(current) : undefined,
       after: undefined,
     });
-  };
-
-  const applyDateRange = (days: number | null) => {
-    if (days == null) {
-      onChange({ ...filter, from: undefined, to: undefined, after: undefined });
-      return;
-    }
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    onChange({
-      ...filter,
-      from: from.toISOString(),
-      to: to.toISOString(),
-      after: undefined,
-    });
-  };
-
-  const activeDayPreset = useMemo(() => {
-    if (!filter.from || !filter.to) return null;
-    const span = new Date(filter.to).getTime() - new Date(filter.from).getTime();
-    for (const p of DATE_PRESETS) {
-      const diff = Math.abs(span - p.days * 24 * 60 * 60 * 1000);
-      if (diff < 60 * 1000) return p.days;
-    }
-    return null;
-  }, [filter.from, filter.to]);
-
-  // A range is "custom" when a from/to is set but doesn't match any preset
-  // span — that's what surfaces the date inputs as the active selection.
-  const rangeInputs = queryToRangeInputs(filter.from, filter.to);
-  const isCustomRange = !!(filter.from || filter.to) && activeDayPreset == null;
-
-  // Typing a custom bound and clicking a preset are mutually exclusive:
-  // both write filter.from/to, so choosing one naturally overwrites the
-  // other (a preset produces a matching span → activeDayPreset lights up;
-  // a hand-picked range doesn't → isCustomRange lights up instead).
-  const setCustomBound = (which: 'fromDate' | 'toDate', value: string) => {
-    const next = { ...rangeInputs, [which]: value };
-    const q = customRangeToQuery(next.fromDate, next.toDate);
-    onChange({ ...filter, from: q.from, to: q.to, after: undefined });
   };
 
   // UI works in seconds; the server's duration_ms column is ms, so we
@@ -145,6 +103,12 @@ export function FilterSidebar({ filter, onChange, facets }: Props) {
 
   const reset = () => onChange({ first: filter.first ?? 50 });
 
+  // Facet lists are re-sorted only when the facets change, not on every
+  // keystroke in the search box.
+  const statusEntries  = useMemo(() => knownStatusEntries(facets.byStatus), [facets.byStatus]);
+  const branchEntries  = useMemo(() => sortBranchFacets(facets.byBranch),   [facets.byBranch]);
+  const projectEntries = useMemo(() => sortFacetsNatural(facets.byProject), [facets.byProject]);
+
   return (
     <Card className="self-start">
       <CardHeader className="flex items-center justify-between">
@@ -164,68 +128,12 @@ export function FilterSidebar({ filter, onChange, facets }: Props) {
           />
         </section>
 
-        <section>
-          <div className="mb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted">
-            <span>Date range</span>
-            {(filter.from || filter.to) && (
-              <button
-                onClick={() => applyDateRange(null)}
-                className="text-[10px] normal-case text-primary hover:underline"
-              >
-                clear
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {DATE_PRESETS.map(({ label, days }) => (
-              <button
-                key={days}
-                onClick={() => applyDateRange(days)}
-                className={cn(
-                  'rounded border px-2 py-0.5 text-xs transition-colors',
-                  activeDayPreset === days
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-surface text-foreground hover:bg-surface-2',
-                )}
-              >
-                Last {label}
-              </button>
-            ))}
-          </div>
-          <div
-            className={cn(
-              'mt-2 grid grid-cols-2 gap-2 rounded border p-2 transition-colors',
-              isCustomRange ? 'border-primary bg-primary/5' : 'border-border',
-            )}
-          >
-            <div>
-              <label htmlFor="filter-range-from" className="text-[10px] uppercase tracking-wider text-muted">
-                From
-              </label>
-              <Input
-                id="filter-range-from"
-                type="date"
-                className="mt-0.5"
-                max={rangeInputs.toDate || undefined}
-                value={rangeInputs.fromDate}
-                onChange={(e) => setCustomBound('fromDate', e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="filter-range-to" className="text-[10px] uppercase tracking-wider text-muted">
-                To
-              </label>
-              <Input
-                id="filter-range-to"
-                type="date"
-                className="mt-0.5"
-                min={rangeInputs.fromDate || undefined}
-                value={rangeInputs.toDate}
-                onChange={(e) => setCustomBound('toDate', e.target.value)}
-              />
-            </div>
-          </div>
-        </section>
+        <DateRangeFilter
+          from={filter.from}
+          to={filter.to}
+          idPrefix="filter-range"
+          onChange={(r) => onChange({ ...filter, ...r, after: undefined })}
+        />
 
         <section>
           <div className="mb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted">
@@ -285,22 +193,19 @@ export function FilterSidebar({ filter, onChange, facets }: Props) {
 
         <FacetGroup
           title="Status"
-          values={KNOWN_STATUSES}
-          counts={facets.byStatus}
+          entries={statusEntries}
           selected={filter.status}
           onToggle={(v) => toggleArr('status', v)}
         />
         <FacetGroup
           title="Branch"
-          values={sortBranches(facets.byBranch.map((f) => f.value))}
-          counts={facets.byBranch}
+          entries={branchEntries}
           selected={filter.branch}
           onToggle={(v) => toggleArr('branch', v)}
         />
         <FacetGroup
           title="Project"
-          values={sortNatural(facets.byProject.map((f) => f.value))}
-          counts={facets.byProject}
+          entries={projectEntries}
           selected={filter.project}
           onToggle={(v) => toggleArr('project', v)}
         />
@@ -355,29 +260,28 @@ function TagFacetSection({
   return (
     <FacetGroup
       title="Tag"
-      values={sortNatural(facets.map((f) => f.value))}
-      counts={facets}
+      entries={sortFacetsNatural(facets)}
       selected={selected}
       onToggle={onToggle}
     />
   );
 }
 
+// FacetGroup takes ordered FacetCount entries rather than bare strings
+// so an entry can carry a `label` (the project facet does) and render
+// the readable name over the id that the filter actually submits.
 function FacetGroup({
   title,
-  values,
-  counts,
+  entries,
   selected,
   onToggle,
 }: {
   title: string;
-  values: string[];
-  counts: FacetCount[];
+  entries: FacetCount[];
   selected: string[] | undefined;
   onToggle: (value: string) => void;
 }) {
-  if (values.length === 0) return null;
-  const countFor = (v: string) => counts.find((c) => c.value === v)?.count ?? 0;
+  if (entries.length === 0) return null;
   const isSelected = (v: string) => selected?.includes(v) ?? false;
 
   return (
@@ -386,22 +290,22 @@ function FacetGroup({
         {title}
       </h4>
       <ul className="max-h-44 space-y-1 overflow-y-auto">
-        {values.map((v) => {
-          const sel = isSelected(v);
+        {entries.map((entry) => {
+          const sel = isSelected(entry.value);
           return (
-            <li key={v}>
+            <li key={entry.value}>
               <button
                 type="button"
-                onClick={() => onToggle(v)}
+                onClick={() => onToggle(entry.value)}
                 className={cn(
-                  'flex w-full items-center justify-between rounded px-2 py-1 text-sm transition-colors',
+                  'flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm transition-colors',
                   sel
                     ? 'bg-primary/10 text-primary'
                     : 'text-foreground hover:bg-surface-2',
                 )}
               >
-                <span className="truncate" title={v}>{v}</span>
-                <span className="ml-2 text-xs text-muted">{countFor(v)}</span>
+                <LabeledValue value={entry.value} label={entry.label} />
+                <span className="ml-2 shrink-0 text-xs text-muted">{entry.count}</span>
               </button>
             </li>
           );
@@ -409,4 +313,10 @@ function FacetGroup({
       </ul>
     </section>
   );
+}
+
+// Sorts on the text an entry actually shows, so the Project facet orders
+// by name rather than by opaque id.
+function sortFacetsNatural(entries: FacetCount[]): FacetCount[] {
+  return [...entries].sort((a, b) => naturalCompare(displayText(a), displayText(b)));
 }

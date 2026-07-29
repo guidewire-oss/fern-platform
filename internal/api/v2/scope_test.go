@@ -262,3 +262,40 @@ func TestTrends_RangeValidation(t *testing.T) {
 		}
 	}
 }
+
+// The handler must record the caller's full readable set separately from
+// their own project selection. Facet computation clears the selection;
+// if the authorization scope rode along in the same field, the project
+// facet would enumerate every project in the system.
+func TestList_NonAdminGetsAuthorizationScopeSeparately(t *testing.T) {
+	svc := &trackingSvc{}
+	r := scopedRunsRouter(t, svc, fakeScope{allowed: allow("p1", "p2")})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v2/test-runs?project=p1", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	// Selection stays the caller's own choice.
+	if got := svc.filter.ProjectIDs; len(got) != 1 || got[0] != "p1" {
+		t.Errorf("ProjectIDs = %v, want just the selected p1", got)
+	}
+	// Boundary is the full readable set, so the facet can offer p2.
+	got := append([]string(nil), svc.filter.AllowedProjectIDs...)
+	sort.Strings(got)
+	if len(got) != 2 || got[0] != "p1" || got[1] != "p2" {
+		t.Errorf("AllowedProjectIDs = %v, want the full allowed set [p1 p2]", got)
+	}
+}
+
+// An admin is unrestricted: no boundary is imposed.
+func TestList_AdminGetsNoAuthorizationScope(t *testing.T) {
+	svc := &trackingSvc{}
+	r := scopedRunsRouter(t, svc, fakeScope{unrestricted: true})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v2/test-runs", nil))
+
+	if len(svc.filter.AllowedProjectIDs) != 0 {
+		t.Errorf("AllowedProjectIDs = %v, want empty for an admin", svc.filter.AllowedProjectIDs)
+	}
+}

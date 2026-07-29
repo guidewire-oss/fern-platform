@@ -49,3 +49,13 @@ func scopeProjectIDs(requested []string, allowed map[string]struct{}) (ids []str
 	}
 	return out, len(out) > 0
 }
+
+// allowedIDs flattens the accessible-project set into a slice for the
+// filter's authorization boundary.
+func allowedIDs(allowed map[string]struct{}) []string {
+	out := make([]string, 0, len(allowed))
+	for id := range allowed {
+		out = append(out, id)
+	}
+	return out
+}

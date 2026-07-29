@@ -37,6 +37,10 @@ export interface TestRunNode {
   id: number;
   run_id: string;
   project_id: string;
+  // Display name resolved from project_details. Optional: absent on an
+  // older backend, empty when the project has no name on record — in
+  // both cases the UI falls back to project_id.
+  project_name?: string;
   branch: string;
   git_branch: string;
   git_commit: string;
@@ -47,6 +51,10 @@ export interface TestRunNode {
   passed_tests: number;
   failed_tests: number;
   skipped_tests: number;
+  // Wall-clock run time as recorded by the server. Preferred over
+  // end_time - start_time, which cannot be computed for a run with no
+  // end_time. Optional: absent on an older backend.
+  duration_ms?: number;
   environment: string;
 }
 
@@ -58,6 +66,9 @@ export interface TestRunEdge {
 export interface FacetCount {
   value: string;
   count: number;
+  // Human-readable rendering of `value`, sent only for the project
+  // facet. `value` stays the filterable id in every case.
+  label?: string;
 }
 
 export interface TestRunFacets {

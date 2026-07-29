@@ -9,6 +9,7 @@ type TestRun struct {
 	ID           uint                   `json:"id"`     // Database ID
 	RunID        string                 `json:"run_id"` // Unique run identifier
 	ProjectID    string                 `json:"project_id"`
+	ProjectName  string                 `json:"project_name"` // Display name resolved from project_details; empty when unknown
 	Name         string                 `json:"name"`
 	Branch       string                 `json:"branch"`
 	GitBranch    string                 `json:"git_branch"`

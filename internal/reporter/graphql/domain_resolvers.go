@@ -393,9 +393,13 @@ func (r *queryResolver) GetTestRun_domain(ctx context.Context, id string) (*mode
 		return nil, err
 	}
 
-	// Non-admins must belong to the run's project team.
+	// Non-admins must belong to the run's project team. The project we
+	// load here is reused for the display name below, so a non-admin
+	// request costs one project lookup, not two.
+	var project *projectsDomain.Project
 	if user.Role != authDomain.RoleAdmin {
-		project, projErr := r.projectService.GetProject(ctx, projectsDomain.ProjectID(testRun.ProjectID))
+		var projErr error
+		project, projErr = r.projectService.GetProject(ctx, projectsDomain.ProjectID(testRun.ProjectID))
 		if projErr != nil || project == nil {
 			return nil, fmt.Errorf("access denied")
 		}
@@ -405,7 +409,33 @@ func (r *queryResolver) GetTestRun_domain(ctx context.Context, id string) (*mode
 		}
 	}
 
-	return r.convertTestRunToGraphQL(testRun), nil
+	out := r.convertTestRunToGraphQL(testRun)
+	if project != nil {
+		setProjectName(out, project)
+	} else {
+		r.attachProjectName(ctx, out)
+	}
+	return out, nil
+}
+
+// attachProjectName fills in the run's project display name from
+// project_details.
+//
+// The name is advisory: if the project has no record, no name, or the
+// lookup fails, projectName stays null and clients fall back to
+// projectId. A failure here must never fail an otherwise-good run
+// query.
+func (r *Resolver) attachProjectName(ctx context.Context, run *model.TestRun) {
+	// A nil projectService is a valid wiring (tests, and callers that
+	// only need run data); name resolution is simply skipped.
+	if run == nil || run.ProjectID == "" || r.projectService == nil {
+		return
+	}
+	project, err := r.projectService.GetProject(ctx, projectsDomain.ProjectID(run.ProjectID))
+	if err != nil || project == nil {
+		return
+	}
+	setProjectName(run, project)
 }
 
 // GetProject implementation using domain service
@@ -1423,4 +1453,15 @@ func (r *queryResolver) Tags_domain(ctx context.Context, filter *model.TagFilter
 		PageInfo:   pageInfo,
 		TotalCount: len(filteredTags),
 	}, nil
+}
+
+// setProjectName copies a already-loaded project's display name onto a
+// run, leaving projectName null when the project has no name.
+func setProjectName(run *model.TestRun, project *projectsDomain.Project) {
+	if run == nil || project == nil {
+		return
+	}
+	if name := project.Name(); name != "" {
+		run.ProjectName = &name
+	}
 }

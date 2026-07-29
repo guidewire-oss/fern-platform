@@ -143,3 +143,40 @@ func TestBuildTestRunOrderBy(t *testing.T) {
 		t.Errorf("ORDER BY should be deterministic keyset: %q", got)
 	}
 }
+
+// AllowedProjectIDs is the authorization boundary, kept separate from the
+// user-selected ProjectIDs so facet computation can clear the selection
+// without also clearing the boundary.
+func TestBuildTestRunWhere_ConstrainsToAllowedProjects(t *testing.T) {
+	clauses, args := infrastructure.BuildTestRunWhere(domain.TestRunFilter{
+		AllowedProjectIDs: []string{"p1", "p2"},
+	})
+	if len(clauses) != 1 {
+		t.Fatalf("clauses = %v, want exactly one", clauses)
+	}
+	if !strings.Contains(clauses[0], "project_id IN") {
+		t.Errorf("clause = %q, want a project_id IN predicate", clauses[0])
+	}
+	got, ok := args[0].([]string)
+	if !ok || len(got) != 2 {
+		t.Errorf("args[0] = %#v, want the two allowed ids", args[0])
+	}
+}
+
+// Both constraints apply together: the effective row set is the
+// intersection of what the user asked for and what they may read.
+func TestBuildTestRunWhere_AllowedAndSelectedBothApply(t *testing.T) {
+	clauses, _ := infrastructure.BuildTestRunWhere(domain.TestRunFilter{
+		ProjectIDs:        []string{"p1"},
+		AllowedProjectIDs: []string{"p1", "p2"},
+	})
+	n := 0
+	for _, c := range clauses {
+		if strings.Contains(c, "project_id IN") {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("got %d project_id predicates, want 2 (selection AND authorization)", n)
+	}
+}
