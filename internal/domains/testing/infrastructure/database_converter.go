@@ -72,16 +72,23 @@ func (c *DatabaseConverter) ConvertDomainSuiteRunsToDatabase(domainSuiteRuns []d
 	return dbSuiteRuns
 }
 
+// mergeErrorMessage combines a spec's ErrorMessage and FailureMessage into the
+// single error_message column the database has. ErrorMessage (status "error")
+// takes priority; FailureMessage (status "failed", the common case) is used
+// as a fallback when ErrorMessage is empty.
+func mergeErrorMessage(errorMessage, failureMessage string) string {
+	if errorMessage == "" && failureMessage != "" {
+		return failureMessage
+	}
+	return errorMessage
+}
+
 // ConvertDomainSpecRunsToDatabase converts domain SpecRuns to database SpecRuns
 func (c *DatabaseConverter) ConvertDomainSpecRunsToDatabase(domainSpecRuns []*domain.SpecRun) []database.SpecRun {
 	dbSpecRuns := make([]database.SpecRun, len(domainSpecRuns))
 
 	for i, domainSpec := range domainSpecRuns {
-		// Combine ErrorMessage and FailureMessage into ErrorMessage
-		errorMessage := domainSpec.ErrorMessage
-		if errorMessage == "" && domainSpec.FailureMessage != "" {
-			errorMessage = domainSpec.FailureMessage
-		}
+		errorMessage := mergeErrorMessage(domainSpec.ErrorMessage, domainSpec.FailureMessage)
 
 		// Convert tags
 		dbTags := c.ConvertDomainTagsToDatabase(domainSpec.Tags)

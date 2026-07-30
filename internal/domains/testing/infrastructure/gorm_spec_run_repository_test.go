@@ -112,6 +112,43 @@ var _ = Describe("GormSpecRunRepository", func() {
 			})
 		})
 
+		Context("when the spec run has only a FailureMessage (status \"failed\")", func() {
+			It("should persist FailureMessage into the error_message column", func() {
+				endTime := time.Now().Add(time.Second)
+				failedSpec := &domain.SpecRun{
+					SuiteRunID:     1,
+					Name:           "test-spec-failed",
+					Status:         "failed",
+					StartTime:      time.Now(),
+					EndTime:        &endTime,
+					Duration:       time.Second,
+					FailureMessage: "expected 2 to equal 3",
+				}
+
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "spec_runs"`)).
+					WithArgs(
+						AnyTime{}, AnyTime{}, nil,
+						failedSpec.SuiteRunID,
+						failedSpec.Name,
+						failedSpec.Status,
+						AnyTime{}, AnyTime{},
+						int64(1000),
+						failedSpec.FailureMessage,
+						failedSpec.StackTrace,
+						failedSpec.RetryCount,
+						failedSpec.IsFlaky,
+					).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(456))
+				mock.ExpectCommit()
+
+				err := repository.Create(ctx, failedSpec)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(failedSpec.ID).To(Equal(uint(456)))
+			})
+		})
+
 		Context("when creation fails", func() {
 			It("should return an error", func() {
 				mock.ExpectBegin()
@@ -177,6 +214,40 @@ var _ = Describe("GormSpecRunRepository", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(specRuns[0].ID).To(Equal(uint(1)))
 				Expect(specRuns[1].ID).To(Equal(uint(2)))
+			})
+		})
+
+		Context("when the batch has a spec run with only a FailureMessage", func() {
+			It("should persist FailureMessage into the error_message column", func() {
+				now := time.Now()
+				end := now.Add(time.Second)
+
+				specRuns := []*domain.SpecRun{
+					{
+						SuiteRunID:     1,
+						Name:           "test-spec-failed",
+						Status:         "failed",
+						StartTime:      now,
+						EndTime:        &end,
+						Duration:       time.Second,
+						FailureMessage: "expected 2 to equal 3",
+					},
+				}
+
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "spec_runs"`)).
+					WithArgs(
+						AnyTime{}, AnyTime{}, nil,
+						uint(1), "test-spec-failed", "failed", AnyTime{}, AnyTime{}, int64(1000),
+						"expected 2 to equal 3", "", 0, false,
+					).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+				mock.ExpectCommit()
+
+				err := repository.CreateBatch(ctx, specRuns)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(specRuns[0].ID).To(Equal(uint(1)))
 			})
 		})
 
