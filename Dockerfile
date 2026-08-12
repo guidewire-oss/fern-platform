@@ -49,7 +49,7 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -ldflags "-w -s" -o seed ./cmd/seed
 
 # Runtime stage
-FROM alpine:3.22
+FROM alpine:3.23
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata
