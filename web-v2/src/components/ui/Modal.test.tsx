@@ -75,6 +75,18 @@ describe('Modal dismissal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('does not close on a primary release with no primary press behind it', () => {
+    const { onClose, backdrop } = renderModal();
+
+    // A right-click leaves no primary press pending, so a stray primary
+    // release — one whose press landed outside the window — must not count.
+    fireEvent.mouseDown(backdrop, { button: 2 });
+    fireEvent.mouseUp(backdrop, { button: 2 });
+    fireEvent.mouseUp(backdrop, { button: 0 });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('closes on Escape', () => {
     const { onClose } = renderModal();
 

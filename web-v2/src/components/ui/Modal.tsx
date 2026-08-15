@@ -47,9 +47,9 @@ export function Modal({ open, onClose, title, description, children, footer, siz
         pressStart.current = e.target;
       }}
       onMouseUp={(e) => {
-        if (e.button !== 0) return;
         const startedOnBackdrop = pressStart.current === e.currentTarget;
         pressStart.current = null;
+        if (e.button !== 0) return;
         if (startedOnBackdrop && e.target === e.currentTarget) onClose();
       }}
       role="dialog"
