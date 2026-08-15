@@ -20,7 +20,7 @@ web-deps: ## Install web dependencies (pnpm install)
 web-codegen: ## Regenerate GraphQL types/hooks from the synced schema
 	cd $(WEB_DIR) && $(PNPM) codegen
 
-web-dev: ## Run Vite dev server (proxies /api, /graphql, /auth to :8080)
+web-dev: ## Run Vite dev server (proxies /api, /graphql, /query, /auth to :8080)
 	cd $(WEB_DIR) && $(PNPM) dev
 
 web-typecheck: ## Type-check the web project
