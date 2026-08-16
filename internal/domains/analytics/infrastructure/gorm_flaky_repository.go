@@ -10,6 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// maxFlakyTestsPerProject caps FindFlakyTestsByProject
+const maxFlakyTestsPerProject = 500
+
 // GormFlakyDetectionRepository implements FlakyDetectionRepository using GORM
 type GormFlakyDetectionRepository struct {
 	db *gorm.DB
@@ -68,7 +71,9 @@ func (r *GormFlakyDetectionRepository) FindFlakyTestsByProject(ctx context.Conte
 		query = query.Where("status = ?", string(status))
 	}
 
-	if err := query.Order("flake_score DESC").Find(&dbFlakyTests).Error; err != nil {
+	// capped so an active project's flake list can't grow
+	// unbounded; ordering by flake_score DESC keeps the worst offenders.
+	if err := query.Order("flake_score DESC").Limit(maxFlakyTestsPerProject).Find(&dbFlakyTests).Error; err != nil {
 		return nil, fmt.Errorf("failed to find flaky tests: %w", err)
 	}
 
@@ -129,6 +134,7 @@ func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, pr
 		JOIN test_runs tr ON tr.id = sur.test_run_id
 		WHERE tr.project_id = ? AND sr.name = ? AND tr.created_at >= ?
 		ORDER BY tr.created_at DESC
+		LIMIT 500
 	`
 
 	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, since).Rows()

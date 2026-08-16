@@ -77,10 +77,14 @@ func (r *GormProjectRepository) FindByProjectID(ctx context.Context, projectID d
 	return r.toDomainModel(&dbProject)
 }
 
+// maxProjectsPerTeam caps FindByTeam so a team with an unusually large
+// number of projects cannot return them all unbounded.
+const maxProjectsPerTeam = 1000
+
 // FindByTeam retrieves all projects for a team
 func (r *GormProjectRepository) FindByTeam(ctx context.Context, team domain.Team) ([]*domain.Project, error) {
 	var dbProjects []database.ProjectDetails
-	if err := r.db.WithContext(ctx).Where("team = ?", string(team)).Find(&dbProjects).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("team = ?", string(team)).Limit(maxProjectsPerTeam).Find(&dbProjects).Error; err != nil {
 		return nil, fmt.Errorf("failed to find projects by team: %w", err)
 	}
 

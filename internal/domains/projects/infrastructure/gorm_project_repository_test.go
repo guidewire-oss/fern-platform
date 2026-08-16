@@ -52,6 +52,25 @@ func TestGormProjectRepository_Delete_CascadeDelete(t *testing.T) {
 	})
 }
 
+func TestGormProjectRepository_FindByTeam_HasLimit(t *testing.T) {
+	t.Run("should cap the number of projects returned", func(t *testing.T) {
+		db, mock, gormDB := setupMockDB(t)
+		defer db.Close()
+
+		repo := infrastructure.NewGormProjectRepository(gormDB)
+
+		rows := sqlmock.NewRows([]string{"id", "project_id", "name", "team"})
+		mock.ExpectQuery(`SELECT \* FROM "project_details" WHERE team = \$1 AND "project_details"\."deleted_at" IS NULL LIMIT \$2`).
+			WithArgs("team-a", sqlmock.AnyArg()).
+			WillReturnRows(rows)
+
+		_, err := repo.FindByTeam(context.Background(), domain.Team("team-a"))
+
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
 // Integration test to verify cascade delete works with real foreign key
 // This test would need a test database to run properly
 func TestProjectDeletion_Integration(t *testing.T) {

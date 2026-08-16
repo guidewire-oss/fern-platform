@@ -18,6 +18,11 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
+// maxListLimit caps client-supplied ?limit values. Without it,
+// listTestRuns' preload-heavy query and getRecentTestRuns' query both scale
+// with whatever a caller requests, unbounded.
+const maxListLimit = 500
+
 // TestRunHandler handles test run related endpoints
 type TestRunHandler struct {
 	*BaseHandler
@@ -156,6 +161,9 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
+			if limit > maxListLimit {
+				limit = maxListLimit
+			}
 		} else if l <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be greater than 0"})
 			return
@@ -304,6 +312,9 @@ func (h *TestRunHandler) getRecentTestRuns(c *gin.Context) {
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
+			if limit > maxListLimit {
+				limit = maxListLimit
+			}
 		} else if l <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be greater than 0"})
 			return

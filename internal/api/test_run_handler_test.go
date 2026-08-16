@@ -676,6 +676,27 @@ var _ = Describe("TestRunHandler", func() {
 			testRunRepo.AssertExpectations(GinkgoT())
 		})
 
+		It("should cap an excessive limit rather than as-is", func() {
+			// An uncapped limit triggers the full preload chain across as
+			// many rows as requested.
+			testRuns := []*domain.TestRun{{ID: 1, ProjectID: "project-123", Status: "passed"}}
+			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 500).Return(testRuns, nil).Once()
+			testRunRepo.On("CountByProjectID", mock.Anything, "project-123").Return(int64(1), nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs?project_id=project-123&limit=100000", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response["limit"]).To(BeNumerically("==", 500))
+
+			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
 		It("should return bad request for invalid limit", func() {
 			req := httptest.NewRequest("GET", "/api/v1/test-runs?limit=0", nil)
 			w := httptest.NewRecorder()
@@ -963,6 +984,18 @@ var _ = Describe("TestRunHandler", func() {
 			testRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "project-123", 5).Return(testRuns, nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/recent?project_id=project-123&limit=5", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusOK))
+			testRunRepo.AssertExpectations(GinkgoT())
+		})
+
+		It("should cap an excessive limit rather than as-is", func() {
+			testRuns := []*domain.TestRun{{ID: 1, ProjectID: "project-123", Status: "passed"}}
+			testRunRepo.On("GetLatestByProjectIDTagsOnly", mock.Anything, "project-123", 500).Return(testRuns, nil).Once()
+
+			req := httptest.NewRequest("GET", "/api/v1/test-runs/recent?project_id=project-123&limit=100000", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
