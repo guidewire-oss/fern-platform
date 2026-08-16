@@ -199,8 +199,11 @@ func (s *TestRunService) GetProjectTestRuns(ctx context.Context, projectID strin
 	return s.testRunRepo.GetLatestByProjectIDTagsOnly(ctx, projectID, limit)
 }
 
-// CountProjectTestRuns counts total test runs for a project
+// CountProjectTestRuns counts total test runs for a project.
 func (s *TestRunService) CountProjectTestRuns(ctx context.Context, projectID string) (int64, error) {
+	if projectID == "" {
+		return 0, nil
+	}
 	return s.testRunRepo.CountByProjectID(ctx, projectID)
 }
 

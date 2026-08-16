@@ -721,8 +721,8 @@ var _ = Describe("TestRunHandler", func() {
 	})
 
 	Describe("countTestRuns", func() {
-		It("should count test runs successfully", func() {
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 0).Return([]*domain.TestRun{}, nil).Once()
+		It("should count test runs successfully without loading the runs themselves", func() {
+			//must not go through GetLatestByProjectID's preload chain
 			testRunRepo.On("CountByProjectID", mock.Anything, "project-123").Return(int64(42), nil).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count?project_id=project-123", nil)
@@ -737,6 +737,7 @@ var _ = Describe("TestRunHandler", func() {
 			Expect(response["total"]).To(BeNumerically("==", 42))
 
 			testRunRepo.AssertExpectations(GinkgoT())
+			testRunRepo.AssertNotCalled(GinkgoT(), "GetLatestByProjectID", mock.Anything, mock.Anything, mock.Anything)
 		})
 
 		It("should count test runs without project ID", func() {
@@ -755,7 +756,7 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		It("should return internal server error when service fails", func() {
-			testRunRepo.On("GetLatestByProjectID", mock.Anything, "project-123", 0).Return(nil, errors.New("database error")).Once()
+			testRunRepo.On("CountByProjectID", mock.Anything, "project-123").Return(int64(0), errors.New("database error")).Once()
 
 			req := httptest.NewRequest("GET", "/api/v1/test-runs/count?project_id=project-123", nil)
 			w := httptest.NewRecorder()

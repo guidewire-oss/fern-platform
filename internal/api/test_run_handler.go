@@ -196,8 +196,10 @@ func (h *TestRunHandler) listTestRuns(c *gin.Context) {
 func (h *TestRunHandler) countTestRuns(c *gin.Context) {
 	projectID := c.Query("project_id")
 
-	// Get count from domain service using ListTestRuns with limit 0 to get total count only
-	_, totalCount, err := h.testingService.ListTestRuns(c.Request.Context(), projectID, 0, 0)
+	// Count directly- ListTestRuns fetched and discarded every run
+	// in the project just to derive this number, triggering an unbounded
+	// preload of all suites/specs/tags along the way.
+	totalCount, err := h.testingService.CountProjectTestRuns(c.Request.Context(), projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
