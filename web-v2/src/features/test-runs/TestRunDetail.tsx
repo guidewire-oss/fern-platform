@@ -468,7 +468,13 @@ function SpecRow({ spec }: { spec: SpecLike }) {
 }
 
 function TagChip({ tag }: { tag: TagRef }) {
-  const label = tag.value ? `${tag.name}: ${tag.value}` : tag.name;
+  // `name` is sometimes the raw, unprocessed "category:value" string (e.g.
+  // Ginkgo labels reported as-is) and sometimes a distinct human label with
+  // category/value tracked separately (e.g. "team" / owner / platform).
+  // Only substitute in "category: value" when name is exactly that raw
+  // compound -- otherwise appending value to name would double it up.
+  const isRawCompound = tag.value && tag.name === `${tag.category}:${tag.value}`;
+  const label = !tag.value ? tag.name : isRawCompound ? `${tag.category}: ${tag.value}` : `${tag.name}: ${tag.value}`;
   const style = tag.color ? { backgroundColor: `${tag.color}22`, color: tag.color } : undefined;
   return (
     <span
