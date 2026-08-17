@@ -12,6 +12,10 @@ import (
 
 // maxFlakyTestsPerProject caps FindFlakyTestsByProject
 const maxFlakyTestsPerProject = 500
+// maxHistoryRowsPerTest caps GetTestRunHistory. Separate from
+// maxFlakyTestsPerProject since the two bound different things and
+// share a value today.
+const maxHistoryRowsPerTest = 500
 
 // GormFlakyDetectionRepository implements FlakyDetectionRepository using GORM
 type GormFlakyDetectionRepository struct {
@@ -117,8 +121,8 @@ func (r *GormFlakyDetectionRepository) SaveTestRunAnalysis(ctx context.Context, 
 // GetTestRunHistory retrieves test execution history for a specific test
 func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, projectID string, testName string, since time.Time) ([]domain.TestExecutionResult, error) {
 	// Use a raw query to get all the needed data in one query
-	query := `
-		SELECT 
+	query := fmt.Sprintf(`
+		SELECT
 			sr.id as spec_run_id,
 			sr.name as test_name,
 			sr.status,
@@ -134,8 +138,8 @@ func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, pr
 		JOIN test_runs tr ON tr.id = sur.test_run_id
 		WHERE tr.project_id = ? AND sr.name = ? AND tr.created_at >= ?
 		ORDER BY tr.created_at DESC
-		LIMIT 500
-	`
+		LIMIT %d
+	`, maxHistoryRowsPerTest)
 
 	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, since).Rows()
 	if err != nil {

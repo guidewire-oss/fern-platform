@@ -57,6 +57,7 @@ func TestGormFlakyDetectionRepository_FindFlakyTestsByProject_HasLimit(t *testin
 
 	rows := sqlmock.NewRows([]string{"id", "project_id", "status", "flake_rate"})
 	mock.ExpectQuery(`SELECT \* FROM "flaky_tests" WHERE project_id = \$1 AND status = \$2 AND "flaky_tests"\."deleted_at" IS NULL ORDER BY flake_score DESC LIMIT \$3`).
+		WithArgs("project-123", string(domain.StatusActive), 500).
 		WillReturnRows(rows)
 
 	_, err := repo.FindFlakyTestsByProject(context.Background(), "project-123", domain.StatusActive)

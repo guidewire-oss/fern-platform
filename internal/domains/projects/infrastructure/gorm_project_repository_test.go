@@ -61,7 +61,7 @@ func TestGormProjectRepository_FindByTeam_HasLimit(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{"id", "project_id", "name", "team"})
 		mock.ExpectQuery(`SELECT \* FROM "project_details" WHERE team = \$1 AND "project_details"\."deleted_at" IS NULL LIMIT \$2`).
-			WithArgs("team-a", sqlmock.AnyArg()).
+			WithArgs("team-a", 1000).
 			WillReturnRows(rows)
 
 		_, err := repo.FindByTeam(context.Background(), domain.Team("team-a"))
@@ -121,8 +121,8 @@ func TestGormProjectRepository_FindByID_NotFound(t *testing.T) {
 		projectID := uint(123)
 
 		mock.ExpectQuery(`SELECT .* FROM "project_details"`).
-    		WithArgs(projectID, sqlmock.AnyArg()).
-    		WillReturnError(gorm.ErrRecordNotFound)
+			WithArgs(projectID, sqlmock.AnyArg()).
+			WillReturnError(gorm.ErrRecordNotFound)
 
 		project, err := repo.FindByID(ctx, projectID)
 
