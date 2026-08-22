@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -1573,7 +1574,9 @@ var _ = Describe("TestRunHandler", func() {
 				Expect(w.Code).To(Equal(http.StatusBadRequest))
 			})
 
-			It("should return bad request when test run validation fails", func() {
+			It("should truncate an oversized spec name instead of rejecting the whole submission", func() {
+				// A single overlong spec name must not take down an entire
+				// run's results -- https://github.com/guidewire-oss/fern-platform/issues/230.
 				req := TestRunRequest{
 					TestProjectID: "project-123",
 					SuiteRuns: []SuiteRun{
@@ -1581,7 +1584,7 @@ var _ = Describe("TestRunHandler", func() {
 							SuiteName: "Suite 1",
 							SpecRuns: []SpecRun{
 								{
-									SpecDescription: string(make([]byte, 300)), // simulate long spec name
+									SpecDescription: strings.Repeat("a", domain.MaxNameLengthBytes+300),
 									Status:          "passed",
 								},
 							},
@@ -1591,19 +1594,18 @@ var _ = Describe("TestRunHandler", func() {
 
 				jsonBody, _ := json.Marshal(req)
 
+				testRunRepo.On("Create", mock.Anything, mock.MatchedBy(func(tr *domain.TestRun) bool {
+					name := tr.SuiteRuns[0].SpecRuns[0].Name
+					return len(name) == domain.MaxNameLengthBytes &&
+						strings.HasSuffix(name, domain.TruncationMarker)
+				})).Return(nil)
+
 				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs", bytes.NewBuffer(jsonBody))
 				httpReq.Header.Set("Content-Type", "application/json")
 				w := httptest.NewRecorder()
 				publicRouter.ServeHTTP(w, httpReq)
 
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-
-				var response map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(response["error"]).To(ContainSubstring("invalid test run"))
-				testRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+				Expect(w.Code).To(Equal(http.StatusCreated))
 			})
 		})
 

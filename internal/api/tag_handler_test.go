@@ -19,6 +19,7 @@ import (
 
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	tagsDomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
+	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
@@ -182,6 +183,25 @@ var _ = Describe("TagHandler & tag processing", func() {
 			Expect(len(req.SuiteRuns)).To(Equal(1))
 			Expect(req.SuiteRuns[0].Tags[0].ID).NotTo(Equal(uint64(0)))
 			Expect(req.SuiteRuns[0].SpecRuns[0].Tags[0].ID).NotTo(Equal(uint64(0)))
+		})
+
+		It("truncates an oversized tag name before it reaches GetOrCreateTag", func() {
+			// tags.name carries a unique index, so an oversized value can
+			// crash the insert the same way spec_name/suite_name did
+			// before issue #230's fix. The name must be bounded here,
+			// before GetOrCreateTag's FindByName/Save/FindByName cycle
+			// runs, so every lookup in that cycle consistently sees the
+			// same (already-truncated) value.
+			longName := strings.Repeat("a", testingDomain.MaxNameLengthBytes+256)
+			req := &TestRunRequest{
+				Tags: []Tag{{Name: longName}},
+			}
+
+			err := ProcessTestRunTags(context.Background(), svc, req)
+			Expect(err).To(BeNil())
+			Expect(len(req.Tags)).To(Equal(1))
+			Expect(len(req.Tags[0].Name)).To(Equal(testingDomain.MaxNameLengthBytes))
+			Expect(req.Tags[0].Name).To(HaveSuffix(testingDomain.TruncationMarker))
 		})
 
 		It("returns error when repository fails during GetOrCreateTag", func() {

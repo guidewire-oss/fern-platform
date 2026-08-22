@@ -6,15 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
-)
-
-const (
-	MaxSpecNameLength = 255
 )
 
 // ErrNotFound is returned when a resource is not found or parent-child validation fails
@@ -41,26 +36,23 @@ func NewTestRunService(
 	}
 }
 
-// ValidateTestRun does validation of test run details
+// ValidateTestRun validates test run details and normalizes names that
+// would otherwise be too long to store. Oversized suite/spec names are
+// truncated in place (see truncateName) rather than rejected, so a
+// single overlong name can't fail the whole test run submission.
 func ValidateTestRun(testRun *domain.TestRun) error {
 	if testRun == nil {
 		return fmt.Errorf("testRun cannot be nil")
 	}
 
-	for _, suite := range testRun.SuiteRuns {
+	for i := range testRun.SuiteRuns {
+		suite := &testRun.SuiteRuns[i]
+		suite.Name = domain.TruncateName(suite.Name)
 		for _, spec := range suite.SpecRuns {
 			if spec == nil {
 				continue
 			}
-			if utf8.RuneCountInString(spec.Name) > MaxSpecNameLength {
-				return fmt.Errorf(
-					"%w: spec name exceeds %d characters (suite: %s, spec: %s)",
-					domain.ErrInvalidTestRun,
-					MaxSpecNameLength,
-					suite.Name,
-					spec.Name,
-				)
-			}
+			spec.Name = domain.TruncateName(spec.Name)
 		}
 	}
 
@@ -155,6 +147,8 @@ func (s *TestRunService) AddSuiteRun(ctx context.Context, testRunID uint, suiteR
 		return fmt.Errorf("suite run test ID mismatch")
 	}
 
+	suiteRun.Name = domain.TruncateName(suiteRun.Name)
+
 	// Create the suite run
 	if err := s.suiteRunRepo.Create(ctx, suiteRun); err != nil {
 		return fmt.Errorf("failed to create suite run: %w", err)
@@ -169,6 +163,8 @@ func (s *TestRunService) AddSpecRun(ctx context.Context, suiteRunID uint, specRu
 	if specRun.SuiteRunID != suiteRunID {
 		return fmt.Errorf("spec run suite ID mismatch")
 	}
+
+	specRun.Name = domain.TruncateName(specRun.Name)
 
 	// Create the spec run
 	if err := s.specRunRepo.Create(ctx, specRun); err != nil {
@@ -381,6 +377,8 @@ func (s *TestRunService) CreateSuiteRun(ctx context.Context, suiteRun *domain.Su
 		suiteRun.StartTime = time.Now()
 	}
 
+	suiteRun.Name = domain.TruncateName(suiteRun.Name)
+
 	return s.suiteRunRepo.Create(ctx, suiteRun)
 }
 
@@ -406,6 +404,8 @@ func (s *TestRunService) CreateSpecRun(ctx context.Context, specRun *domain.Spec
 			specRun.Duration = specRun.EndTime.Sub(specRun.StartTime)
 		}
 	}
+
+	specRun.Name = domain.TruncateName(specRun.Name)
 
 	return s.specRunRepo.Create(ctx, specRun)
 }
