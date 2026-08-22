@@ -1,6 +1,7 @@
 package infrastructure_test
 
 import (
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -477,6 +478,23 @@ var _ = Describe("DatabaseConverter", func() {
 		It("should return nil for nil domain tags", func() {
 			dbTags := converter.ConvertDomainTagsToDatabase(nil)
 			Expect(dbTags).To(BeNil())
+		})
+
+		It("should truncate an oversized tag name instead of passing it straight to the DB", func() {
+			// tags.name carries a unique index, so an oversized value hits
+			// the same Postgres B-tree size ceiling as spec_name/suite_name
+			// -- this is the single choke point every run/suite/spec-level
+			// tag passes through before a repository write, so bounding it
+			// here covers all of them. See issue #230.
+			longName := strings.Repeat("a", domain.MaxNameLengthBytes+256)
+
+			dbTags := converter.ConvertDomainTagsToDatabase([]domain.Tag{
+				{ID: 1, Name: longName, Category: "priority", Value: "high"},
+			})
+
+			Expect(dbTags).To(HaveLen(1))
+			Expect(len(dbTags[0].Name)).To(Equal(domain.MaxNameLengthBytes))
+			Expect(dbTags[0].Name).To(HaveSuffix(domain.TruncationMarker))
 		})
 	})
 
