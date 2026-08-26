@@ -11,7 +11,6 @@ import (
 	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
-	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 	"gorm.io/gorm"
 )
@@ -67,22 +66,8 @@ func NewDomainHandlerV2(
 
 // RegisterRoutes registers API routes with the Gin router using split handlers
 func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
-	// Static file serving for web interface
-	router.Static("/web", "./web")
+	// Static file serving for docs (legacy web/ removed; v2 SPA is embedded)
 	router.Static("/docs", "./docs")
-
-	// Root route — serve the SPA. When auth is config-disabled (local
-	// docker-compose smoke, single-user dev), skip the login redirect
-	// entirely so users land on a working UI. Production deployments
-	// keep the redirect by leaving auth.enabled=true.
-	router.GET("/", func(c *gin.Context) {
-		authOn := config.GetConfig().Auth.Enabled
-		if authOn && !h.isUserAuthenticated(c) {
-			c.Redirect(302, "/auth/login")
-			return
-		}
-		c.File("./web/index.html")
-	})
 
 	// OAuth authentication routes
 	authGroup := router.Group("/auth")

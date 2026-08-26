@@ -186,46 +186,42 @@ func main() {
 	gqlHandler := graphql.NewHandler(resolver, roleGroupNames)
 	gqlHandler.RegisterRoutes(router, authMiddleware)
 
-	// v2 surface (RFC-004). Off by default; users opt in with
-	// FERN_V2_UI_ENABLED=true. See docs/specs/frontend-modernization.
-	if strings.EqualFold(os.Getenv("FERN_V2_UI_ENABLED"), "true") {
-		queryRepo := testinginfra.NewTestRunQueryRepo(db.DB)
-		// Facet aggregates over millions of suite_runs are expensive
-		// (large GROUP BYs). Cache aggressively — 5 min TTL.
-		facetCache := testingapp.NewMemoryFacetCache(5 * time.Minute)
-		// Test runs store only a project_id; the resolver batches the
-		// project_details lookup so the list and its project facet can
-		// show display names.
-		queryService := testingapp.NewTestRunQueryService(queryRepo, facetCache).
-			WithProjectNames(testinginfra.NewProjectNameRepo(db.DB))
-		savedViewRepo := testinginfra.NewGormSavedViewRepository(db.DB)
+	queryRepo := testinginfra.NewTestRunQueryRepo(db.DB)
+	// Facet aggregates over millions of suite_runs are expensive
+	// (large GROUP BYs). Cache aggressively — 5 min TTL.
+	facetCache := testingapp.NewMemoryFacetCache(5 * time.Minute)
+	// Test runs store only a project_id; the resolver batches the
+	// project_details lookup so the list and its project facet can
+	// show display names.
+	queryService := testingapp.NewTestRunQueryService(queryRepo, facetCache).
+		WithProjectNames(testinginfra.NewProjectNameRepo(db.DB))
+	savedViewRepo := testinginfra.NewGormSavedViewRepository(db.DB)
 
-		apiv2.MountV2(apiv2.MountOptions{
-			Engine:        router,
-			TestRunSvc:    queryService,
-			TrendsSvc:     testingService, // shares the TestRunService — implements AggregateDailyByProjects
-			SavedViewRepo: savedViewRepo,
-			// VitalSink left nil: the telemetry endpoint accepts and
-			// drops vitals until a Prometheus-backed sink is wired.
+	apiv2.MountV2(apiv2.MountOptions{
+		Engine:        router,
+		TestRunSvc:    queryService,
+		TrendsSvc:     testingService, // shares the TestRunService — implements AggregateDailyByProjects
+		SavedViewRepo: savedViewRepo,
+		// VitalSink left nil: the telemetry endpoint accepts and
+		// drops vitals until a Prometheus-backed sink is wired.
 
-			// Auth: when AUTH_ENABLED=true, apply the same middleware
-			// that protects /api/v1. When AUTH_ENABLED=false (local
-			// smoke), authMiddleware.RequireAuth() is a permissive
-			// passthrough that injects a synthetic "dev-admin" user,
-			// so the group is still safe to leave wired.
-			Auth: authMiddleware.RequireAuth(),
-			// Team-based authorization for the read endpoints, mirroring
-			// the v1 GraphQL rule. Without it a non-admin could read any
-			// team's runs via /api/v2/test-runs?project=<id>.
-			Scope: v2ProjectScope{
-				projects:  projectService,
-				adminName: cfg.Auth.OAuth.AdminGroupName,
-				mgrName:   cfg.Auth.OAuth.ManagerGroupName,
-				userName:  cfg.Auth.OAuth.UserGroupName,
-			},
-		})
-		logger.WithService("fern-platform").Info("v2 API surface mounted at /api/v2")
-	}
+		// Auth: when AUTH_ENABLED=true, apply the same middleware
+		// that protects /api/v1. When AUTH_ENABLED=false (local
+		// smoke), authMiddleware.RequireAuth() is a permissive
+		// passthrough that injects a synthetic "dev-admin" user,
+		// so the group is still safe to leave wired.
+		Auth: authMiddleware.RequireAuth(),
+		// Team-based authorization for the read endpoints, mirroring
+		// the v1 GraphQL rule. Without it a non-admin could read any
+		// team's runs via /api/v2/test-runs?project=<id>.
+		Scope: v2ProjectScope{
+			projects:  projectService,
+			adminName: cfg.Auth.OAuth.AdminGroupName,
+			mgrName:   cfg.Auth.OAuth.ManagerGroupName,
+			userName:  cfg.Auth.OAuth.UserGroupName,
+		},
+	})
+	logger.WithService("fern-platform").Info("v2 API surface mounted at /api/v2")
 
 	// Prometheus text exposition for scrapers. The format is
 	// version 0.0.4; PrometheusContentType matches what scrapers
@@ -240,17 +236,11 @@ func main() {
 	// above continues to work for any existing probes.
 	apiv2.RegisterHealthRoutes(router, dbPinger{db: db.DB})
 
-	// v2 SPA mounted at /v2/* (RFC-004 FR-25: legacy UI remains at /
-	// until parity is verified). Gated on the same FERN_V2_UI_ENABLED
-	// flag as the /api/v2 surface — mounting the SPA without its API
-	// produces a half-broken page where every fetch 404s, so the two
-	// must flip together.
-	if strings.EqualFold(os.Getenv("FERN_V2_UI_ENABLED"), "true") {
-		if err := web.RegisterAtPrefix(router, "/v2"); err != nil {
-			logger.WithService("fern-platform").WithError(err).Fatal("failed to mount v2 SPA")
-		}
-		logger.WithService("fern-platform").Info("v2 SPA mounted at /v2/")
+	// v2 SPA mounted at / (RFC-004 GA: v2 is now the default UI).
+	if err := web.Register(router); err != nil {
+		logger.WithService("fern-platform").WithError(err).Fatal("failed to mount v2 SPA")
 	}
+	logger.WithService("fern-platform").Info("v2 SPA mounted at /")
 
 	// /favicon.ico — every browser requests this even when the page
 	// sets a data-URI link. Serving an inline 🌿 SVG silences the

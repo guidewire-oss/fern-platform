@@ -25,7 +25,7 @@ Think of it as a specialized analytics platform for your tests - like Datadog or
 - **Interactive Visualizations** - Treemap view shows test suite health at a glance
 - **Team-Based Access Control** - OAuth/SSO with role-based permissions
 - **Rich Querying** - GraphQL API for complex test data analysis
-- **v2 SPA** - Modern React frontend with filtering, saved views, and treemap drill-down (opt-in, served at `/v2`)
+- **v2 SPA** - Modern React frontend with filtering, saved views, and treemap drill-down (served at `/`)
 
 ## Quick Start
 
@@ -95,8 +95,7 @@ make deploy-all
 
 | URL | Description |
 |-----|-------------|
-| `http://fern-platform.local:8080/v2` | v2 SPA (modern React frontend) |
-| `http://fern-platform.local:8080` | v1 classic frontend |
+| `http://fern-platform.local:8080` | v2 SPA (modern React frontend) |
 
 **Default credentials**: `admin@fern.com` / `test123`
 
@@ -242,31 +241,20 @@ graph TD
     Domains --- Storage
 ```
 
-## v2 SPA Frontend
+## Frontend (v2 SPA)
 
-Fern Platform ships a modern React SPA alongside the classic server-rendered UI. Both are served from the same binary — the v2 frontend is opt-in so existing deployments are unaffected.
-
-### Enabling v2
-
-The v2 frontend is **off by default**. Set the environment variable to opt in:
-
-```bash
-FERN_V2_UI_ENABLED=true
-```
-
-For Kubernetes deployments, edit `deployments/fern-platform-kubevela.yaml` and set the value to `"true"`. For Docker Compose, add it to your `config.local.yaml` or pass it via the environment.
+Fern Platform serves a React SPA embedded in the Go binary. It is the default UI at `/`.
 
 ### URL layout
 
 | Path | Serves |
 |------|--------|
-| `/v2` | v2 SPA (index.html + assets) |
-| `/v2/*` | Client-side routes (React Router handles them) |
-| `/api/v2/*` | REST endpoints used exclusively by the v2 SPA |
-| `/` | v1 classic frontend (unchanged) |
-| `/api/v1/*` | Legacy GraphQL + REST (unchanged) |
+| `/` | v2 SPA (index.html + assets) |
+| `/*` | Client-side routes (React Router handles them) |
+| `/api/v2/*` | REST endpoints used by the SPA |
+| `/api/v1/*` | Legacy GraphQL + REST |
 
-### v2 feature highlights
+### Feature highlights
 
 - **Filtered test-run list** — server-side filtering by status, branch, tag, and date with keyset pagination
 - **Saved views** — bookmark filter combinations per page (stored per user)
@@ -274,11 +262,16 @@ For Kubernetes deployments, edit `deployments/fern-platform-kubevela.yaml` and s
 - **Dark mode** — persisted per-user via profile settings
 - **JIRA coverage** — link spec runs to JIRA issues and visualize coverage hierarchy
 
-### Building the v2 SPA locally
+### Building the frontend locally
+
+The built assets (`internal/web/dist/`) are **not committed to git**. Run `make web-stage` before `go build`, or use the Docker build which handles this automatically.
 
 ```bash
-# Install dependencies and build (outputs to internal/web/dist/)
-make web-v2-build
+# Install dependencies, build, and stage into internal/web/dist/
+make web-build
+
+# Then build the Go binary
+go build ./cmd/fern-platform
 
 # Run the dev server with hot-reload (proxies API calls to a running backend)
 cd web-v2 && pnpm dev

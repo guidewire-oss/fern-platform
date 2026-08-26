@@ -844,10 +844,7 @@ spec:
           #   kubectl create secret generic fern-platform-secrets \
           #     --from-literal=JIRA_ENCRYPTION_KEY=$(openssl rand -base64 32)
           - name: JIRA_ENCRYPTION_KEY
-            valueFrom:
-              secretKeyRef:
-                name: fern-platform-secrets
-                key: JIRA_ENCRYPTION_KEY
+            value: p5kHPJF+2/FJ6YYOJNOcD+McVd4m+5sO3rt2CuYOZvY=
 
           # Admin User and Group Configuration
           - name: OAUTH_ADMIN_USERS
