@@ -1,2 +1,0 @@
-import{p as e,i as r}from"./index-GNsoRvIO.js";function c({value:t,label:n,className:s}){return n?e.jsxs("span",{className:r("flex min-w-0 flex-col",s),children:[e.jsx("span",{className:"truncate",title:n,children:n}),e.jsx("span",{className:"truncate font-mono text-[11px] text-muted",title:t,children:t})]}):e.jsx("span",{className:r("truncate",s),title:t,children:t})}export{c as L};
-//# sourceMappingURL=LabeledValue-BCoS5e4_.js.map
