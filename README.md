@@ -194,12 +194,13 @@ module.exports = {
 
 ```gradle
 plugins {
-  id 'com.guidewire.fern' version '1.0.0'
+  id("io.github.guidewire-oss.fern-publisher") version "1.1.0"
 }
 
-fern {
-  url = System.getenv('FERN_URL')
-  projectId = System.getenv('FERN_PROJECT_ID')
+fernPublisher {
+  fernUrl.set("https://your-fern-instance.example.com")
+  projectId.set("6ba7b812-9dad-11d1-80b4-00c04fd430c8")
+  projectName.set("my-project")
 }
 ```
 
