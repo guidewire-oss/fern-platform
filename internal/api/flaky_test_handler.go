@@ -20,8 +20,9 @@ func parseFlakyTestID(c *gin.Context) (uint, bool) {
 		return 0, false
 	}
 
-	id, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil || id == 0 {
+	// 63 bits, not 64: the column is BIGSERIAL
+	id, err := strconv.ParseUint(raw, 10, 63)
+	if err != nil || id == 0 || uint64(uint(id)) != id {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID must be a positive integer"})
 		return 0, false
 	}

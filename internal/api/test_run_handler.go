@@ -22,6 +22,7 @@ import (
 
 // analysisTimeout bounds a single background analysis.
 const analysisTimeout = 2 * time.Minute
+const maxConcurrentAnalyses = 4
 
 // flakyAnalyzer is the part of flaky detection the ingest path needs; an
 // interface so tests can stub it.
@@ -36,6 +37,7 @@ type TestRunHandler struct {
 	tagService     *tagsApp.TagService
 	projectService *projectsApp.ProjectService
 	flakyAnalyzer  flakyAnalyzer
+	analysisSlots  chan struct{}
 }
 
 // NewTestRunHandler creates a new test run handler
@@ -44,6 +46,7 @@ func NewTestRunHandler(testingService *application.TestRunService, projectServic
 		BaseHandler:    NewBaseHandler(logger),
 		testingService: testingService,
 		projectService: projectService,
+		analysisSlots:  make(chan struct{}, maxConcurrentAnalyses),
 	}
 }
 
@@ -65,11 +68,24 @@ func (h *TestRunHandler) triggerFlakyAnalysis(c *gin.Context, projectID, runID s
 		return
 	}
 
+	// Take a slot without waiting. Each analysis covers the whole project
+	// window, so the next ingest subsumes one that was skipped here.
+	select {
+	case h.analysisSlots <- struct{}{}:
+	default:
+		h.logger.WithFields(map[string]interface{}{
+			"projectID": projectID,
+			"runID":     runID,
+		}).Info("Flaky analysis skipped: too many already running")
+		return
+	}
+
 	// The request context dies with the response, which would kill the
 	// analysis mid-flight.
 	parent := context.WithoutCancel(c.Request.Context())
 
 	go func() {
+		defer func() { <-h.analysisSlots }()
 		defer func() {
 			// Gin's recovery only covers the request goroutine.
 			if r := recover(); r != nil {

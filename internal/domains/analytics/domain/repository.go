@@ -15,7 +15,9 @@ type FlakyDetectionRepository interface {
 	SaveFlakyTest(ctx context.Context, flaky *FlakyTest) error
 
 	// GetFlakyTestByName looks up by natural key: flaky_tests has no test_id.
-	GetFlakyTestByName(ctx context.Context, projectID string, testName string) (*FlakyTest, error)
+	// All three columns, because the unique key is
+	// (project_id, test_name, suite_name) and a name can repeat across suites.
+	GetFlakyTestByName(ctx context.Context, projectID string, testName string, suiteName string) (*FlakyTest, error)
 
 	// Find flaky tests for a project
 	FindFlakyTestsByProject(ctx context.Context, projectID string, status FlakyTestStatus) ([]*FlakyTest, error)

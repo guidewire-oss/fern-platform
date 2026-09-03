@@ -144,7 +144,7 @@ func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID strin
 	testID := domain.BuildTestID(projectID, testName)
 
 	// Only a clean not-found means absent; anything else is a real failure.
-	existingFlaky, err := s.repo.GetFlakyTestByName(ctx, projectID, testName)
+	existingFlaky, err := s.repo.GetFlakyTestByName(ctx, projectID, testName, suiteName)
 	if err != nil && !errors.Is(err, domain.ErrFlakyTestNotFound) {
 		return nil, fmt.Errorf("failed to get existing flaky test: %w", err)
 	}

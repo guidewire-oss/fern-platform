@@ -61,10 +61,10 @@ func (r *GormFlakyDetectionRepository) SaveFlakyTest(ctx context.Context, flaky 
 }
 
 // GetFlakyTestByName retrieves a flaky test by its natural key.
-func (r *GormFlakyDetectionRepository) GetFlakyTestByName(ctx context.Context, projectID string, testName string) (*domain.FlakyTest, error) {
+func (r *GormFlakyDetectionRepository) GetFlakyTestByName(ctx context.Context, projectID string, testName string, suiteName string) (*domain.FlakyTest, error) {
 	var dbFlaky database.FlakyTest
 	if err := r.db.WithContext(ctx).
-		Where("project_id = ? AND test_name = ?", projectID, testName).
+		Where("project_id = ? AND test_name = ? AND suite_name = ?", projectID, testName, suiteName).
 		First(&dbFlaky).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrFlakyTestNotFound

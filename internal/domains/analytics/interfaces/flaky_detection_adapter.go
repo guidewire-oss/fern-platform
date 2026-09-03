@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -16,6 +17,19 @@ import (
 type FlakyDetectionAdapter struct {
 	service *application.FlakyDetectionService
 	logger  *logging.Logger
+}
+
+// errInvalidRowID rejects a path parameter that is not a usable row ID.
+var errInvalidRowID = errors.New("invalid flaky test row ID")
+
+// parseFlakyTestRowID parses a path parameter into a row ID. 63 bits, not 64:
+// the column is BIGSERIAL
+func parseFlakyTestRowID(raw string) (uint, error) {
+	id, err := strconv.ParseUint(raw, 10, 63)
+	if err != nil || id == 0 || uint64(uint(id)) != id {
+		return 0, errInvalidRowID
+	}
+	return uint(id), nil
 }
 
 // NewFlakyDetectionAdapter creates a new flaky detection adapter
@@ -76,13 +90,17 @@ func (a *FlakyDetectionAdapter) GetFlakyTests() gin.HandlerFunc {
 // MarkTestResolved handles PUT /api/v1/flaky-tests/:testId/resolve
 func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := strconv.ParseUint(c.Param("testId"), 10, 64)
-		if err != nil || id == 0 {
+		id, err := parseFlakyTestRowID(c.Param("testId"))
+		if err != nil {
 			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return
 		}
 
-		if err := a.service.MarkTestResolved(c.Request.Context(), uint(id)); err != nil {
+		if err := a.service.MarkTestResolved(c.Request.Context(), id); err != nil {
+			if errors.Is(err, domain.ErrFlakyTestNotFound) {
+				c.JSON(404, gin.H{"error": "Flaky test not found"})
+				return
+			}
 			a.logger.WithError(err).Error("Failed to mark test as resolved")
 			c.JSON(500, gin.H{"error": "Failed to mark test as resolved"})
 			return
@@ -97,13 +115,17 @@ func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 // IgnoreTest handles PUT /api/v1/flaky-tests/:testId/ignore
 func (a *FlakyDetectionAdapter) IgnoreTest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := strconv.ParseUint(c.Param("testId"), 10, 64)
-		if err != nil || id == 0 {
+		id, err := parseFlakyTestRowID(c.Param("testId"))
+		if err != nil {
 			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return
 		}
 
-		if err := a.service.IgnoreTest(c.Request.Context(), uint(id)); err != nil {
+		if err := a.service.IgnoreTest(c.Request.Context(), id); err != nil {
+			if errors.Is(err, domain.ErrFlakyTestNotFound) {
+				c.JSON(404, gin.H{"error": "Flaky test not found"})
+				return
+			}
 			a.logger.WithError(err).Error("Failed to ignore test")
 			c.JSON(500, gin.H{"error": "Failed to ignore test"})
 			return

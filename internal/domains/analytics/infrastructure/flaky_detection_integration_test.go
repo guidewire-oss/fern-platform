@@ -2,8 +2,10 @@ package infrastructure_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,13 +33,23 @@ const (
 	stableSpecName = "stable_spec"
 )
 
+// dbSeq names each test's in-memory database uniquely.
+var dbSeq atomic.Uint64
+
 func newFlakyTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
+	dsn := fmt.Sprintf("file:flaky-%d?mode=memory&cache=shared", dbSeq.Add(1))
+
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 
 	require.NoError(t, db.AutoMigrate(
 		&database.TestRun{},
@@ -45,11 +57,6 @@ func newFlakyTestDB(t *testing.T) *gorm.DB {
 		&database.SpecRun{},
 		&database.FlakyTest{},
 	))
-
-	// The shared in-memory DB outlives one test, so clear it.
-	for _, tbl := range []string{"spec_runs", "suite_runs", "test_runs", "flaky_tests"} {
-		require.NoError(t, db.Exec("DELETE FROM "+tbl).Error)
-	}
 
 	return db
 }
