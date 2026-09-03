@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	analyticsDomain "github.com/guidewire-oss/fern-platform/internal/domains/analytics/domain"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
@@ -23,6 +24,35 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
+
+// analyzeCall records one background AnalyzeTestRun call and its context state.
+type analyzeCall struct {
+	projectID string
+	runID     string
+	ctxErr    error
+}
+
+// stubFlakyAnalyzer makes the ingest path's background analysis observable.
+type stubFlakyAnalyzer struct {
+	called chan analyzeCall
+	err    error
+	panics bool
+}
+
+func newStubFlakyAnalyzer() *stubFlakyAnalyzer {
+	return &stubFlakyAnalyzer{called: make(chan analyzeCall, 1)}
+}
+
+func (s *stubFlakyAnalyzer) AnalyzeTestRun(ctx context.Context, projectID string, testRunID string) (*analyticsDomain.TestRunAnalysis, error) {
+	// Record before panicking so the call is still observable.
+	s.called <- analyzeCall{projectID: projectID, runID: testRunID, ctxErr: ctx.Err()}
+
+	if s.panics {
+		panic("analysis panicked")
+	}
+
+	return nil, s.err
+}
 
 // MockTestRunRepository provides a mock implementation of TestRunRepository
 type MockTestRunRepository struct {
@@ -1564,6 +1594,63 @@ var _ = Describe("TestRunHandler", func() {
 				Expect(w.Code).To(Equal(http.StatusCreated))
 			})
 
+			// ingestOneRun posts a minimal run with the analyzer wired in.
+			ingestOneRun := func(analyzer *stubFlakyAnalyzer) *httptest.ResponseRecorder {
+				handler.SetFlakyDetectionService(analyzer)
+
+				req := TestRunRequest{
+					TestProjectID: "project-123",
+					SuiteRuns: []SuiteRun{
+						{SuiteName: "Suite 1", SpecRuns: []SpecRun{{SpecDescription: "Spec 1", Status: "passed"}}},
+					},
+				}
+				jsonBody, _ := json.Marshal(req)
+
+				testRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+				testRunRepo.On("GetByRunID", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
+				suiteRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+				specRunRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+
+				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs", bytes.NewBuffer(jsonBody))
+				httpReq.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+				publicRouter.ServeHTTP(w, httpReq)
+
+				return w
+			}
+
+			It("should trigger flaky analysis after a successful ingest", func() {
+				analyzer := newStubFlakyAnalyzer()
+
+				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
+
+				// Analysis is in the background, so wait for it.
+				var call analyzeCall
+				Eventually(analyzer.called, "2s").Should(Receive(&call))
+				Expect(call.projectID).To(Equal("project-123"))
+
+				// Its context must outlive the request's.
+				Expect(call.ctxErr).To(BeNil())
+			})
+
+			It("should still succeed when flaky analysis fails", func() {
+				analyzer := newStubFlakyAnalyzer()
+				analyzer.err = errors.New("analysis exploded")
+
+				// Ingest is unaffected by the failure.
+				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
+				Eventually(analyzer.called, "2s").Should(Receive())
+			})
+
+			It("should survive a panic inside flaky analysis", func() {
+				analyzer := newStubFlakyAnalyzer()
+				analyzer.panics = true
+
+				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
+				Eventually(analyzer.called, "2s").Should(Receive())
+				// Reaching here at all means the panic was recovered.
+			})
+
 			It("should return bad request for empty body", func() {
 				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs", nil)
 				httpReq.Header.Set("Content-Type", "application/json")
@@ -1665,6 +1752,30 @@ var _ = Describe("TestRunHandler", func() {
 		})
 
 		Describe("completeTestRun", func() {
+			It("should trigger flaky analysis when a streamed run is completed", func() {
+				analyzer := newStubFlakyAnalyzer()
+				handler.SetFlakyDetectionService(analyzer)
+
+				existing := &domain.TestRun{ID: 7, RunID: "run-123", ProjectID: "project-123"}
+				testRunRepo.On("GetByRunID", mock.Anything, "run-123").Return(existing, nil).Once()
+				testRunRepo.On("GetByID", mock.Anything, uint(7)).Return(existing, nil).Once()
+				suiteRunRepo.On("FindByTestRunID", mock.Anything, uint(7)).Return([]*domain.SuiteRun{}, nil).Once()
+				testRunRepo.On("Update", mock.Anything, mock.Anything).Return(nil).Once()
+
+				jsonBody, _ := json.Marshal(map[string]interface{}{"runId": "run-123", "status": "passed"})
+				httpReq := httptest.NewRequest("POST", "/api/v1/test-runs/complete", bytes.NewBuffer(jsonBody))
+				httpReq.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+				publicRouter.ServeHTTP(w, httpReq)
+
+				Expect(w.Code).To(Equal(http.StatusOK))
+
+				var call analyzeCall
+				Eventually(analyzer.called, "2s").Should(Receive(&call))
+				Expect(call.projectID).To(Equal("project-123"))
+				Expect(call.runID).To(Equal("run-123"))
+			})
+
 			It("should return not found for nonexistent run", func() {
 				req := map[string]interface{}{
 					"runId":  "nonexistent",

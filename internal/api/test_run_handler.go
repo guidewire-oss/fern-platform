@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	analyticsDomain "github.com/guidewire-oss/fern-platform/internal/domains/analytics/domain"
 	projectsApp "github.com/guidewire-oss/fern-platform/internal/domains/projects/application"
 	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
@@ -18,12 +20,22 @@ import (
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
+// analysisTimeout bounds a single background analysis.
+const analysisTimeout = 2 * time.Minute
+
+// flakyAnalyzer is the part of flaky detection the ingest path needs; an
+// interface so tests can stub it.
+type flakyAnalyzer interface {
+	AnalyzeTestRun(ctx context.Context, projectID string, testRunID string) (*analyticsDomain.TestRunAnalysis, error)
+}
+
 // TestRunHandler handles test run related endpoints
 type TestRunHandler struct {
 	*BaseHandler
 	testingService *application.TestRunService
 	tagService     *tagsApp.TagService
 	projectService *projectsApp.ProjectService
+	flakyAnalyzer  flakyAnalyzer
 }
 
 // NewTestRunHandler creates a new test run handler
@@ -38,6 +50,47 @@ func NewTestRunHandler(testingService *application.TestRunService, projectServic
 // SetTagService sets the tag service for public endpoints that need tag processing
 func (h *TestRunHandler) SetTagService(tagService *tagsApp.TagService) {
 	h.tagService = tagService
+}
+
+// SetFlakyDetectionService enables detection after ingest. Optional: with no
+// analyzer, ingest behaves as before.
+func (h *TestRunHandler) SetFlakyDetectionService(svc flakyAnalyzer) {
+	h.flakyAnalyzer = svc
+}
+
+// triggerFlakyAnalysis runs detection in the background. It never blocks the
+// caller and never fails the request.
+func (h *TestRunHandler) triggerFlakyAnalysis(c *gin.Context, projectID, runID string) {
+	if h.flakyAnalyzer == nil || projectID == "" {
+		return
+	}
+
+	// The request context dies with the response, which would kill the
+	// analysis mid-flight.
+	parent := context.WithoutCancel(c.Request.Context())
+
+	go func() {
+		defer func() {
+			// Gin's recovery only covers the request goroutine.
+			if r := recover(); r != nil {
+				h.logger.WithFields(map[string]interface{}{
+					"projectID": projectID,
+					"panic":     r,
+				}).Error("Flaky analysis panicked")
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(parent, analysisTimeout)
+		defer cancel()
+
+		if _, err := h.flakyAnalyzer.AnalyzeTestRun(ctx, projectID, runID); err != nil {
+			// Ingest already succeeded; log and move on.
+			h.logger.WithError(err).WithFields(map[string]interface{}{
+				"projectID": projectID,
+				"runID":     runID,
+			}).Error("Flaky analysis failed")
+		}
+	}()
 }
 
 // createTestRun handles POST /api/v1/admin/test-runs
@@ -613,6 +666,7 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 
 		// If it was newly created (not a duplicate), return immediately
 		if !alreadyExisted {
+			h.triggerFlakyAnalysis(c, testRun.ProjectID, testRun.RunID)
 			response := ConvertDomainTestRunToAPI(testRun)
 			c.JSON(http.StatusCreated, response)
 			return
@@ -661,6 +715,8 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 			return
 		}
 	}
+
+	h.triggerFlakyAnalysis(c, testRun.ProjectID, testRun.RunID)
 
 	response := ConvertDomainTestRunToAPI(testRun)
 	c.JSON(http.StatusCreated, response)
@@ -747,6 +803,9 @@ func (h *TestRunHandler) completeTestRun(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// The streaming ingest flow finishes here, not at recordTestRun.
+	h.triggerFlakyAnalysis(c, testRun.ProjectID, testRun.RunID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Test run completed successfully"})
 }

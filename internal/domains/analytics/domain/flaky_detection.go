@@ -1,11 +1,19 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 )
 
+// BuildTestID is shared so the detector and the repository agree on the ID.
+func BuildTestID(projectID, testName string) string {
+	return fmt.Sprintf("%s:%s", projectID, testName)
+}
+
 // FlakyTest represents a test that has been identified as flaky
 type FlakyTest struct {
+	// ID is the row identifier resolve/ignore use; zero until saved.
+	ID           uint
 	TestID       string
 	ProjectID    string
 	TestName     string

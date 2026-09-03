@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -71,14 +72,14 @@ func (s *FlakyDetectionService) GetFlakyTests(ctx context.Context, projectID str
 	return s.repo.FindFlakyTestsByProject(ctx, projectID, domain.StatusActive)
 }
 
-// MarkTestResolved marks a flaky test as resolved
-func (s *FlakyDetectionService) MarkTestResolved(ctx context.Context, testID string) error {
-	return s.repo.UpdateFlakyTestStatus(ctx, testID, domain.StatusResolved)
+// MarkTestResolved marks a flaky test as resolved, by row ID.
+func (s *FlakyDetectionService) MarkTestResolved(ctx context.Context, id uint) error {
+	return s.repo.UpdateFlakyTestStatus(ctx, id, domain.StatusResolved)
 }
 
-// IgnoreTest marks a flaky test as ignored
-func (s *FlakyDetectionService) IgnoreTest(ctx context.Context, testID string) error {
-	return s.repo.UpdateFlakyTestStatus(ctx, testID, domain.StatusIgnored)
+// IgnoreTest marks a flaky test as ignored, by row ID.
+func (s *FlakyDetectionService) IgnoreTest(ctx context.Context, id uint) error {
+	return s.repo.UpdateFlakyTestStatus(ctx, id, domain.StatusIgnored)
 }
 
 // Internal types and methods
@@ -140,11 +141,11 @@ func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID strin
 	}
 
 	failureRate := float64(failureCount) / float64(len(history))
-	testID := generateTestID(projectID, testName)
+	testID := domain.BuildTestID(projectID, testName)
 
-	// Check if test is already tracked
-	existingFlaky, err := s.repo.GetFlakyTest(ctx, testID)
-	if err != nil && err.Error() != "flaky test not found" {
+	// Only a clean not-found means absent; anything else is a real failure.
+	existingFlaky, err := s.repo.GetFlakyTestByName(ctx, projectID, testName)
+	if err != nil && !errors.Is(err, domain.ErrFlakyTestNotFound) {
 		return nil, fmt.Errorf("failed to get existing flaky test: %w", err)
 	}
 
@@ -236,10 +237,6 @@ func (s *FlakyDetectionService) calculateFlakeScore(failureRate float64, totalRu
 
 func (s *FlakyDetectionService) getUniqueTestNames(ctx context.Context, projectID string, since time.Time) ([]string, error) {
 	return s.repo.GetUniqueTestNames(ctx, projectID, since)
-}
-
-func generateTestID(projectID, testName string) string {
-	return fmt.Sprintf("%s_%s", projectID, testName)
 }
 
 // GetFlakyTestTrends returns trend data for flaky tests over time

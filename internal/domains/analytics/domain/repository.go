@@ -2,22 +2,26 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrFlakyTestNotFound tells an absent record apart from a real failure.
+var ErrFlakyTestNotFound = errors.New("flaky test not found")
 
 // FlakyDetectionRepository defines the interface for flaky test persistence
 type FlakyDetectionRepository interface {
 	// Save or update a flaky test record
 	SaveFlakyTest(ctx context.Context, flaky *FlakyTest) error
 
-	// Get a flaky test by ID
-	GetFlakyTest(ctx context.Context, testID string) (*FlakyTest, error)
+	// GetFlakyTestByName looks up by natural key: flaky_tests has no test_id.
+	GetFlakyTestByName(ctx context.Context, projectID string, testName string) (*FlakyTest, error)
 
 	// Find flaky tests for a project
 	FindFlakyTestsByProject(ctx context.Context, projectID string, status FlakyTestStatus) ([]*FlakyTest, error)
 
-	// Update flaky test status
-	UpdateFlakyTestStatus(ctx context.Context, testID string, status FlakyTestStatus) error
+	// UpdateFlakyTestStatus updates one record by its row ID.
+	UpdateFlakyTestStatus(ctx context.Context, id uint, status FlakyTestStatus) error
 
 	// Record a test run analysis
 	SaveTestRunAnalysis(ctx context.Context, analysis *TestRunAnalysis) error
