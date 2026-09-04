@@ -4,7 +4,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
@@ -20,14 +19,13 @@ func parseFlakyTestID(c *gin.Context) (uint, bool) {
 		return 0, false
 	}
 
-	// 63 bits, not 64: the column is BIGSERIAL
-	id, err := strconv.ParseUint(raw, 10, 63)
-	if err != nil || id == 0 || uint64(uint(id)) != id {
+	id, err := analyticsDomain.ParseFlakyTestRowID(raw)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID must be a positive integer"})
 		return 0, false
 	}
 
-	return uint(id), true
+	return id, true
 }
 
 // FlakyTestHandler handles flaky test related endpoints
@@ -115,4 +113,3 @@ func (h *FlakyTestHandler) RegisterRoutes(userGroup *gin.RouterGroup) {
 	userGroup.POST("/flaky-tests/:id/resolve", h.resolveFlakyTest)
 	userGroup.POST("/flaky-tests/:id/ignore", h.ignoreFlakyTest)
 }
-

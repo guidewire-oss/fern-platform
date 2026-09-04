@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -36,18 +37,19 @@ type analyzeCall struct {
 type stubFlakyAnalyzer struct {
 	called chan analyzeCall
 	err    error
-	panics bool
+	panicOnCall int32
+	calls       atomic.Int32
 }
 
 func newStubFlakyAnalyzer() *stubFlakyAnalyzer {
-	return &stubFlakyAnalyzer{called: make(chan analyzeCall, 1)}
+	return &stubFlakyAnalyzer{called: make(chan analyzeCall, 4)}
 }
 
 func (s *stubFlakyAnalyzer) AnalyzeTestRun(ctx context.Context, projectID string, testRunID string) (*analyticsDomain.TestRunAnalysis, error) {
 	// Record before panicking so the call is still observable.
 	s.called <- analyzeCall{projectID: projectID, runID: testRunID, ctxErr: ctx.Err()}
 
-	if s.panics {
+	if n := s.calls.Add(1); s.panicOnCall != 0 && n == s.panicOnCall {
 		panic("analysis panicked")
 	}
 
@@ -1644,11 +1646,22 @@ var _ = Describe("TestRunHandler", func() {
 
 			It("should survive a panic inside flaky analysis", func() {
 				analyzer := newStubFlakyAnalyzer()
-				analyzer.panics = true
+				analyzer.panicOnCall = 1
 
 				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
 				Eventually(analyzer.called, "2s").Should(Receive())
 				// Reaching here at all means the panic was recovered.
+			})
+
+			It("should still analyse a later run after one panicked", func() {
+				analyzer := newStubFlakyAnalyzer()
+				analyzer.panicOnCall = 1
+
+				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
+				Eventually(analyzer.called, "2s").Should(Receive())
+
+				Expect(ingestOneRun(analyzer).Code).To(Equal(http.StatusCreated))
+				Eventually(analyzer.called, "2s").Should(Receive())
 			})
 
 			It("should return bad request for empty body", func() {

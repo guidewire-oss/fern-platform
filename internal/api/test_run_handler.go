@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,65 @@ import (
 
 // analysisTimeout bounds a single background analysis.
 const analysisTimeout = 2 * time.Minute
+
+// maxConcurrentAnalyses caps the analyses running at once. Each one scans the
+// project's whole window, so a goroutine per ingest could saturate the database
+// under sustained load, which is the throughput this is meant to protect.
+// Analyses over the cap wait for a slot rather than being dropped.
 const maxConcurrentAnalyses = 4
+
+// analysisQueue serialises analysis per project and remembers at most one
+// follow-up run per project.
+//
+// Coalescing rather than a queue because an analysis covers the project's whole
+// window: replaying every run that landed while one was working would repeat
+// the same work, and keeping only the newest still accounts for all of them.
+// Unlike dropping the trigger, it guarantees the most recent ingest is analysed
+// even if ingestion then stops.
+type analysisQueue struct {
+	mu      sync.Mutex
+	running map[string]bool
+	pending map[string]string // projectID -> run awaiting analysis
+}
+
+func newAnalysisQueue() *analysisQueue {
+	return &analysisQueue{
+		running: make(map[string]bool),
+		pending: make(map[string]string),
+	}
+}
+
+// claim reports whether the caller should start a worker for this project.
+// When one is already running it records the run as pending instead.
+func (q *analysisQueue) claim(projectID, runID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.running[projectID] {
+		q.pending[projectID] = runID
+		return false
+	}
+
+	q.running[projectID] = true
+	return true
+}
+
+// next hands back the pending run for a project, keeping it marked running.
+// With nothing pending it clears the flag, which is what lets a later ingest
+// start a fresh worker. A worker must reach this on every exit path, panic
+// included, or the project is never analysed again.
+func (q *analysisQueue) next(projectID string) (string, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if runID, ok := q.pending[projectID]; ok {
+		delete(q.pending, projectID)
+		return runID, true
+	}
+
+	delete(q.running, projectID)
+	return "", false
+}
 
 // flakyAnalyzer is the part of flaky detection the ingest path needs; an
 // interface so tests can stub it.
@@ -38,6 +97,7 @@ type TestRunHandler struct {
 	projectService *projectsApp.ProjectService
 	flakyAnalyzer  flakyAnalyzer
 	analysisSlots  chan struct{}
+	analysisQueue  *analysisQueue
 }
 
 // NewTestRunHandler creates a new test run handler
@@ -47,6 +107,7 @@ func NewTestRunHandler(testingService *application.TestRunService, projectServic
 		testingService: testingService,
 		projectService: projectService,
 		analysisSlots:  make(chan struct{}, maxConcurrentAnalyses),
+		analysisQueue:  newAnalysisQueue(),
 	}
 }
 
@@ -68,15 +129,14 @@ func (h *TestRunHandler) triggerFlakyAnalysis(c *gin.Context, projectID, runID s
 		return
 	}
 
-	// Take a slot without waiting. Each analysis covers the whole project
-	// window, so the next ingest subsumes one that was skipped here.
-	select {
-	case h.analysisSlots <- struct{}{}:
-	default:
+	// One analysis per project at a time. A run arriving while one is working
+	// is held as the project's pending run and picked up on the way out, so
+	// nothing is lost even if this is the last ingest.
+	if !h.analysisQueue.claim(projectID, runID) {
 		h.logger.WithFields(map[string]interface{}{
 			"projectID": projectID,
 			"runID":     runID,
-		}).Info("Flaky analysis skipped: too many already running")
+		}).Info("Flaky analysis coalesced into the run already in progress")
 		return
 	}
 
@@ -85,28 +145,47 @@ func (h *TestRunHandler) triggerFlakyAnalysis(c *gin.Context, projectID, runID s
 	parent := context.WithoutCancel(c.Request.Context())
 
 	go func() {
-		defer func() { <-h.analysisSlots }()
-		defer func() {
-			// Gin's recovery only covers the request goroutine.
-			if r := recover(); r != nil {
-				h.logger.WithFields(map[string]interface{}{
-					"projectID": projectID,
-					"panic":     r,
-				}).Error("Flaky analysis panicked")
+		for current := runID; ; {
+			h.runFlakyAnalysis(parent, projectID, current)
+
+			next, ok := h.analysisQueue.next(projectID)
+			if !ok {
+				return
 			}
-		}()
-
-		ctx, cancel := context.WithTimeout(parent, analysisTimeout)
-		defer cancel()
-
-		if _, err := h.flakyAnalyzer.AnalyzeTestRun(ctx, projectID, runID); err != nil {
-			// Ingest already succeeded; log and move on.
-			h.logger.WithError(err).WithFields(map[string]interface{}{
-				"projectID": projectID,
-				"runID":     runID,
-			}).Error("Flaky analysis failed")
+			current = next
 		}
 	}()
+}
+
+// runFlakyAnalysis performs one analysis. It recovers its own panics so that
+// the caller's loop always reaches analysisQueue.next: leaving a project marked
+// as running would stop it from ever being analysed again.
+func (h *TestRunHandler) runFlakyAnalysis(parent context.Context, projectID, runID string) {
+	defer func() {
+		// Gin's recovery only covers the request goroutine.
+		if r := recover(); r != nil {
+			h.logger.WithFields(map[string]interface{}{
+				"projectID": projectID,
+				"panic":     r,
+			}).Error("Flaky analysis panicked")
+		}
+	}()
+
+	// Wait for a slot before starting the clock, so time spent queueing does
+	// not come out of the analysis's own budget.
+	h.analysisSlots <- struct{}{}
+	defer func() { <-h.analysisSlots }()
+
+	ctx, cancel := context.WithTimeout(parent, analysisTimeout)
+	defer cancel()
+
+	if _, err := h.flakyAnalyzer.AnalyzeTestRun(ctx, projectID, runID); err != nil {
+		// Ingest already succeeded; log and move on.
+		h.logger.WithError(err).WithFields(map[string]interface{}{
+			"projectID": projectID,
+			"runID":     runID,
+		}).Error("Flaky analysis failed")
+	}
 }
 
 // createTestRun handles POST /api/v1/admin/test-runs

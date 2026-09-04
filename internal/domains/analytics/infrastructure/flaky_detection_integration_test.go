@@ -29,6 +29,7 @@ import (
 
 const (
 	flakyProjectID = "proj-flaky-integration"
+	flakySuiteName = "example suite"
 	flakySpecName  = "flaky_spec"
 	stableSpecName = "stable_spec"
 )
@@ -91,7 +92,7 @@ func seedFlakyHistory(t *testing.T, db *gorm.DB) {
 
 		suite := database.SuiteRun{
 			TestRunID: run.ID,
-			SuiteName: "example suite",
+			SuiteName: flakySuiteName,
 			Status:    "completed",
 			StartTime: createdAt,
 		}
@@ -145,7 +146,7 @@ func TestAnalyzeTestRun_DetectsFlakySpec(t *testing.T) {
 
 	// Both spec names are in the window, but only one is flaky.
 	assert.Equal(t, 2, analysis.TotalTests)
-	assert.Equal(t, []string{domain.BuildTestID(flakyProjectID, flakySpecName)}, analysis.NewFlaky)
+	assert.Equal(t, []string{domain.BuildTestID(flakyProjectID, flakySuiteName, flakySpecName)}, analysis.NewFlaky)
 
 	flaky, err := svc.GetFlakyTests(ctx, flakyProjectID)
 	require.NoError(t, err)

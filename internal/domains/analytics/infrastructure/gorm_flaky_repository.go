@@ -64,7 +64,10 @@ func (r *GormFlakyDetectionRepository) SaveFlakyTest(ctx context.Context, flaky 
 func (r *GormFlakyDetectionRepository) GetFlakyTestByName(ctx context.Context, projectID string, testName string, suiteName string) (*domain.FlakyTest, error) {
 	var dbFlaky database.FlakyTest
 	if err := r.db.WithContext(ctx).
-		Where("project_id = ? AND test_name = ? AND suite_name = ?", projectID, testName, suiteName).
+		// COALESCE because suite_name is nullable: an older row stored as NULL
+		// would miss a plain equality against the empty string analysis
+		// supplies, and the insert that followed would duplicate it.
+		Where("project_id = ? AND test_name = ? AND COALESCE(suite_name, '') = ?", projectID, testName, suiteName).
 		First(&dbFlaky).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrFlakyTestNotFound
@@ -127,7 +130,7 @@ func (r *GormFlakyDetectionRepository) SaveTestRunAnalysis(ctx context.Context, 
 }
 
 // GetTestRunHistory retrieves test execution history for a specific test
-func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, projectID string, testName string, since time.Time) ([]domain.TestExecutionResult, error) {
+func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, projectID string, testName string, suiteName string, since time.Time) ([]domain.TestExecutionResult, error) {
 	// Use a raw query to get all the needed data in one query
 	query := `
 		SELECT
@@ -144,12 +147,13 @@ func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, pr
 		FROM spec_runs sr
 		JOIN suite_runs sur ON sur.id = sr.suite_run_id
 		JOIN test_runs tr ON tr.id = sur.test_run_id
-		WHERE tr.project_id = ? AND sr.spec_name = ? AND tr.created_at >= ?
+		WHERE tr.project_id = ? AND sr.spec_name = ? AND sur.suite_name = ?
+		  AND tr.created_at >= ?
 		  AND sr.deleted_at IS NULL AND sur.deleted_at IS NULL AND tr.deleted_at IS NULL
 		ORDER BY tr.created_at DESC
 	`
 
-	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, since).Rows()
+	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, suiteName, since).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get test run history: %w", err)
 	}
@@ -210,26 +214,24 @@ func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, pr
 	return results, nil
 }
 
-// GetUniqueTestNames returns all unique test names for a project since a given time
-func (r *GormFlakyDetectionRepository) GetUniqueTestNames(ctx context.Context, projectID string, since time.Time) ([]string, error) {
-	var testNames []string
-
+// GetUniqueTests returns each (spec, suite) pair a project ran since a given time
+func (r *GormFlakyDetectionRepository) GetUniqueTests(ctx context.Context, projectID string, since time.Time) ([]domain.TestIdentity, error) {
 	query := `
-		SELECT DISTINCT sr.spec_name
+		SELECT DISTINCT sr.spec_name as test_name, sur.suite_name as suite_name
 		FROM spec_runs sr
 		JOIN suite_runs sur ON sur.id = sr.suite_run_id
 		JOIN test_runs tr ON tr.id = sur.test_run_id
 		WHERE tr.project_id = ? AND tr.created_at >= ?
 		  AND sr.deleted_at IS NULL AND sur.deleted_at IS NULL AND tr.deleted_at IS NULL
-		ORDER BY sr.spec_name
+		ORDER BY sur.suite_name, sr.spec_name
 	`
 
-	err := r.db.WithContext(ctx).Raw(query, projectID, since).Pluck("spec_name", &testNames).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to get unique test names: %w", err)
+	var tests []domain.TestIdentity
+	if err := r.db.WithContext(ctx).Raw(query, projectID, since).Scan(&tests).Error; err != nil {
+		return nil, fmt.Errorf("failed to get unique tests: %w", err)
 	}
 
-	return testNames, nil
+	return tests, nil
 }
 
 // Helper function to calculate severity based on flake score
@@ -265,7 +267,7 @@ func (r *GormFlakyDetectionRepository) toDomainFlakyTest(dbFlaky *database.Flaky
 
 	return &domain.FlakyTest{
 		ID:           dbFlaky.ID,
-		TestID:       domain.BuildTestID(dbFlaky.ProjectID, dbFlaky.TestName),
+		TestID:       domain.BuildTestID(dbFlaky.ProjectID, dbFlaky.SuiteName, dbFlaky.TestName),
 		ProjectID:    dbFlaky.ProjectID,
 		TestName:     dbFlaky.TestName,
 		SuiteName:    dbFlaky.SuiteName,

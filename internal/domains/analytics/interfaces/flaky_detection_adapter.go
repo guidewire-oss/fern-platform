@@ -19,19 +19,6 @@ type FlakyDetectionAdapter struct {
 	logger  *logging.Logger
 }
 
-// errInvalidRowID rejects a path parameter that is not a usable row ID.
-var errInvalidRowID = errors.New("invalid flaky test row ID")
-
-// parseFlakyTestRowID parses a path parameter into a row ID. 63 bits, not 64:
-// the column is BIGSERIAL
-func parseFlakyTestRowID(raw string) (uint, error) {
-	id, err := strconv.ParseUint(raw, 10, 63)
-	if err != nil || id == 0 || uint64(uint(id)) != id {
-		return 0, errInvalidRowID
-	}
-	return uint(id), nil
-}
-
 // NewFlakyDetectionAdapter creates a new flaky detection adapter
 func NewFlakyDetectionAdapter(service *application.FlakyDetectionService, logger *logging.Logger) *FlakyDetectionAdapter {
 	return &FlakyDetectionAdapter{
@@ -90,7 +77,7 @@ func (a *FlakyDetectionAdapter) GetFlakyTests() gin.HandlerFunc {
 // MarkTestResolved handles PUT /api/v1/flaky-tests/:testId/resolve
 func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := parseFlakyTestRowID(c.Param("testId"))
+		id, err := domain.ParseFlakyTestRowID(c.Param("testId"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return
@@ -115,7 +102,7 @@ func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 // IgnoreTest handles PUT /api/v1/flaky-tests/:testId/ignore
 func (a *FlakyDetectionAdapter) IgnoreTest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := parseFlakyTestRowID(c.Param("testId"))
+		id, err := domain.ParseFlakyTestRowID(c.Param("testId"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return

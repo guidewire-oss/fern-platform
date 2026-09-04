@@ -5,9 +5,12 @@ import (
 	"time"
 )
 
-// BuildTestID is shared so the detector and the repository agree on the ID.
-func BuildTestID(projectID, testName string) string {
-	return fmt.Sprintf("%s:%s", projectID, testName)
+// BuildTestID renders a flaky test's display ID as
+// "<projectID>:<suiteName>:<testName>". All three parts, or two rows keyed on
+// (project, test, suite) would report as one. Derived only: no test_id column,
+// rebuilt on every read, never parsed back.
+func BuildTestID(projectID, suiteName, testName string) string {
+	return fmt.Sprintf("%s:%s:%s", projectID, suiteName, testName)
 }
 
 // FlakyTest represents a test that has been identified as flaky

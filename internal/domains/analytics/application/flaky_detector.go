@@ -32,18 +32,18 @@ func (s *FlakyDetectionService) AnalyzeTestRun(ctx context.Context, projectID st
 		AnalyzedAt: time.Now(),
 	}
 
-	// Get all unique test names from recent history
+	// Get every (spec, suite) pair from recent history
 	since := time.Now().Add(-s.config.AnalysisWindow)
-	testNames, err := s.getUniqueTestNames(ctx, projectID, since)
+	tests, err := s.repo.GetUniqueTests(ctx, projectID, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get test names: %w", err)
 	}
 
-	analysis.TotalTests = len(testNames)
+	analysis.TotalTests = len(tests)
 
 	// Analyze each test
-	for _, testName := range testNames {
-		result, err := s.analyzeTest(ctx, projectID, testName, since)
+	for _, test := range tests {
+		result, err := s.analyzeTest(ctx, projectID, test.TestName, test.SuiteName, since)
 		if err != nil {
 			// Log error but continue with other tests
 			continue
@@ -98,9 +98,9 @@ type testAnalysisResult struct {
 	action analysisAction
 }
 
-func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID string, testName string, since time.Time) (*testAnalysisResult, error) {
+func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID string, testName string, suiteName string, since time.Time) (*testAnalysisResult, error) {
 	// Get test execution history
-	history, err := s.repo.GetTestRunHistory(ctx, projectID, testName, since)
+	history, err := s.repo.GetTestRunHistory(ctx, projectID, testName, suiteName, since)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get test history: %w", err)
 	}
@@ -114,7 +114,6 @@ func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID strin
 	failureCount := 0
 	consecutivePasses := 0
 	var lastFailure *domain.TestFailureInfo
-	var suiteName, packageName string
 
 	for _, exec := range history {
 		if exec.Status == "failed" {
@@ -133,15 +132,10 @@ func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID strin
 		} else if exec.Status == "passed" {
 			consecutivePasses++
 		}
-
-		// Capture suite and package name from any execution
-		if suiteName == "" && exec.SuiteName != "" {
-			suiteName = exec.SuiteName
-		}
 	}
 
 	failureRate := float64(failureCount) / float64(len(history))
-	testID := domain.BuildTestID(projectID, testName)
+	testID := domain.BuildTestID(projectID, suiteName, testName)
 
 	// Only a clean not-found means absent; anything else is a real failure.
 	existingFlaky, err := s.repo.GetFlakyTestByName(ctx, projectID, testName, suiteName)
@@ -161,7 +155,7 @@ func (s *FlakyDetectionService) analyzeTest(ctx context.Context, projectID strin
 				ProjectID:    projectID,
 				TestName:     testName,
 				SuiteName:    suiteName,
-				PackageName:  packageName,
+				PackageName:  "", // no package column to read back from
 				FirstSeen:    time.Now(),
 				LastSeen:     time.Now(),
 				TotalRuns:    len(history),
@@ -233,10 +227,6 @@ func (s *FlakyDetectionService) calculateFlakeScore(failureRate float64, totalRu
 	}
 
 	return math.Min(math.Max(score, 0.0), 1.0)
-}
-
-func (s *FlakyDetectionService) getUniqueTestNames(ctx context.Context, projectID string, since time.Time) ([]string, error) {
-	return s.repo.GetUniqueTestNames(ctx, projectID, since)
 }
 
 // GetFlakyTestTrends returns trend data for flaky tests over time
