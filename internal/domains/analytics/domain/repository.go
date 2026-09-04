@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"math/bits"
 	"strconv"
 	"time"
 )
@@ -14,12 +15,15 @@ var ErrFlakyTestNotFound = errors.New("flaky test not found")
 // ErrInvalidFlakyTestID rejects an identifier no flaky_tests row could carry.
 var ErrInvalidFlakyTestID = errors.New("invalid flaky test ID")
 
-// ParseFlakyTestRowID parses a caller-supplied row ID. 63 bits because the
-// column is BIGSERIAL; the MaxUint bound stops a 32-bit uint wrapping a large
-// input onto another row.
+// ParseFlakyTestRowID parses a caller-supplied row ID.
+//
+// Parsed at uint's own width so uint(id) cannot narrow, then bounded by
+// MaxInt64 because the column is BIGSERIAL. Splitting it this way keeps a
+// too-large input a rejection here rather than a driver error, and leaves no
+// truncating conversion for a reader (or CodeQL) to have to reason about.
 func ParseFlakyTestRowID(raw string) (uint, error) {
-	id, err := strconv.ParseUint(raw, 10, 63)
-	if err != nil || id == 0 || id > uint64(math.MaxUint) {
+	id, err := strconv.ParseUint(raw, 10, bits.UintSize)
+	if err != nil || id == 0 || id > math.MaxInt64 {
 		return 0, ErrInvalidFlakyTestID
 	}
 	return uint(id), nil
