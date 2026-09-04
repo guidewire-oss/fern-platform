@@ -2,12 +2,31 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
+	analyticsDomain "github.com/guidewire-oss/fern-platform/internal/domains/analytics/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
+
+// parseFlakyTestID reads :id as a row ID and writes its own error response.
+func parseFlakyTestID(c *gin.Context) (uint, bool) {
+	raw := c.Param("id")
+	if raw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID is required"})
+		return 0, false
+	}
+
+	id, err := analyticsDomain.ParseFlakyTestRowID(raw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID must be a positive integer"})
+		return 0, false
+	}
+
+	return id, true
+}
 
 // FlakyTestHandler handles flaky test related endpoints
 type FlakyTestHandler struct {
@@ -46,13 +65,16 @@ func (h *FlakyTestHandler) getFlakyTests(c *gin.Context) {
 
 // resolveFlakyTest handles POST /api/v1/flaky-tests/:id/resolve
 func (h *FlakyTestHandler) resolveFlakyTest(c *gin.Context) {
-	testID := c.Param("id")
-	if testID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID is required"})
+	id, ok := parseFlakyTestID(c)
+	if !ok {
 		return
 	}
 
-	if err := h.flakyDetectionService.MarkTestResolved(c.Request.Context(), testID); err != nil {
+	if err := h.flakyDetectionService.MarkTestResolved(c.Request.Context(), id); err != nil {
+		if errors.Is(err, analyticsDomain.ErrFlakyTestNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Flaky test not found"})
+			return
+		}
 		h.logger.WithError(err).Error("Failed to mark test as resolved")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark test as resolved"})
 		return
@@ -65,13 +87,16 @@ func (h *FlakyTestHandler) resolveFlakyTest(c *gin.Context) {
 
 // ignoreFlakyTest handles POST /api/v1/flaky-tests/:id/ignore
 func (h *FlakyTestHandler) ignoreFlakyTest(c *gin.Context) {
-	testID := c.Param("id")
-	if testID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "test ID is required"})
+	id, ok := parseFlakyTestID(c)
+	if !ok {
 		return
 	}
 
-	if err := h.flakyDetectionService.IgnoreTest(c.Request.Context(), testID); err != nil {
+	if err := h.flakyDetectionService.IgnoreTest(c.Request.Context(), id); err != nil {
+		if errors.Is(err, analyticsDomain.ErrFlakyTestNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Flaky test not found"})
+			return
+		}
 		h.logger.WithError(err).Error("Failed to ignore test")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ignore test"})
 		return
@@ -88,4 +113,3 @@ func (h *FlakyTestHandler) RegisterRoutes(userGroup *gin.RouterGroup) {
 	userGroup.POST("/flaky-tests/:id/resolve", h.resolveFlakyTest)
 	userGroup.POST("/flaky-tests/:id/ignore", h.ignoreFlakyTest)
 }
-

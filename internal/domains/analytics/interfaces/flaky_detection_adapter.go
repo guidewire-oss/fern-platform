@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -76,13 +77,17 @@ func (a *FlakyDetectionAdapter) GetFlakyTests() gin.HandlerFunc {
 // MarkTestResolved handles PUT /api/v1/flaky-tests/:testId/resolve
 func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		testID := c.Param("testId")
-		if testID == "" {
-			c.JSON(400, gin.H{"error": "test ID is required"})
+		id, err := domain.ParseFlakyTestRowID(c.Param("testId"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return
 		}
 
-		if err := a.service.MarkTestResolved(c.Request.Context(), testID); err != nil {
+		if err := a.service.MarkTestResolved(c.Request.Context(), id); err != nil {
+			if errors.Is(err, domain.ErrFlakyTestNotFound) {
+				c.JSON(404, gin.H{"error": "Flaky test not found"})
+				return
+			}
 			a.logger.WithError(err).Error("Failed to mark test as resolved")
 			c.JSON(500, gin.H{"error": "Failed to mark test as resolved"})
 			return
@@ -97,13 +102,17 @@ func (a *FlakyDetectionAdapter) MarkTestResolved() gin.HandlerFunc {
 // IgnoreTest handles PUT /api/v1/flaky-tests/:testId/ignore
 func (a *FlakyDetectionAdapter) IgnoreTest() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		testID := c.Param("testId")
-		if testID == "" {
-			c.JSON(400, gin.H{"error": "test ID is required"})
+		id, err := domain.ParseFlakyTestRowID(c.Param("testId"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "test ID must be a positive integer"})
 			return
 		}
 
-		if err := a.service.IgnoreTest(c.Request.Context(), testID); err != nil {
+		if err := a.service.IgnoreTest(c.Request.Context(), id); err != nil {
+			if errors.Is(err, domain.ErrFlakyTestNotFound) {
+				c.JSON(404, gin.H{"error": "Flaky test not found"})
+				return
+			}
 			a.logger.WithError(err).Error("Failed to ignore test")
 			c.JSON(500, gin.H{"error": "Failed to ignore test"})
 			return

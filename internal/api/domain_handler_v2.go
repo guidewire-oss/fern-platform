@@ -50,6 +50,10 @@ func NewDomainHandlerV2(
 	baseHandler := NewBaseHandler(logger)
 	testRunHandler := NewTestRunHandler(testingService, projectService, logger)
 	testRunHandler.SetTagService(tagService)
+	// A typed nil in the interface would defeat the handler's nil check.
+	if flakyDetectionService != nil {
+		testRunHandler.SetFlakyDetectionService(flakyDetectionService)
+	}
 	return &DomainHandlerV2{
 		authHandler:           NewAuthHandler(authMiddleware, userRepo, logger),
 		healthHandler:         NewHealthHandler(logger),

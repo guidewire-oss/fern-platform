@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,10 +25,12 @@ func NewGormFlakyDetectionRepository(db *gorm.DB) *GormFlakyDetectionRepository 
 func (r *GormFlakyDetectionRepository) SaveFlakyTest(ctx context.Context, flaky *domain.FlakyTest) error {
 	// Convert domain model to database model
 	dbFlaky := &database.FlakyTest{
-		ProjectID:        flaky.ProjectID,
-		TestName:         flaky.TestName,
-		SuiteName:        flaky.SuiteName,
-		FlakeRate:        flaky.FlakeScore * 100, // Convert to percentage
+		ProjectID: flaky.ProjectID,
+		TestName:  flaky.TestName,
+		SuiteName: flaky.SuiteName,
+		// flake_rate is DECIMAL(5,4): a 0–1 fraction, as cmd/seed writes.
+		// Scaling to 0–100 overflowed it for any score >= 0.1.
+		FlakeRate:        flaky.FlakeScore,
 		TotalExecutions:  flaky.TotalRuns,
 		FlakyExecutions:  flaky.FailureCount,
 		FirstSeenAt:      flaky.FirstSeen,
@@ -37,21 +40,37 @@ func (r *GormFlakyDetectionRepository) SaveFlakyTest(ctx context.Context, flaky 
 		LastErrorMessage: getLastErrorMessage(flaky.Metadata),
 	}
 
-	// Use upsert pattern
-	result := r.db.WithContext(ctx).Save(dbFlaky)
+	// Without the row ID, Save inserts and re-analysis trips
+	// UNIQUE(project_id, test_name, suite_name).
+	dbFlaky.ID = flaky.ID
+
+	tx := r.db.WithContext(ctx)
+	if dbFlaky.ID != 0 {
+		// Save writes every column and we have no created_at to write back.
+		tx = tx.Omit("created_at")
+	}
+
+	result := tx.Save(dbFlaky)
 	if result.Error != nil {
 		return fmt.Errorf("failed to save flaky test: %w", result.Error)
 	}
 
+	flaky.ID = dbFlaky.ID
+
 	return nil
 }
 
-// GetFlakyTest retrieves a flaky test by ID
-func (r *GormFlakyDetectionRepository) GetFlakyTest(ctx context.Context, testID string) (*domain.FlakyTest, error) {
+// GetFlakyTestByName retrieves a flaky test by its natural key.
+func (r *GormFlakyDetectionRepository) GetFlakyTestByName(ctx context.Context, projectID string, testName string, suiteName string) (*domain.FlakyTest, error) {
 	var dbFlaky database.FlakyTest
-	if err := r.db.WithContext(ctx).Where("test_id = ?", testID).First(&dbFlaky).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("flaky test not found")
+	if err := r.db.WithContext(ctx).
+		// COALESCE because suite_name is nullable: an older row stored as NULL
+		// would miss a plain equality against the empty string analysis
+		// supplies, and the insert that followed would duplicate it.
+		Where("project_id = ? AND test_name = ? AND COALESCE(suite_name, '') = ?", projectID, testName, suiteName).
+		First(&dbFlaky).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrFlakyTestNotFound
 		}
 		return nil, fmt.Errorf("failed to get flaky test: %w", err)
 	}
@@ -68,27 +87,28 @@ func (r *GormFlakyDetectionRepository) FindFlakyTestsByProject(ctx context.Conte
 		query = query.Where("status = ?", string(status))
 	}
 
-	if err := query.Order("flake_score DESC").Find(&dbFlakyTests).Error; err != nil {
+	// There is no flake_score column; ordering by it failed the query.
+	if err := query.Order("flake_rate DESC").Find(&dbFlakyTests).Error; err != nil {
 		return nil, fmt.Errorf("failed to find flaky tests: %w", err)
 	}
 
-	flakyTests := make([]*domain.FlakyTest, len(dbFlakyTests))
-	for i, dbFlaky := range dbFlakyTests {
-		flaky, err := r.toDomainFlakyTest(&dbFlaky)
+	// Appended, not indexed: a skipped row would leave a nil hole.
+	flakyTests := make([]*domain.FlakyTest, 0, len(dbFlakyTests))
+	for i := range dbFlakyTests {
+		flaky, err := r.toDomainFlakyTest(&dbFlakyTests[i])
 		if err != nil {
-			// Log error but continue
 			continue
 		}
-		flakyTests[i] = flaky
+		flakyTests = append(flakyTests, flaky)
 	}
 
 	return flakyTests, nil
 }
 
-// UpdateFlakyTestStatus updates the status of a flaky test
-func (r *GormFlakyDetectionRepository) UpdateFlakyTestStatus(ctx context.Context, testID string, status domain.FlakyTestStatus) error {
+// UpdateFlakyTestStatus updates the status of a flaky test by row ID.
+func (r *GormFlakyDetectionRepository) UpdateFlakyTestStatus(ctx context.Context, id uint, status domain.FlakyTestStatus) error {
 	result := r.db.WithContext(ctx).Model(&database.FlakyTest{}).
-		Where("test_id = ?", testID).
+		Where("id = ?", id).
 		Update("status", string(status))
 
 	if result.Error != nil {
@@ -96,7 +116,7 @@ func (r *GormFlakyDetectionRepository) UpdateFlakyTestStatus(ctx context.Context
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("flaky test not found")
+		return domain.ErrFlakyTestNotFound
 	}
 
 	return nil
@@ -110,28 +130,30 @@ func (r *GormFlakyDetectionRepository) SaveTestRunAnalysis(ctx context.Context, 
 }
 
 // GetTestRunHistory retrieves test execution history for a specific test
-func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, projectID string, testName string, since time.Time) ([]domain.TestExecutionResult, error) {
+func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, projectID string, testName string, suiteName string, since time.Time) ([]domain.TestExecutionResult, error) {
 	// Use a raw query to get all the needed data in one query
 	query := `
-		SELECT 
+		SELECT
 			sr.id as spec_run_id,
-			sr.name as test_name,
+			sr.spec_name as test_name,
 			sr.status,
-			sr.duration,
-			sr.failure_message,
+			sr.duration_ms,
+			sr.error_message,
 			sr.created_at,
-			sur.name as suite_name,
+			sur.suite_name as suite_name,
 			tr.id as test_run_id,
-			tr.git_branch,
-			tr.git_commit
+			COALESCE(tr.branch, '') as branch,
+			COALESCE(tr.commit_sha, '') as commit_sha
 		FROM spec_runs sr
 		JOIN suite_runs sur ON sur.id = sr.suite_run_id
 		JOIN test_runs tr ON tr.id = sur.test_run_id
-		WHERE tr.project_id = ? AND sr.name = ? AND tr.created_at >= ?
+		WHERE tr.project_id = ? AND sr.spec_name = ? AND sur.suite_name = ?
+		  AND tr.created_at >= ?
+		  AND sr.deleted_at IS NULL AND sur.deleted_at IS NULL AND tr.deleted_at IS NULL
 		ORDER BY tr.created_at DESC
 	`
 
-	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, since).Rows()
+	rows, err := r.db.WithContext(ctx).Raw(query, projectID, testName, suiteName, since).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get test run history: %w", err)
 	}
@@ -192,25 +214,24 @@ func (r *GormFlakyDetectionRepository) GetTestRunHistory(ctx context.Context, pr
 	return results, nil
 }
 
-// GetUniqueTestNames returns all unique test names for a project since a given time
-func (r *GormFlakyDetectionRepository) GetUniqueTestNames(ctx context.Context, projectID string, since time.Time) ([]string, error) {
-	var testNames []string
-
+// GetUniqueTests returns each (spec, suite) pair a project ran since a given time
+func (r *GormFlakyDetectionRepository) GetUniqueTests(ctx context.Context, projectID string, since time.Time) ([]domain.TestIdentity, error) {
 	query := `
-		SELECT DISTINCT sr.name
+		SELECT DISTINCT sr.spec_name as test_name, sur.suite_name as suite_name
 		FROM spec_runs sr
 		JOIN suite_runs sur ON sur.id = sr.suite_run_id
 		JOIN test_runs tr ON tr.id = sur.test_run_id
 		WHERE tr.project_id = ? AND tr.created_at >= ?
-		ORDER BY sr.name
+		  AND sr.deleted_at IS NULL AND sur.deleted_at IS NULL AND tr.deleted_at IS NULL
+		ORDER BY sur.suite_name, sr.spec_name
 	`
 
-	err := r.db.WithContext(ctx).Raw(query, projectID, since).Pluck("name", &testNames).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to get unique test names: %w", err)
+	var tests []domain.TestIdentity
+	if err := r.db.WithContext(ctx).Raw(query, projectID, since).Scan(&tests).Error; err != nil {
+		return nil, fmt.Errorf("failed to get unique tests: %w", err)
 	}
 
-	return testNames, nil
+	return tests, nil
 }
 
 // Helper function to calculate severity based on flake score
@@ -244,11 +265,9 @@ func (r *GormFlakyDetectionRepository) toDomainFlakyTest(dbFlaky *database.Flaky
 		metadata.FailurePatterns = []string{dbFlaky.LastErrorMessage}
 	}
 
-	// Generate TestID from project and test name
-	testID := fmt.Sprintf("%s:%s", dbFlaky.ProjectID, dbFlaky.TestName)
-
 	return &domain.FlakyTest{
-		TestID:       testID,
+		ID:           dbFlaky.ID,
+		TestID:       domain.BuildTestID(dbFlaky.ProjectID, dbFlaky.SuiteName, dbFlaky.TestName),
 		ProjectID:    dbFlaky.ProjectID,
 		TestName:     dbFlaky.TestName,
 		SuiteName:    dbFlaky.SuiteName,
@@ -257,7 +276,7 @@ func (r *GormFlakyDetectionRepository) toDomainFlakyTest(dbFlaky *database.Flaky
 		LastSeen:     dbFlaky.LastSeenAt,
 		TotalRuns:    dbFlaky.TotalExecutions,
 		FailureCount: dbFlaky.FlakyExecutions,
-		FlakeScore:   dbFlaky.FlakeRate / 100, // Convert from percentage
+		FlakeScore:   dbFlaky.FlakeRate,
 		Status:       domain.FlakyTestStatus(dbFlaky.Status),
 		Metadata:     metadata,
 	}, nil
