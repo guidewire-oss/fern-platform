@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// BuildTestID renders a flaky test's display ID as
-// "<projectID>:<suiteName>:<testName>". All three parts, or two rows keyed on
-// (project, test, suite) would report as one. Derived only: no test_id column,
-// rebuilt on every read, never parsed back.
+// BuildTestID renders a flaky test's display ID from all three parts of the
+// key it is derived from, or two rows keyed on (project, test, suite) would
+// report as one.
+// Derived only: no test_id column, rebuilt on every read, never parsed back.
 func BuildTestID(projectID, suiteName, testName string) string {
-	return fmt.Sprintf("%s:%s:%s", projectID, suiteName, testName)
+	return fmt.Sprintf("%q:%q:%q", projectID, suiteName, testName)
 }
 
 // FlakyTest represents a test that has been identified as flaky

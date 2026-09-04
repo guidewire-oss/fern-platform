@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"time"
 )
@@ -14,11 +15,11 @@ var ErrFlakyTestNotFound = errors.New("flaky test not found")
 var ErrInvalidFlakyTestID = errors.New("invalid flaky test ID")
 
 // ParseFlakyTestRowID parses a caller-supplied row ID. 63 bits because the
-// column is BIGSERIAL; the round-trip catches a 32-bit uint wrapping a large
+// column is BIGSERIAL; the MaxUint bound stops a 32-bit uint wrapping a large
 // input onto another row.
 func ParseFlakyTestRowID(raw string) (uint, error) {
 	id, err := strconv.ParseUint(raw, 10, 63)
-	if err != nil || id == 0 || uint64(uint(id)) != id {
+	if err != nil || id == 0 || id > uint64(math.MaxUint) {
 		return 0, ErrInvalidFlakyTestID
 	}
 	return uint(id), nil
