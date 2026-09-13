@@ -32,6 +32,128 @@ func BeEnabled() OmegaMatcher {
 	}, BeTrue())
 }
 
+var _ = Describe("UC-04-05: Team Assignment for Projects", Label("e2e"), func() {
+	var (
+		browser playwright.Browser
+		ctx     playwright.BrowserContext
+		page    playwright.Page
+		err     error
+	)
+
+	BeforeEach(func() {
+		browser = CreateBrowser()
+		ctx, err = browser.NewContext(contextOptions)
+		Expect(err).NotTo(HaveOccurred())
+		page, err = ctx.NewPage()
+		Expect(err).NotTo(HaveOccurred())
+
+		page.Goto(baseURL + "/")
+		signInBtn := page.Locator("button:has-text('Sign in'), a:has-text('Sign in')")
+		Expect(signInBtn.Click()).To(Succeed())
+		page.WaitForURL("**/auth/realms/**")
+		page.Fill("input[name='username']", username)
+		page.Fill("input[name='password']", password)
+		page.Click("input[type='submit']")
+		Eventually(func() bool {
+			return strings.HasPrefix(page.URL(), baseURL)
+		}, 10*time.Second).Should(BeTrue())
+		page.Click("text=Projects")
+		page.WaitForLoadState()
+	})
+
+	AfterEach(func() {
+		SaveVideoOnFailure(ctx, CurrentSpecReport())
+		ctx.Close()
+		browser.Close()
+	})
+
+	It("should render the Team field as a text input with datalist", func() {
+		page.Click("button:has-text('New Project')")
+		page.WaitForSelector("text=Create New Project")
+
+		teamInput := page.Locator("input[list='teams-datalist']")
+		Expect(teamInput).To(BeVisible())
+
+		datalist := page.Locator("datalist#teams-datalist")
+		count, err := datalist.Count()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(count).To(Equal(1))
+	})
+
+	It("should allow typing a free-form team name not in the suggestion list", func() {
+		page.Click("button:has-text('New Project')")
+		page.WaitForSelector("text=Create New Project")
+
+		teamInput := page.Locator("input[list='teams-datalist']")
+		Expect(teamInput.Fill("brand-new-group")).To(Succeed())
+
+		value, err := teamInput.InputValue()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(value).To(Equal("brand-new-group"))
+	})
+
+	It("should create a project assigned to a new group with no existing projects", func() {
+		page.Click("button:has-text('New Project')")
+		page.WaitForSelector("text=Create New Project")
+
+		projectName := fmt.Sprintf("Group Test Project %d", time.Now().Unix())
+		page.Fill("input[placeholder='My Project']", projectName)
+		page.Fill("input[list='teams-datalist']", "empty-group")
+		page.Click("button:has-text('Create Project')")
+
+		Eventually(func() bool {
+			count, _ := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
+				HasText: projectName,
+			}).Count()
+			return count > 0
+		}, 10*time.Second).Should(BeTrue())
+
+		projectRow := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
+			HasText: projectName,
+		}).First()
+		Expect(projectRow.Locator("text=empty-group")).To(BeVisible())
+	})
+
+	It("should allow clearing the team field to assign no team", func() {
+		page.Click("button:has-text('New Project')")
+		page.WaitForSelector("text=Create New Project")
+
+		teamInput := page.Locator("input[list='teams-datalist']")
+		Expect(teamInput.Fill("")).To(Succeed())
+
+		value, err := teamInput.InputValue()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(value).To(Equal(""))
+	})
+
+	It("should pre-populate team field when editing an existing project", func() {
+		projectName := fmt.Sprintf("Edit Team Test %d", time.Now().Unix())
+		page.Click("button:has-text('New Project')")
+		page.WaitForSelector("text=Create New Project")
+		page.Fill("input[placeholder='My Project']", projectName)
+		page.Fill("input[list='teams-datalist']", teamName)
+		page.Click("button:has-text('Create Project')")
+		Eventually(func() bool {
+			count, _ := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
+				HasText: projectName,
+			}).Count()
+			return count > 0
+		}, 10*time.Second).Should(BeTrue())
+
+		projectRow := page.Locator("tr").Filter(playwright.LocatorFilterOptions{
+			HasText: projectName,
+		}).First()
+		editBtn := projectRow.Locator("button[title='Edit project']")
+		Expect(editBtn.Click()).To(Succeed())
+		page.WaitForSelector("text=Edit Project")
+
+		teamInput := page.Locator("input[list='teams-datalist']")
+		value, err := teamInput.InputValue()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(value).To(Equal(teamName))
+	})
+})
+
 var _ = Describe("UC-04: Project Management", Label("e2e"), func() {
 	var (
 		browser playwright.Browser
@@ -177,7 +299,7 @@ var _ = Describe("UC-04: Project Management", Label("e2e"), func() {
 				projectName := fmt.Sprintf("Test Project %d", time.Now().Unix())
 				page.Fill("input[placeholder='My Project']", projectName)
 				page.Fill("textarea", "Test project for deletion")
-				page.SelectOption("select", playwright.SelectOptionValues{Values: &[]string{"fern"}}) // Select team
+				page.Fill("input[list='teams-datalist']", teamName)
 				page.Click("button:has-text('Create Project')")
 				
 				// Wait for project to be created
