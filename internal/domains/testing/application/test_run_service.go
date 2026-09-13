@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	projectsDomain "github.com/guidewire-oss/fern-platform/internal/domains/projects/domain"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/database"
 	"gorm.io/gorm"
@@ -91,8 +92,15 @@ func (s *TestRunService) CreateTestRun(ctx context.Context, testRun *domain.Test
 
 	// Create the test run
 	if err := s.testRunRepo.Create(ctx, testRun); err != nil {
-		// Check if it's a unique constraint violation (concurrent thread created it)
 		errStr := strings.ToLower(err.Error())
+
+		// Check if it's a foreign key violation on project_id (non-existent project)
+		if strings.Contains(errStr, "foreign key") || strings.Contains(errStr, "fk_test_runs_project_id") ||
+			strings.Contains(errStr, "23503") {
+			return nil, false, fmt.Errorf("%w: %s", projectsDomain.ErrProjectNotFound, testRun.ProjectID)
+		}
+
+		// Check if it's a unique constraint violation (concurrent thread created it)
 		if strings.Contains(errStr, "unique") || strings.Contains(errStr, "duplicate") {
 			// Another thread already created this test run
 			// Try to fetch the existing one

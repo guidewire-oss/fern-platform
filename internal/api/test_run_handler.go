@@ -580,6 +580,16 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 	}
 
 	if testRun == nil {
+		if _, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(req.TestProjectID)); err != nil {
+			if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.TestProjectID)})
+				return
+			}
+			h.logger.WithError(err).Error("Failed to validate project")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate project"})
+			return
+		}
+
 		// brand new run
 		newTestRun := &domain.TestRun{
 			RunID:        runID,
@@ -601,11 +611,15 @@ func (h *TestRunHandler) recordTestRun(c *gin.Context) {
 		createdTestRun, alreadyExisted, err := h.testingService.CreateTestRun(c.Request.Context(), newTestRun)
 		h.logger.Debug("Test run creation result", "alreadyExisted", alreadyExisted, "runID", runID)
 		if err != nil {
+			if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.TestProjectID)})
+				return
+			}
 			if errors.Is(err, domain.ErrInvalidTestRun) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create test run"})
 			return
 		}
 
@@ -703,9 +717,23 @@ func (h *TestRunHandler) startTestRun(c *gin.Context) {
 		Metadata:    req.Metadata,
 	}
 
+	if _, err := h.projectService.GetProject(c.Request.Context(), projectsDomain.ProjectID(req.ProjectID)); err != nil {
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.ProjectID)})
+			return
+		}
+		h.logger.WithError(err).Error("Failed to validate project")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate project"})
+		return
+	}
+
 	_, _, err := h.testingService.CreateTestRun(c.Request.Context(), testRun)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, projectsDomain.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("project '%s' not found", req.ProjectID)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create test run"})
 		return
 	}
 
