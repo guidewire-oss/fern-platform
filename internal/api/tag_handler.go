@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	tagsDomain "github.com/guidewire-oss/fern-platform/internal/domains/tags/domain"
+	testingDomain "github.com/guidewire-oss/fern-platform/internal/domains/testing/domain"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 )
 
@@ -68,8 +69,17 @@ func ProcessTestRunTags(c context.Context, tagService *tagsApp.TagService, req *
 func processTagList(c context.Context, tagService *tagsApp.TagService, tags []Tag) ([]Tag, error) {
 	result := make([]Tag, 0, len(tags))
 	for _, t := range tags {
+		// Bound the name before it ever reaches GetOrCreateTag: tags.name
+		// carries a unique index, so an oversized tag value can crash the
+		// insert here the same way spec_name/suite_name did before issue
+		// #230's fix. Truncating up front (rather than after Save) also
+		// means the FindByName lookups inside GetOrCreateTag consistently
+		// see the same, already-normalized name -- no risk of the lookup
+		// missing the row it just wrote.
+		name := testingDomain.TruncateName(t.Name)
+
 		// Use the tag service to get or create the tag
-		domainTag, err := tagService.GetOrCreateTag(c, t.Name)
+		domainTag, err := tagService.GetOrCreateTag(c, name)
 		if err != nil {
 			return nil, err
 		}

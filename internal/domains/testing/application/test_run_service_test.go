@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -374,8 +375,10 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			mockTestRunRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should return error when one of the spec name exceeds max length", func() {
-			longName := strings.Repeat("a", 256)
+		It("should truncate (not reject) a spec name that exceeds max length", func() {
+			// A single oversized name must not fail the whole submission --
+			// https://github.com/guidewire-oss/fern-platform/issues/230.
+			longName := strings.Repeat("a", domain.MaxNameLengthBytes+256)
 
 			testRun := &domain.TestRun{
 				ProjectID: "proj-123",
@@ -391,19 +394,30 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				},
 			}
 
+			mockTestRunRepo.On("Create", ctx, mock.MatchedBy(func(tr *domain.TestRun) bool {
+				name := tr.SuiteRuns[0].SpecRuns[0].Name
+				return len(name) == domain.MaxNameLengthBytes &&
+					strings.HasSuffix(name, domain.TruncationMarker)
+			})).Return(nil)
+
 			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
 
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("invalid test run"))
-			Expect(result).To(BeNil())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
 			Expect(alreadyExisted).To(BeFalse())
 
-			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockTestRunRepo.AssertExpectations(GinkgoT())
 		})
 
-		It("should validate spec name length using rune count (unicode)", func() {
-			// each "你" is 1 rune but 3 bytes
-			longName := strings.Repeat("你", 256)
+		It("should truncate using byte length while preserving valid UTF-8 (unicode)", func() {
+			// "你" is 1 rune but 3 bytes -- truncating at a fixed byte
+			// count risks slicing a multi-byte rune in half unless the
+			// cut point is backed off to a rune boundary. The exact kept
+			// length can therefore land a couple bytes short of
+			// MaxNameLengthBytes (whatever it takes to land on a
+			// boundary); what must hold is that it never exceeds the
+			// budget and never produces invalid UTF-8.
+			longName := strings.Repeat("你", domain.MaxNameLengthBytes+256)
 
 			testRun := &domain.TestRun{
 				ProjectID: "proj-123",
@@ -419,14 +433,20 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 				},
 			}
 
+			mockTestRunRepo.On("Create", ctx, mock.MatchedBy(func(tr *domain.TestRun) bool {
+				name := tr.SuiteRuns[0].SpecRuns[0].Name
+				return len(name) <= domain.MaxNameLengthBytes &&
+					utf8.ValidString(name) &&
+					strings.HasSuffix(name, domain.TruncationMarker)
+			})).Return(nil)
+
 			result, alreadyExisted, err := service.CreateTestRun(ctx, testRun)
 
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("invalid test run"))
-			Expect(result).To(BeNil())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
 			Expect(alreadyExisted).To(BeFalse())
 
-			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
+			mockTestRunRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should ignore nil spec runs during validation", func() {
@@ -724,6 +744,25 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			Expect(err.Error()).To(ContainSubstring("test ID mismatch"))
 		})
 
+		It("should truncate an oversized name instead of failing (append-to-existing-run path)", func() {
+			// AddSuiteRun is the path used when suites are appended to a test
+			// run that already exists -- it must guard name length itself,
+			// it can't rely on CreateTestRun's validation having run.
+			suiteRun := &domain.SuiteRun{
+				TestRunID: 1,
+				Name:      strings.Repeat("a", domain.MaxNameLengthBytes+256),
+			}
+
+			mockSuiteRepo.On("Create", ctx, mock.MatchedBy(func(s *domain.SuiteRun) bool {
+				return len(s.Name) == domain.MaxNameLengthBytes
+			})).Return(nil)
+
+			err := service.AddSuiteRun(ctx, 1, suiteRun)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
+
 		It("should return error when repository fails", func() {
 			suiteRun := &domain.SuiteRun{
 				TestRunID: 1,
@@ -772,6 +811,30 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			err := service.AddSpecRun(ctx, 1, specRun)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("suite ID mismatch"))
+		})
+
+		It("should truncate an oversized name instead of failing (append-to-existing-run path)", func() {
+			specRun := &domain.SpecRun{
+				SuiteRunID: 1,
+				Name:       strings.Repeat("a", domain.MaxNameLengthBytes+256),
+			}
+			suiteRun := &domain.SuiteRun{
+				ID:        1,
+				Name:      "Suite",
+				StartTime: time.Now(),
+			}
+
+			mockSpecRepo.On("Create", ctx, mock.MatchedBy(func(s *domain.SpecRun) bool {
+				return len(s.Name) == domain.MaxNameLengthBytes
+			})).Return(nil)
+			mockSpecRepo.On("FindBySuiteRunID", ctx, uint(1)).Return([]*domain.SpecRun{specRun}, nil)
+			mockSuiteRepo.On("GetByID", ctx, uint(1)).Return(suiteRun, nil)
+			mockSuiteRepo.On("Update", ctx, mock.Anything).Return(nil)
+
+			err := service.AddSpecRun(ctx, 1, specRun)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should return error when repository fails", func() {
@@ -863,8 +926,8 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
 		})
 
-		It("should return error when spec name exceeds max length in CreateTestRunWithSuites", func() {
-			longName := strings.Repeat("a", 256)
+		It("should truncate (not reject) a spec name that exceeds max length in CreateTestRunWithSuites", func() {
+			longName := strings.Repeat("a", domain.MaxNameLengthBytes+256)
 
 			testRun := &domain.TestRun{
 				ProjectID: "proj-123",
@@ -885,16 +948,20 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 
 			mockTestRunRepo.On("Create", ctx, testRun).Return(nil)
 			mockSuiteRepo.On("Create", ctx, mock.Anything).Return(nil)
+			mockSpecRepo.On("CreateBatch", ctx, mock.MatchedBy(func(specs []*domain.SpecRun) bool {
+				return len(specs) == 1 && len(specs[0].Name) == domain.MaxNameLengthBytes
+			})).Return(nil)
+			mockTestRunRepo.On("GetByID", ctx, mock.Anything).Return(testRun, nil)
+			mockSuiteRepo.On("FindByTestRunID", ctx, mock.Anything).Return([]*domain.SuiteRun{}, nil)
+			mockTestRunRepo.On("Update", ctx, mock.Anything).Return(nil)
 
 			err := service.CreateTestRunWithSuites(ctx, testRun, suites)
 
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("invalid test run"))
+			Expect(err).NotTo(HaveOccurred())
 
-			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
-			mockTestRunRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
-			mockSuiteRepo.AssertNotCalled(GinkgoT(), "Create", mock.Anything, mock.Anything)
-			mockSpecRepo.AssertNotCalled(GinkgoT(), "CreateBatch", mock.Anything, mock.Anything)
+			mockTestRunRepo.AssertExpectations(GinkgoT())
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+			mockSpecRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should return error when test run creation fails", func() {
@@ -949,6 +1016,22 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			err := service.CreateSuiteRun(ctx, suiteRun)
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should truncate an oversized name instead of failing", func() {
+			suiteRun := &domain.SuiteRun{
+				TestRunID: 1,
+				Name:      strings.Repeat("a", domain.MaxNameLengthBytes+256),
+			}
+
+			mockSuiteRepo.On("Create", ctx, mock.MatchedBy(func(s *domain.SuiteRun) bool {
+				return len(s.Name) == domain.MaxNameLengthBytes
+			})).Return(nil)
+
+			err := service.CreateSuiteRun(ctx, suiteRun)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockSuiteRepo.AssertExpectations(GinkgoT())
+		})
 	})
 
 	Describe("CreateSpecRun", func() {
@@ -976,6 +1059,22 @@ var _ = Describe("TestRunService", Label("unit", "application", "testing"), func
 			err := service.CreateSpecRun(ctx, specRun)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("suite run ID is required"))
+		})
+
+		It("should truncate an oversized name instead of failing", func() {
+			specRun := &domain.SpecRun{
+				SuiteRunID: 1,
+				Name:       strings.Repeat("a", domain.MaxNameLengthBytes+256),
+			}
+
+			mockSpecRepo.On("Create", ctx, mock.MatchedBy(func(s *domain.SpecRun) bool {
+				return len(s.Name) == domain.MaxNameLengthBytes
+			})).Return(nil)
+
+			err := service.CreateSpecRun(ctx, specRun)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockSpecRepo.AssertExpectations(GinkgoT())
 		})
 
 		It("should calculate duration from start and end time", func() {

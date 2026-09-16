@@ -208,7 +208,15 @@ func (c *DatabaseConverter) ConvertSpecRunToDomain(dbSpec *database.SpecRun) *do
 	}
 }
 
-// ConvertDomainTagsToDatabase converts domain tags to database tags
+// ConvertDomainTagsToDatabase converts domain tags to database tags.
+// Names are bounded via domain.TruncateName -- this is the single choke
+// point every run/suite/spec-level tag passes through on its way to a
+// repository write (see ConvertTestRunToDatabase and the SuiteRun/SpecRun
+// converters below), so tags.name's unique index can't crash the batch
+// the same way spec_name/suite_name did before issue #230's fix. A tag
+// with an already-resolved ID (looked up or created earlier via the
+// tags service) is unaffected by truncation here: its name was already
+// normalized before that lookup, and TruncateName is idempotent.
 func (c *DatabaseConverter) ConvertDomainTagsToDatabase(domainTags []domain.Tag) []database.Tag {
 	if len(domainTags) == 0 {
 		return nil
@@ -220,7 +228,7 @@ func (c *DatabaseConverter) ConvertDomainTagsToDatabase(domainTags []domain.Tag)
 			BaseModel: database.BaseModel{
 				ID: tag.ID,
 			},
-			Name:     tag.Name,
+			Name:     domain.TruncateName(tag.Name),
 			Category: tag.Category,
 			Value:    tag.Value,
 		}
