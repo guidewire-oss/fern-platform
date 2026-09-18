@@ -19,8 +19,9 @@ pnpm install              # first time only
 make web-dev              # or: pnpm dev
 ```
 
-Vite runs on `:5173` and proxies `/api`, `/graphql`, `/auth` to the Go
-server on `:8080`.
+Vite runs on `:5173` and proxies `/api`, `/graphql`, `/query`, `/auth` to
+the Go server on `:8080`. GraphQL requests go to `/query`; `/graphql`
+serves the playground page.
 
 ## Build
 
