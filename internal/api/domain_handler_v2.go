@@ -11,6 +11,7 @@ import (
 	summaryInterfaces "github.com/guidewire-oss/fern-platform/internal/domains/summary/interfaces"
 	tagsApp "github.com/guidewire-oss/fern-platform/internal/domains/tags/application"
 	"github.com/guidewire-oss/fern-platform/internal/domains/testing/application"
+	"github.com/guidewire-oss/fern-platform/pkg/config"
 	"github.com/guidewire-oss/fern-platform/pkg/logging"
 	"gorm.io/gorm"
 )
@@ -66,8 +67,15 @@ func NewDomainHandlerV2(
 
 // RegisterRoutes registers API routes with the Gin router using split handlers
 func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
-	// Static file serving for docs (legacy web/ removed; v2 SPA is embedded)
+	// Static file serving for docs
 	router.Static("/docs", "./docs")
+
+	// Legacy UI, kept reachable at /legacy for the rollback window while
+	// v2 (mounted at /) is the default. Assets live under /web (referenced
+	// as absolute paths in web/index.html); only the index route moves.
+	router.Static("/web", "./web")
+	router.GET("/legacy", h.serveLegacyUI)
+	router.GET("/legacy/", h.serveLegacyUI)
 
 	// OAuth authentication routes
 	authGroup := router.Group("/auth")
@@ -116,6 +124,18 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
 	sessionID, err := c.Cookie("session_id")
 	return err == nil && sessionID != ""
+}
+
+// serveLegacyUI serves the pre-v2 static UI at /legacy. Mirrors the
+// auth gating the v1 root route used to apply before v2 became the
+// default at /.
+func (h *DomainHandlerV2) serveLegacyUI(c *gin.Context) {
+	authOn := config.GetConfig().Auth.Enabled
+	if authOn && !h.isUserAuthenticated(c) {
+		c.Redirect(302, "/auth/login")
+		return
+	}
+	c.File("./web/index.html")
 }
 
 // registerJiraConnectionRoutes registers JIRA connection routes

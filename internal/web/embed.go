@@ -30,6 +30,8 @@ var reservedPrefixes = []string{
 	"/auth/",
 	"/health",
 	"/metrics",
+	"/legacy",
+	"/web/",
 }
 
 // Register mounts asset serving and a SPA index fallback on r.
