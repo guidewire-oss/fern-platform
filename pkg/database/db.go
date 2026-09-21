@@ -40,7 +40,7 @@ func NewDatabase(cfg *config.DatabaseConfig) (*DB, error) {
 	dbUrl := cfg.ConnectionString()
 
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Warn),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},

@@ -67,22 +67,15 @@ func NewDomainHandlerV2(
 
 // RegisterRoutes registers API routes with the Gin router using split handlers
 func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
-	// Static file serving for web interface
-	router.Static("/web", "./web")
+	// Static file serving for docs
 	router.Static("/docs", "./docs")
 
-	// Root route — serve the SPA. When auth is config-disabled (local
-	// docker-compose smoke, single-user dev), skip the login redirect
-	// entirely so users land on a working UI. Production deployments
-	// keep the redirect by leaving auth.enabled=true.
-	router.GET("/", func(c *gin.Context) {
-		authOn := config.GetConfig().Auth.Enabled
-		if authOn && !h.isUserAuthenticated(c) {
-			c.Redirect(302, "/auth/login")
-			return
-		}
-		c.File("./web/index.html")
-	})
+	// Legacy UI, kept reachable at /legacy for the rollback window while
+	// v2 (mounted at /) is the default. Assets live under /web (referenced
+	// as absolute paths in web/index.html); only the index route moves.
+	router.Static("/web", "./web")
+	router.GET("/legacy", h.serveLegacyUI)
+	router.GET("/legacy/", h.serveLegacyUI)
 
 	// OAuth authentication routes
 	authGroup := router.Group("/auth")
@@ -131,6 +124,18 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
 	sessionID, err := c.Cookie("session_id")
 	return err == nil && sessionID != ""
+}
+
+// serveLegacyUI serves the pre-v2 static UI at /legacy. Mirrors the
+// auth gating the v1 root route used to apply before v2 became the
+// default at /.
+func (h *DomainHandlerV2) serveLegacyUI(c *gin.Context) {
+	authOn := config.GetConfig().Auth.Enabled
+	if authOn && !h.isUserAuthenticated(c) {
+		c.Redirect(302, "/auth/login")
+		return
+	}
+	c.File("./web/index.html")
 }
 
 // registerJiraConnectionRoutes registers JIRA connection routes

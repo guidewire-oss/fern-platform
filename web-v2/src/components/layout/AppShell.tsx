@@ -7,7 +7,6 @@ import {
   Bookmark,
   Sparkles,
   CircleUser,
-  ExternalLink,
   ChevronDown,
   LogIn,
   LogOut,
@@ -198,14 +197,6 @@ function TopBar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <a
-            href="/"
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted transition-colors hover:border-primary hover:text-primary"
-            title="Open legacy UI"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Legacy UI
-          </a>
           {isLoading ? (
             <div className="h-6 w-32 animate-pulse rounded-full bg-surface-2" aria-hidden />
           ) : user ? (

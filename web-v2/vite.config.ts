@@ -4,10 +4,7 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 export default defineConfig({
-  // Mount under /v2/ so the SPA can coexist with the legacy UI at /.
-  // The Go server serves built assets at <base>assets/* — must match
-  // internal/web.RegisterAtPrefix's prefix argument.
-  base: '/v2/',
+  base: '/',
   plugins: [react()],
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
