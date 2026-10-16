@@ -3,6 +3,7 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -103,20 +104,60 @@ func TestEmbed_RegisterAtPrefix_ServesIndexAtPrefix(t *testing.T) {
 	}
 }
 
+// firstAssetName returns the name of one file under the embedded
+// dist/assets directory. The SPA is built at compile time, so asset
+// names are content-hashed and cannot be hardcoded.
+func firstAssetName(t *testing.T) string {
+	t.Helper()
+	entries, err := os.ReadDir("dist/assets")
+	if err != nil {
+		t.Skipf("dist/assets not staged (run make web-stage): %v", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			return e.Name()
+		}
+	}
+	t.Skip("dist/assets is empty (run make web-stage)")
+	return ""
+}
+
+func assertImmutableCache(t *testing.T, path string, r *gin.Engine) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("%s: status=%d", path, w.Code)
+	}
+	cc := w.Header().Get("Cache-Control")
+	if !strings.Contains(cc, "max-age=31536000") || !strings.Contains(cc, "immutable") {
+		t.Errorf("%s: expected long-immutable cache on hashed assets, got %q", path, cc)
+	}
+}
+
 func TestEmbed_RegisterAtPrefix_CachesAssetsAggressively(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	if err := web.RegisterAtPrefix(r, "/v2"); err != nil {
 		t.Fatal(err)
 	}
+	assertImmutableCache(t, "/v2/assets/"+firstAssetName(t), r)
+}
+
+func TestEmbed_Register_CachesAssetsAggressively(t *testing.T) {
+	r := newTestRouter(t)
+	assertImmutableCache(t, "/assets/"+firstAssetName(t), r)
+}
+
+func TestEmbed_MissingAssetIsNotCachedImmutably(t *testing.T) {
+	r := newTestRouter(t)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v2/assets/placeholder.txt", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d", w.Code)
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/index-doesnotexist.js", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status=%d, want 404", w.Code)
 	}
-	cc := w.Header().Get("Cache-Control")
-	if !strings.Contains(cc, "max-age=31536000") || !strings.Contains(cc, "immutable") {
-		t.Errorf("expected long-immutable cache on hashed assets, got %q", cc)
+	if cc := w.Header().Get("Cache-Control"); strings.Contains(cc, "immutable") {
+		t.Errorf("a 404 must not carry an immutable Cache-Control, got %q", cc)
 	}
 }
 

@@ -1,0 +1,21 @@
+name: Stage web SPA
+description: >
+  Build the web-v2 SPA and copy it into internal/web/dist so //go:embed
+  has a real index.html. internal/web/dist is gitignored, so any job that
+  runs `go test ./...` or builds the binary needs this first.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      with:
+        version: 9
+
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+        cache-dependency-path: web-v2/pnpm-lock.yaml
+
+    - name: Build and stage SPA
+      shell: bash
+      run: make web-bundle

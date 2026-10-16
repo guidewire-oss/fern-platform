@@ -5,10 +5,13 @@ claude-progress.md
 .reviews
 REVIEW.md
 
-# internal/web/dist/ must be tracked — it's embedded into the Go
-# binary via //go:embed all:dist. Override any global "dist/" rule.
+# internal/web/dist/ is built at compile time (make web-stage / Dockerfile).
+# Only the .gitkeep placeholder is tracked so the directory exists for
+# //go:embed; the actual build artifacts are not committed.
 !internal/web/dist/
-!internal/web/dist/**
+!internal/web/dist/.gitkeep
+internal/web/dist/*
+!internal/web/dist/.gitkeep
 
 # Local binaries built by `go build ./cmd/...` at repo root.
 /fern-platform

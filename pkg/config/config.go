@@ -58,6 +58,10 @@ type DatabaseConfig struct {
 	MaxIdleConns    int           `mapstructure:"maxIdleConns"`
 	ConnMaxLifetime time.Duration `mapstructure:"connMaxLifetime"`
 	ConnMaxIdleTime time.Duration `mapstructure:"connMaxIdleTime"`
+	// LogLevel sets GORM's logger level: silent, error, warn or info.
+	// "info" logs every SQL statement; the default is "warn" (errors and
+	// slow queries only). Set DB_LOG_LEVEL=info to trace SQL when debugging.
+	LogLevel string `mapstructure:"logLevel"`
 }
 
 type AuthConfig struct {
@@ -268,6 +272,7 @@ func (m *Manager) setDefaults() {
 	viper.SetDefault("database.maxIdleConns", 5)
 	viper.SetDefault("database.connMaxLifetime", "300s")
 	viper.SetDefault("database.connMaxIdleTime", "300s")
+	viper.SetDefault("database.logLevel", "warn")
 
 	// Auth defaults
 	viper.SetDefault("auth.enabled", false)
@@ -346,6 +351,9 @@ func (m *Manager) bindEnvVars() error {
 		return err
 	}
 	if err := viper.BindEnv("database.sslmode", "DB_SSLMODE", "POSTGRES_SSLMODE"); err != nil {
+		return err
+	}
+	if err := viper.BindEnv("database.logLevel", "DB_LOG_LEVEL"); err != nil {
 		return err
 	}
 

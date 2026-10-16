@@ -1,6 +1,11 @@
 # Fern Platform - Main Makefile
 # Unified interface that imports modular Makefiles
 
+# Disable make's built-in suffix rules. Without this, GNU make treats
+# Makefile.web as a WEB (literate Pascal) source and tries to remake
+# Makefile via `tangle` before running any target.
+.SUFFIXES:
+
 # Import all modular Makefiles
 include Makefile.core
 include Makefile.test

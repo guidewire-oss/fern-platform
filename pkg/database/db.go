@@ -4,6 +4,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -35,12 +36,28 @@ type DB struct {
 	config *config.DatabaseConfig
 }
 
+// gormLogLevel maps the configured level name to a GORM log level.
+// Empty or unrecognised values fall back to Warn, so a typo never
+// turns on per-query SQL logging.
+func gormLogLevel(level string) logger.LogLevel {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "silent":
+		return logger.Silent
+	case "error":
+		return logger.Error
+	case "info":
+		return logger.Info
+	default:
+		return logger.Warn
+	}
+}
+
 // NewDatabase creates a new database connection using the provided configuration
 func NewDatabase(cfg *config.DatabaseConfig) (*DB, error) {
 	dbUrl := cfg.ConnectionString()
 
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(gormLogLevel(cfg.LogLevel)),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},

@@ -11,7 +11,7 @@ EMBED_DIST_DIR := internal/web/dist
 PNPM           ?= pnpm
 GQL_SCHEMA_SRC := internal/reporter/graphql/schema.graphql
 
-.PHONY: web-deps web-codegen web-dev web-build web-test web-typecheck web-lint web-size sync-schema web-stage web-clean
+.PHONY: web-deps web-codegen web-dev web-build web-bundle web-test web-typecheck web-lint web-size sync-schema web-stage web-clean
 
 web-deps: ## Install web dependencies (pnpm install)
 	@echo "📦 Installing web dependencies..."
@@ -40,11 +40,17 @@ web-build: web-typecheck web-lint web-test ## Build production bundle (typecheck
 	cd $(WEB_DIR) && $(PNPM) build
 	$(MAKE) web-stage
 
+web-bundle: web-deps ## Install deps, build and stage the SPA (skips lint and tests; the build still typechecks; used by CI before go test)
+	@echo "🌿 Building Fern web SPA..."
+	cd $(WEB_DIR) && $(PNPM) build
+	$(MAKE) web-stage
+
 web-stage: ## Copy dist/ into internal/web/dist/ so go:embed picks it up
 	@echo "📂 Staging dist/ into $(EMBED_DIST_DIR)..."
 	rm -rf $(EMBED_DIST_DIR)
 	mkdir -p $(EMBED_DIST_DIR)
 	cp -R $(WEB_DIST_DIR)/. $(EMBED_DIST_DIR)/
+	touch $(EMBED_DIST_DIR)/.gitkeep
 
 sync-schema: ## Mirror the server GraphQL schema into the web project
 	@if [ ! -f "$(GQL_SCHEMA_SRC)" ]; then \

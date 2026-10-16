@@ -178,7 +178,7 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
-  basepath: '/v2',
+  basepath: '/',
   defaultPreload: 'intent',
 });
 

@@ -38,13 +38,17 @@ func (h *AuthHandler) showLoginPage(c *gin.Context) {
 		return
 	}
 
-	returnURL := c.Query("return")
-	if returnURL == "" {
-		returnURL = "/"
-	}
+	// Only same-origin paths are kept; anything else falls back to "/".
+	returnURL := interfaces.SafeLocalRedirect(c.Query("return"))
 
-	// Store return URL in session/cookie for post-auth redirect
-	c.SetCookie("auth_return_url", returnURL, 3600, "/", "", false, true)
+	// Store return URL in a cookie; the OAuth callback redirects to it.
+	// Mark the cookie Secure whenever the request arrived over HTTPS, either
+	// directly or through a TLS-terminating proxy (X-Forwarded-Proto). This is
+	// the same check the other auth cookies use. It is conditional rather than
+	// always true because local development runs over plain http://localhost,
+	// where browsers would drop a Secure cookie and break the post-login redirect.
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetCookie(interfaces.ReturnURLCookie, returnURL, 3600, "/", "", isSecure, true)
 
 	// Generate OAuth URL
 	oauthURL := h.generateOAuthURL(c)
