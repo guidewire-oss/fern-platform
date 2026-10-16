@@ -53,8 +53,7 @@ func Register(r *gin.Engine) error {
 	// Hashed assets are served via http.FileServer over the embedded
 	// filesystem. Vite emits them under /assets/*; matching there keeps
 	// the SPA fallback below cheap.
-	assetServer := http.StripPrefix("/assets/", http.FileServer(http.FS(mustSub(sub, "assets"))))
-	r.GET("/assets/*filepath", gin.WrapH(assetServer))
+	r.GET("/assets/*filepath", immutableAssetHandler("/assets/", mustSub(sub, "assets")))
 
 	// SPA fallback: any unmatched path returns index.html unless it
 	// targets a reserved API/auth prefix.
@@ -81,6 +80,26 @@ func Register(r *gin.Engine) error {
 	})
 
 	return nil
+}
+
+// immutableAssetHandler serves the content-hashed bundle files under
+// urlPrefix with a year-long immutable Cache-Control. The embedded FS
+// has no modtimes, so FileServer emits no validators; without this
+// header browsers re-download every bundle on each load.
+//
+// The header is only set for files that exist. After a deploy, a stale
+// index.html can still reference a hash that no longer exists; a 404
+// carrying "immutable" could be cached for a year and keep that page
+// broken even once index.html is refreshed.
+func immutableAssetHandler(urlPrefix string, assets fs.FS) gin.HandlerFunc {
+	server := http.StripPrefix(urlPrefix, http.FileServer(http.FS(assets)))
+	return func(c *gin.Context) {
+		name := strings.TrimPrefix(c.Param("filepath"), "/")
+		if info, err := fs.Stat(assets, name); err == nil && !info.IsDir() {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		server.ServeHTTP(c.Writer, c.Request)
+	}
 }
 
 func mustSub(parent fs.FS, dir string) fs.FS {
@@ -118,11 +137,7 @@ func RegisterAtPrefix(r *gin.Engine, prefix string) error {
 
 	// Hashed assets under <prefix>/assets/*. Vite emits these with
 	// content-hashed filenames so a year-long Cache-Control is safe.
-	assetServer := http.StripPrefix(prefix+"/assets/", http.FileServer(http.FS(mustSub(sub, "assets"))))
-	r.GET(prefix+"/assets/*filepath", func(c *gin.Context) {
-		c.Header("Cache-Control", "public, max-age=31536000, immutable")
-		assetServer.ServeHTTP(c.Writer, c.Request)
-	})
+	r.GET(prefix+"/assets/*filepath", immutableAssetHandler(prefix+"/assets/", mustSub(sub, "assets")))
 
 	// index.html at the bare prefix. The wider "any unmatched path
 	// under <prefix>" case is handled by NoRoute below — Gin's

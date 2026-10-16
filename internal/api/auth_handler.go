@@ -38,13 +38,11 @@ func (h *AuthHandler) showLoginPage(c *gin.Context) {
 		return
 	}
 
-	returnURL := c.Query("return")
-	if returnURL == "" {
-		returnURL = "/"
-	}
+	// Only same-origin paths are kept; anything else falls back to "/".
+	returnURL := interfaces.SafeLocalRedirect(c.Query("return"))
 
-	// Store return URL in session/cookie for post-auth redirect
-	c.SetCookie("auth_return_url", returnURL, 3600, "/", "", false, true)
+	// Store return URL in a cookie; the OAuth callback redirects to it.
+	c.SetCookie(interfaces.ReturnURLCookie, returnURL, 3600, "/", "", false, true)
 
 	// Generate OAuth URL
 	oauthURL := h.generateOAuthURL(c)

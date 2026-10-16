@@ -64,6 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+
+    # internal/web/dist is gitignored; the web tests embed the built SPA.
+    - uses: ./.github/actions/stage-web-spa
     
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -104,10 +107,10 @@ jobs:
 
   web-v2:
     # v2 SPA (Vite + React + TypeScript) lives at web-v2/. Its built
-    # output is embedded into the Go binary via //go:embed all:dist,
-    # so the Go test/build jobs above don't catch a broken TypeScript
-    # source — the pre-checked-in dist/ keeps embedding cleanly. This
-    # job is the source-side safety net: typecheck, lint, unit tests,
+    # output is embedded into the Go binary via //go:embed all:dist.
+    # The Go test jobs above build the SPA only to stage it for the
+    # embed; they don't typecheck or lint it. This job is the
+    # source-side safety net: typecheck, lint, unit tests,
     # production build, and a schema-drift check between the GraphQL
     # SDL the Go backend exposes and the copy web-v2 codegen consumes.
     #
@@ -254,6 +257,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - uses: actions/checkout@v5
+
+    - uses: ./.github/actions/stage-web-spa
     
     - uses: dagger/dagger-for-github@8.0.0
       with:
@@ -272,6 +277,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/stage-web-spa
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}

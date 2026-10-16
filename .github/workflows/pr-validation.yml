@@ -39,10 +39,11 @@ jobs:
           didn't match the configured pattern. Please ensure that the subject
           doesn't start with an uppercase character.
 
-  # The server embeds the SPA via //go:embed internal/web/dist, which is a
-  # committed build artifact. If someone changes web-v2/src but forgets to
-  # rebuild + restage internal/web/dist, a stale SPA ships silently. This
-  # job rebuilds the SPA and fails if the committed dist drifts from source.
+  # The server embeds the SPA via //go:embed internal/web/dist, which is
+  # gitignored and built at compile time (make web-bundle / Dockerfile).
+  # This job proves the embed contract from a clean checkout: the SPA
+  # builds, stages, and the Go side can serve it. (It used to diff a
+  # committed dist; that guard is meaningless now that dist is not tracked.)
   check-embed-fresh:
     runs-on: ubuntu-latest
     needs: validate-pr
@@ -53,32 +54,15 @@ jobs:
       with:
         persist-credentials: false
 
-    - name: Set up Node
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+    - uses: ./.github/actions/stage-web-spa
+
+    - name: Set up Go
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
       with:
-        node-version: 20
+        go-version-file: go.mod
 
-    - name: Build and stage web-v2 SPA
-      run: |
-        corepack enable
-        cd web-v2
-        pnpm install --frozen-lockfile
-        pnpm build
-        cd ..
-        rm -rf internal/web/dist
-        mkdir -p internal/web/dist
-        cp -R web-v2/dist/. internal/web/dist/
-
-    - name: Fail if the embedded SPA is stale
-      run: |
-        if ! git diff --quiet -- internal/web/dist; then
-          echo "::error::internal/web/dist is out of sync with web-v2/src."
-          echo "Rebuild and restage the SPA, then commit internal/web/dist:"
-          echo "  cd web-v2 && pnpm build && cd .. && rm -rf internal/web/dist && mkdir -p internal/web/dist && cp -R web-v2/dist/. internal/web/dist/"
-          git status --short -- internal/web/dist
-          exit 1
-        fi
-        echo "Embedded SPA is in sync with web-v2/src."
+    - name: Embedded SPA serves from a clean build
+      run: go test ./internal/web/...
 
   check-acceptance-tests:
     runs-on: ubuntu-latest

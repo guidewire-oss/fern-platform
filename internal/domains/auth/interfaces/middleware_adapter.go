@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -308,6 +309,27 @@ func GenerateCodeChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
+// ReturnURLCookie holds the path to send the user back to after login.
+// Set by GET /auth/login, consumed by the OAuth callback.
+const ReturnURLCookie = "auth_return_url"
+
+// SafeLocalRedirect returns target if it is a same-origin path, and "/"
+// otherwise. The value comes from a query string or cookie, so it must
+// never send the user to another host after login (open redirect).
+func SafeLocalRedirect(target string) string {
+	if !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.HasPrefix(target, "/\\") {
+		return "/"
+	}
+	if strings.ContainsAny(target, "\r\n\t") {
+		return "/"
+	}
+	u, err := url.Parse(target)
+	if err != nil || u.IsAbs() || u.Host != "" {
+		return "/"
+	}
+	return target
+}
+
 // StartOAuthFlow initiates the OAuth authentication flow
 func (m *AuthMiddlewareAdapter) StartOAuthFlow() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -440,8 +462,17 @@ func (m *AuthMiddlewareAdapter) HandleOAuthCallback() gin.HandlerFunc {
 			"is_new_user": result.IsNewUser,
 		}).Info("OAuth authentication successful")
 
-		// Redirect to dashboard or intended page
-		redirectURL := c.DefaultQuery("redirect", "/")
+		// Redirect to the page the user originally asked for. The login page
+		// (GET /auth/login?return=...) stores it in ReturnURLCookie; the
+		// IdP only echoes code/state, so the cookie is the one value that
+		// survives the round trip. Fall back to ?redirect=, then "/".
+		redirectURL := "/"
+		if returnURL, err := c.Cookie(ReturnURLCookie); err == nil && returnURL != "" {
+			redirectURL = SafeLocalRedirect(returnURL)
+			c.SetCookie(ReturnURLCookie, "", -1, "/", "", isSecure, true)
+		} else if q := c.Query("redirect"); q != "" {
+			redirectURL = SafeLocalRedirect(q)
+		}
 		c.Redirect(http.StatusFound, redirectURL)
 	}
 }

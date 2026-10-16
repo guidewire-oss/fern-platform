@@ -267,7 +267,8 @@ Fern Platform serves a React SPA embedded in the Go binary. It is the default UI
 The built assets (`internal/web/dist/`) are **not committed to git**. Run `make web-stage` before `go build`, or use the Docker build which handles this automatically.
 
 ```bash
-# Install dependencies, build, and stage into internal/web/dist/
+# Install dependencies, then build and stage into internal/web/dist/
+make web-deps
 make web-build
 
 # Then build the Go binary

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	_ "net/http"
 	"net/http/httptest"
-	_ "strings"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -274,6 +274,40 @@ var _ = Describe("AuthMiddlewareAdapter", Label("auth"), func() {
 
 			mw := adapter.HandleOAuthCallback()
 			mw(c)
+
+			Expect(recorder.Code).To(Equal(302))
+			Expect(recorder.Header().Get("Location")).To(Equal("/"))
+		})
+
+		completeLogin := func(returnCookie string) {
+			req := httptest.NewRequest("GET", "/callback?state=state123&code=abc", nil)
+			req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "state123"})
+			if returnCookie != "" {
+				req.AddCookie(&http.Cookie{Name: interfaces.ReturnURLCookie, Value: returnCookie})
+			}
+			c.Request = req
+
+			oauth.token = &application.TokenInfo{AccessToken: "tok"}
+			oauth.user = &application.UserInfo{Sub: "u1"}
+			authSvc.authFn = func(ctx context.Context, u application.UserInfo, t application.TokenInfo, ip, ua string) (*application.AuthenticateResult, error) {
+				return &application.AuthenticateResult{
+					Session: &domain.Session{SessionID: "s1"},
+					User:    &domain.User{UserID: "u1"},
+				}, nil
+			}
+			adapter.HandleOAuthCallback()(c)
+		}
+
+		It("redirects to the return URL saved by the login page and clears it", func() {
+			completeLogin("/legacy")
+
+			Expect(recorder.Code).To(Equal(302))
+			Expect(recorder.Header().Get("Location")).To(Equal("/legacy"))
+			Expect(strings.Join(recorder.Header().Values("Set-Cookie"), ";")).To(ContainSubstring(interfaces.ReturnURLCookie + "=;"))
+		})
+
+		It("ignores a return URL that points off-site", func() {
+			completeLogin("//evil.example/phish")
 
 			Expect(recorder.Code).To(Equal(302))
 			Expect(recorder.Header().Get("Location")).To(Equal("/"))
@@ -860,3 +894,17 @@ var _ = Describe("Auth Middleware Helper Functions", func() {
 		})
 	})
 })
+
+var _ = DescribeTable("SafeLocalRedirect",
+	func(in, want string) {
+		Expect(interfaces.SafeLocalRedirect(in)).To(Equal(want))
+	},
+	Entry("keeps a plain path", "/legacy", "/legacy"),
+	Entry("keeps path and query", "/projects/abc?tab=runs", "/projects/abc?tab=runs"),
+	Entry("empty falls back to root", "", "/"),
+	Entry("relative path falls back", "legacy", "/"),
+	Entry("absolute URL falls back", "https://evil.example/", "/"),
+	Entry("scheme-relative URL falls back", "//evil.example/", "/"),
+	Entry("backslash host trick falls back", "/\\evil.example", "/"),
+	Entry("embedded newline falls back", "/ok\r\nLocation: https://evil.example", "/"),
+)

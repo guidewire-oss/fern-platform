@@ -2,6 +2,8 @@
 package api
 
 import (
+	"net/url"
+
 	"github.com/gin-gonic/gin"
 	analyticsApp "github.com/guidewire-oss/fern-platform/internal/domains/analytics/application"
 	authDomain "github.com/guidewire-oss/fern-platform/internal/domains/auth/domain"
@@ -132,7 +134,9 @@ func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
 func (h *DomainHandlerV2) serveLegacyUI(c *gin.Context) {
 	authOn := config.GetConfig().Auth.Enabled
 	if authOn && !h.isUserAuthenticated(c) {
-		c.Redirect(302, "/auth/login")
+		// Carry /legacy through login so the user lands back here and not
+		// on the v2 SPA at /.
+		c.Redirect(302, "/auth/login?return="+url.QueryEscape("/legacy"))
 		return
 	}
 	c.File("./web/index.html")
