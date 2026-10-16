@@ -40,7 +40,7 @@ web-build: web-typecheck web-lint web-test ## Build production bundle (typecheck
 	cd $(WEB_DIR) && $(PNPM) build
 	$(MAKE) web-stage
 
-web-bundle: web-deps ## Install deps, build and stage the SPA (no typecheck/lint/test; used by CI before go test)
+web-bundle: web-deps ## Install deps, build and stage the SPA (skips lint and tests; the build still typechecks; used by CI before go test)
 	@echo "🌿 Building Fern web SPA..."
 	cd $(WEB_DIR) && $(PNPM) build
 	$(MAKE) web-stage

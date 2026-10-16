@@ -17,10 +17,10 @@ func TestServeLegacyUI_UnauthenticatedKeepsLegacyReturnPath(t *testing.T) {
 	t.Setenv("AUTH_ENABLED", "true")
 	t.Setenv("JWT_SECRET", "test-only-not-a-real-secret")
 	if err := config.NewManager().Load(""); err != nil {
-		t.Skipf("config could not be loaded in this environment: %v", err)
+		t.Fatalf("config could not be loaded: %v", err)
 	}
 	if !config.GetConfig().Auth.Enabled {
-		t.Skip("auth not enabled by AUTH_ENABLED in this environment")
+		t.Fatal("AUTH_ENABLED=true did not enable auth in the loaded config")
 	}
 
 	gin.SetMode(gin.TestMode)
