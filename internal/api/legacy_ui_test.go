@@ -38,3 +38,31 @@ func TestServeLegacyUI_UnauthenticatedKeepsLegacyReturnPath(t *testing.T) {
 		t.Errorf("Location=%q, want %q", got, want)
 	}
 }
+
+// Old /web URLs (e.g. bookmarked /web/#/test-runs) must redirect to /legacy
+// rather than keep serving the legacy UI, while /web assets still load (#237).
+func TestLegacyUIRoutes_WebRedirectsToLegacyAndAssetsStillServe(t *testing.T) {
+	t.Chdir("../..") // ./web is resolved relative to the repo root
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := &DomainHandlerV2{}
+	h.registerLegacyUIRoutes(r)
+
+	for _, path := range []string{"/web", "/web/", "/web/index.html"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusFound {
+			t.Errorf("%s: status=%d, want 302", path, w.Code)
+		}
+		if got := w.Header().Get("Location"); got != "/legacy" {
+			t.Errorf("%s: Location=%q, want /legacy", path, got)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/web/js/graphql-client.js", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("/web/js/graphql-client.js: status=%d, want 200", w.Code)
+	}
+}
