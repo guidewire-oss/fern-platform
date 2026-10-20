@@ -46,6 +46,11 @@ Choose based on your installation method:
 - Make
 - 8GB RAM minimum
 
+**For running from source (`go run` / IDE):**
+- Go 1.24+
+- Node.js 20+ and pnpm 9 (to build the v2 SPA embedded in the binary)
+- Make
+
 ### Installation
 
 Choose your preferred installation method:
@@ -264,7 +269,7 @@ Fern Platform serves a React SPA embedded in the Go binary. It is the default UI
 
 ### Building the frontend locally
 
-The built assets (`internal/web/dist/`) are **not committed to git**. Run `make web-stage` before `go build`, or use the Docker build which handles this automatically.
+The built assets (`internal/web/dist/`) are **not committed to git**. Run `make web-bundle` before `go build` or `go run`, or use the Docker build which handles this automatically.
 
 ```bash
 # Install dependencies, then build and stage into internal/web/dist/
@@ -277,6 +282,10 @@ go build ./cmd/fern-platform
 # Run the dev server with hot-reload (proxies API calls to a running backend)
 cd web-v2 && pnpm dev
 ```
+
+> **Server exits with `failed to mount v2 SPA` / `web: read index.html: open index.html: file does not exist`?**
+> The SPA hasn't been built and staged into `internal/web/dist/`. Run `make web-bundle`
+> (installs deps, builds, and stages), then rebuild and restart the server.
 
 ## The Vision: Where We're Heading
 

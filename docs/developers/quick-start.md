@@ -309,7 +309,17 @@ auth:
 
 > 💡 Keep your local `config/config.yaml` overrides out of commits — the cluster password is environment-specific.
 
-### Step 5: Run Fern Platform from your IDE
+### Step 5: Build the frontend
+
+The v2 SPA is embedded in the Go binary from `internal/web/dist/`, which is not committed. Build and stage it (needs Node.js 20+ and pnpm 9):
+
+```bash
+make web-bundle
+```
+
+The first build is required: without `internal/web/dist/index.html` the server exits with `failed to mount v2 SPA`. Re-run it after pulling changes to `web-v2/`, otherwise the server keeps serving the older bundle it was built with.
+
+### Step 6: Run Fern Platform from your IDE
 
 Run from the repo root:
 

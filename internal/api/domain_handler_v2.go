@@ -2,6 +2,7 @@
 package api
 
 import (
+	"net/http"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
@@ -72,12 +73,7 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 	// Static file serving for docs
 	router.Static("/docs", "./docs")
 
-	// Legacy UI, kept reachable at /legacy for the rollback window while
-	// v2 (mounted at /) is the default. Assets live under /web (referenced
-	// as absolute paths in web/index.html); only the index route moves.
-	router.Static("/web", "./web")
-	router.GET("/legacy", h.serveLegacyUI)
-	router.GET("/legacy/", h.serveLegacyUI)
+	h.registerLegacyUIRoutes(router)
 
 	// OAuth authentication routes
 	authGroup := router.Group("/auth")
@@ -126,6 +122,30 @@ func (h *DomainHandlerV2) RegisterRoutes(router *gin.Engine) {
 func (h *DomainHandlerV2) isUserAuthenticated(c *gin.Context) bool {
 	sessionID, err := c.Cookie("session_id")
 	return err == nil && sessionID != ""
+}
+
+// registerLegacyUIRoutes keeps the legacy UI reachable at /legacy for the
+// rollback window while v2 (mounted at /) is the default. Assets stay under
+// /web (referenced as absolute paths in web/index.html), mounted per folder
+// so /web itself no longer serves the old index. Old /web URLs redirect to
+// /legacy; the browser carries the #/route fragment across the redirect.
+func (h *DomainHandlerV2) registerLegacyUIRoutes(router *gin.Engine) {
+	for _, dir := range []string{"css", "fonts", "images", "js"} {
+		router.Static("/web/"+dir, "./web/"+dir)
+	}
+	redirectToLegacy := func(c *gin.Context) {
+		// 302, not 301: browsers cache 301s, which would outlive a rollback.
+		c.Redirect(http.StatusFound, "/legacy")
+	}
+	// HEAD too, as router.Static("/web") did, so curl -I and uptime checks
+	// get the redirect rather than a 404.
+	for _, path := range []string{"/web", "/web/", "/web/index.html"} {
+		router.GET(path, redirectToLegacy)
+		router.HEAD(path, redirectToLegacy)
+	}
+
+	router.GET("/legacy", h.serveLegacyUI)
+	router.GET("/legacy/", h.serveLegacyUI)
 }
 
 // serveLegacyUI serves the pre-v2 static UI at /legacy. Mirrors the
