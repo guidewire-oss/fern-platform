@@ -317,7 +317,7 @@ The v2 SPA is embedded in the Go binary from `internal/web/dist/`, which is not 
 make web-bundle
 ```
 
-Re-run this after pulling changes to `web-v2/`. Skipping it makes the server exit with `failed to mount v2 SPA`.
+The first build is required: without `internal/web/dist/index.html` the server exits with `failed to mount v2 SPA`. Re-run it after pulling changes to `web-v2/`, otherwise the server keeps serving the older bundle it was built with.
 
 ### Step 6: Run Fern Platform from your IDE
 

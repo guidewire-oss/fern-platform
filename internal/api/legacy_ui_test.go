@@ -49,14 +49,16 @@ func TestLegacyUIRoutes_WebRedirectsToLegacyAndAssetsStillServe(t *testing.T) {
 	h := &DomainHandlerV2{}
 	h.registerLegacyUIRoutes(r)
 
-	for _, path := range []string{"/web", "/web/", "/web/index.html"} {
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
-		if w.Code != http.StatusFound {
-			t.Errorf("%s: status=%d, want 302", path, w.Code)
-		}
-		if got := w.Header().Get("Location"); got != "/legacy" {
-			t.Errorf("%s: Location=%q, want /legacy", path, got)
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		for _, path := range []string{"/web", "/web/", "/web/index.html"} {
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			if w.Code != http.StatusFound {
+				t.Errorf("%s %s: status=%d, want 302", method, path, w.Code)
+			}
+			if got := w.Header().Get("Location"); got != "/legacy" {
+				t.Errorf("%s %s: Location=%q, want /legacy", method, path, got)
+			}
 		}
 	}
 

@@ -137,9 +137,12 @@ func (h *DomainHandlerV2) registerLegacyUIRoutes(router *gin.Engine) {
 		// 302, not 301: browsers cache 301s, which would outlive a rollback.
 		c.Redirect(http.StatusFound, "/legacy")
 	}
-	router.GET("/web", redirectToLegacy)
-	router.GET("/web/", redirectToLegacy)
-	router.GET("/web/index.html", redirectToLegacy)
+	// HEAD too, as router.Static("/web") did, so curl -I and uptime checks
+	// get the redirect rather than a 404.
+	for _, path := range []string{"/web", "/web/", "/web/index.html"} {
+		router.GET(path, redirectToLegacy)
+		router.HEAD(path, redirectToLegacy)
+	}
 
 	router.GET("/legacy", h.serveLegacyUI)
 	router.GET("/legacy/", h.serveLegacyUI)
