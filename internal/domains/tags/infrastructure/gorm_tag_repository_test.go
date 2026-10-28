@@ -201,6 +201,59 @@ var _ = Describe("GormTagRepository", Label("integration", "infrastructure", "ta
 			Expect(tag.Name()).To(Equal("test"))
 		})
 
+		It("should find a tag when the search name has wrapping quotes", func() {
+			dbTag := &database.Tag{
+				Name:     "labels:a || b",
+				Category: "labels",
+				Value:    "a || b",
+			}
+			err := db.Create(dbTag).Error
+			Expect(err).NotTo(HaveOccurred())
+
+			tag, err := repo.FindByName(ctx, `labels:"a || b"`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tag).NotTo(BeNil())
+			Expect(tag.Name()).To(Equal("labels:a || b"))
+		})
+
+		It("should find a legacy row stored with wrapping quotes", func() {
+			dbTag := &database.Tag{
+				Name:     `labels:"a || b"`,
+				Category: "labels",
+				Value:    `"a || b"`,
+			}
+			Expect(db.Create(dbTag).Error).NotTo(HaveOccurred())
+
+			tag, err := repo.FindByName(ctx, `labels:"a || b"`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tag.Name()).To(Equal(`labels:"a || b"`))
+		})
+
+		It("should reuse a legacy quoted row in GetOrCreateTag instead of creating a duplicate", func() {
+			dbTag := &database.Tag{
+				Name:     `labels:"a || b"`,
+				Category: "labels",
+				Value:    `"a || b"`,
+			}
+			Expect(db.Create(dbTag).Error).NotTo(HaveOccurred())
+
+			_, err := repo.GetOrCreateTag(ctx, `labels:"a || b"`)
+			Expect(err).NotTo(HaveOccurred())
+
+			var count int64
+			Expect(db.Model(&database.Tag{}).Count(&count).Error).NotTo(HaveOccurred())
+			Expect(count).To(Equal(int64(1)))
+		})
+
+		It("should prefer the canonical row over a legacy quoted one", func() {
+			Expect(db.Create(&database.Tag{Name: `labels:"a || b"`, Category: "labels", Value: `"a || b"`}).Error).NotTo(HaveOccurred())
+			Expect(db.Create(&database.Tag{Name: "labels:a || b", Category: "labels", Value: "a || b"}).Error).NotTo(HaveOccurred())
+
+			tag, err := repo.FindByName(ctx, `labels:"a || b"`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(tag.Name()).To(Equal("labels:a || b"))
+		})
+
 		It("should return error for non-existent tag", func() {
 			tag, err := repo.FindByName(ctx, "nonexistent")
 			Expect(err).To(HaveOccurred())

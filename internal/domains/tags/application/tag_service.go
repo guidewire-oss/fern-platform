@@ -55,8 +55,9 @@ func (s *TagService) CreateTag(ctx context.Context, name string) (*domain.Tag, e
 		return nil, fmt.Errorf("failed to save tag: %w", err)
 	}
 
-	// Retrieve the saved tag to get the ID
-	return s.tagRepo.FindByName(ctx, name)
+	// Retrieve the saved tag to get the ID. Look it up by the normalized name,
+	// since the raw input may differ from what was stored (case, quotes).
+	return s.tagRepo.FindByName(ctx, tag.Name())
 }
 
 // GetTag retrieves a tag by ID
