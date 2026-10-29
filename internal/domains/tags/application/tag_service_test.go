@@ -45,7 +45,8 @@ func (r *inMemoryTagRepo) FindByName(ctx context.Context, name string) (*domain.
 	if r.fail {
 		return nil, fmt.Errorf("repo error")
 	}
-	if t, ok := r.byName[strings.ToLower(name)]; ok {
+	normalized, _, _ := domain.ParseTagName(name)
+	if t, ok := r.byName[normalized]; ok {
 		return t, nil
 	}
 	return nil, fmt.Errorf("not found")
@@ -280,6 +281,21 @@ var _ = Describe("TagService", func() {
 			second, err := svc.CreateTag(ctx, "dup")
 			Expect(err).To(BeNil())
 			Expect(second.ID()).To(Equal(first.ID()))
+		})
+
+		It("strips wrapping quotes and reuses the tag for quoted and unquoted input", func() {
+			quoted, err := svc.CreateTag(ctx, `labels:"a || b"`)
+			Expect(err).To(BeNil())
+			Expect(quoted.Name()).To(Equal("labels:a || b"))
+			Expect(quoted.Value()).To(Equal("a || b"))
+
+			again, err := svc.CreateTag(ctx, `labels:"a || b"`)
+			Expect(err).To(BeNil())
+			Expect(again.ID()).To(Equal(quoted.ID()))
+
+			plain, err := svc.CreateTag(ctx, "labels:a || b")
+			Expect(err).To(BeNil())
+			Expect(plain.ID()).To(Equal(quoted.ID()))
 		})
 
 		It("returns error if repository fails", func() {

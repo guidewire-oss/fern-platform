@@ -87,6 +87,37 @@ var _ = Describe("Tag", Label("unit", "domain", "tags"), func() {
 			})
 		})
 
+		Context("with wrapping quotes", func() {
+			DescribeTable("strips one matching pair around the value",
+				func(input, name, category, value string) {
+					tag, err := domain.NewTag(input)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(tag.Name()).To(Equal(name))
+					Expect(tag.Category()).To(Equal(category))
+					Expect(tag.Value()).To(Equal(value))
+				},
+				Entry("double quotes after a category", `labels:"a || b"`, "labels:a || b", "labels", "a || b"),
+				Entry("single quotes after a category", `labels:'a || b'`, "labels:a || b", "labels", "a || b"),
+				Entry("quotes on a colon-less tag", `"smoke"`, "smoke", "", "smoke"),
+				Entry("whitespace around and inside the quotes", `labels: " a "`, "labels:a", "labels", "a"),
+				Entry("uppercase is still lowercased", `Labels:"A || B"`, "labels:a || b", "labels", "a || b"),
+				Entry("only the outer pair is stripped", `labels:""a""`, `labels:"a"`, "labels", `"a"`),
+				Entry("inner quotes are kept", `msg:say "hi" now`, `msg:say "hi" now`, "msg", `say "hi" now`),
+				Entry("mismatched quotes are kept", `labels:"a'`, `labels:"a'`, "labels", `"a'`),
+				Entry("unterminated quote is kept", `labels:"a`, `labels:"a`, "labels", `"a`),
+				Entry("empty quoted value is kept", `labels:""`, `labels:""`, "labels", `""`),
+				Entry("whitespace-only quoted value is kept", `labels:" "`, `labels:" "`, "labels", `" "`),
+			)
+
+			It("should give the same name for a quoted and unquoted tag", func() {
+				quoted, err := domain.NewTag(`labels:"a || b"`)
+				Expect(err).NotTo(HaveOccurred())
+				plain, err := domain.NewTag(`labels:a || b`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(quoted.Name()).To(Equal(plain.Name()))
+			})
+		})
+
 		Context("with invalid tag names", func() {
 			It("should return error when name is empty", func() {
 				tag, err := domain.NewTag("")

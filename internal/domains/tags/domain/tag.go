@@ -33,21 +33,9 @@ func NewTag(name string) (*Tag, error) {
 		return nil, errors.New("tag name cannot be empty")
 	}
 
-	// Normalize tag name
-	normalizedName := strings.TrimSpace(strings.ToLower(name))
+	normalizedName, category, value := ParseTagName(name)
 	if normalizedName == "" {
 		return nil, errors.New("tag name cannot be empty after normalization")
-	}
-
-	// Parse category and value from name
-	// If there is no colon, put the whole input into Value
-	// Example: "priority:high" -> Category: "priority", Value: "high"
-	var category, value string
-	if idx := strings.Index(normalizedName, ":"); idx == -1 {
-		value = normalizedName
-	} else {
-		category = strings.TrimSpace(normalizedName[:idx])
-		value = strings.TrimSpace(normalizedName[idx+1:])
 	}
 
 	return &Tag{
@@ -57,6 +45,58 @@ func NewTag(name string) (*Tag, error) {
 		value:     value,
 		createdAt: time.Now(),
 	}, nil
+}
+
+// ParseTagName normalizes a raw tag string into its stored name, category and
+// value. It is the single place tag names are interpreted, so lookups and
+// creation agree on what an incoming tag is called.
+//
+// The name is trimmed and lowercased. It is split on the first colon into
+// category and value; with no colon the whole input is the value and the
+// category is empty. A single pair of matching quotes (' or ") wrapping the
+// value is stripped, e.g. labels:"a || b" -> labels / a || b. The name is only
+// rebuilt as category:value when a quote was stripped, so existing names keep
+// their original spelling.
+func ParseTagName(raw string) (name, category, value string) {
+	name = strings.TrimSpace(strings.ToLower(raw))
+	if name == "" {
+		return "", "", ""
+	}
+
+	hasColon := false
+	rawValue := name
+	if idx := strings.Index(name, ":"); idx != -1 {
+		hasColon = true
+		category = strings.TrimSpace(name[:idx])
+		rawValue = strings.TrimSpace(name[idx+1:])
+	}
+
+	value = stripWrappingQuotes(rawValue)
+	if value == rawValue {
+		return name, category, value
+	}
+
+	if !hasColon {
+		return value, "", value
+	}
+	return category + ":" + value, category, value
+}
+
+// stripWrappingQuotes removes one pair of matching quotes around the whole
+// string. Inner quotes, unmatched quotes and an empty pair ("") are left alone,
+// so a value never silently becomes empty.
+func stripWrappingQuotes(s string) string {
+	if len(s) < 3 {
+		return s
+	}
+	first, last := s[0], s[len(s)-1]
+	if first != last || (first != '"' && first != '\'') {
+		return s
+	}
+	if inner := strings.TrimSpace(s[1 : len(s)-1]); inner != "" {
+		return inner
+	}
+	return s
 }
 
 // ID returns the tag ID

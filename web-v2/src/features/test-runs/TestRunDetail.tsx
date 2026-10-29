@@ -467,14 +467,25 @@ function SpecRow({ spec }: { spec: SpecLike }) {
   );
 }
 
-function TagChip({ tag }: { tag: TagRef }) {
+// Exported for unit tests, like hasDisplayableMetadata above.
+// eslint-disable-next-line react-refresh/only-export-components
+export function tagLabel(tag: TagRef): string {
   // `name` is sometimes the raw, unprocessed "category:value" string (e.g.
   // Ginkgo labels reported as-is) and sometimes a distinct human label with
   // category/value tracked separately (e.g. "team" / owner / platform).
-  // Only substitute in "category: value" when name is exactly that raw
+  // A tag with no colon has no category (ingest stores it empty) and its value
+  // is just its name, so the empty category is what marks it colon-less.
+  // Only substitute in "category: value" when name is exactly the raw
   // compound -- otherwise appending value to name would double it up.
-  const isRawCompound = tag.value && tag.name === `${tag.category}:${tag.value}`;
-  const label = !tag.value ? tag.name : isRawCompound ? `${tag.category}: ${tag.value}` : `${tag.name}: ${tag.value}`;
+  if (!tag.value || !tag.category) return tag.name;
+  if (tag.name === `${tag.category}:${tag.value}` || tag.name === tag.value) {
+    return `${tag.category}: ${tag.value}`;
+  }
+  return `${tag.name}: ${tag.value}`;
+}
+
+function TagChip({ tag }: { tag: TagRef }) {
+  const label = tagLabel(tag);
   const style = tag.color ? { backgroundColor: `${tag.color}22`, color: tag.color } : undefined;
   return (
     <span

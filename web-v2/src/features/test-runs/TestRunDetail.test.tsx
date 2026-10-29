@@ -37,7 +37,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQuery: (opts: { queryFn: () => unknown }) => mockQuery(opts),
 }));
 
-import TestRunDetail, { hasDisplayableMetadata } from './TestRunDetail';
+import TestRunDetail, { hasDisplayableMetadata, tagLabel } from './TestRunDetail';
 
 type Tag = { id: string; name: string; category: string | null; value: string | null; color: string | null };
 type SpecLike = {
@@ -365,5 +365,48 @@ describe('TestRunDetail project identification', () => {
     renderWith({ ...baseRun, projectName: 'Flux System 1' });
     const link = screen.getByText('Flux System 1').closest('a');
     expect(link?.getAttribute('data-to')).toBe('/projects/$projectId');
+  });
+});
+
+describe('tagLabel', () => {
+  const tag = (name: string, category: string | null, value: string | null): Tag => ({
+    id: 't', name, category, value, color: null,
+  });
+
+  it('shows only the name when there is no value', () => {
+    expect(tagLabel(tag('smoke', 'suite', null))).toBe('smoke');
+  });
+
+  it('shows only the name for a colon-less tag (empty or null category, value === name)', () => {
+    expect(tagLabel(tag('metrics', '', 'metrics'))).toBe('metrics');
+    expect(tagLabel(tag('lhs_tenant_log_metrics', null, 'lhs_tenant_log_metrics'))).toBe('lhs_tenant_log_metrics');
+  });
+
+  it('renders a raw category:value name as "category: value"', () => {
+    expect(tagLabel(tag('team:qa', 'team', 'qa'))).toBe('team: qa');
+    expect(tagLabel(tag('team:team', 'team', 'team'))).toBe('team: team');
+  });
+
+  it('keeps the category for a categorized tag whose value equals its name', () => {
+    expect(tagLabel(tag('integration', 'type', 'integration'))).toBe('type: integration');
+  });
+
+  it('shows a category-less ":value" name as stored', () => {
+    expect(tagLabel(tag(':foo', '', 'foo'))).toBe(':foo');
+  });
+
+  it('renders a distinct label with a separate category/value as "name: value"', () => {
+    expect(tagLabel(tag('team', 'owner', 'platform'))).toBe('team: platform');
+  });
+});
+
+describe('Tag chip rendering', () => {
+  it('does not duplicate a colon-less tag in the run header', () => {
+    renderWith({
+      ...baseRun,
+      tags: [{ id: 't1', name: 'metrics', category: '', value: 'metrics', color: null }],
+    });
+    const chip = within(screen.getByTestId('run-tags')).getByTestId('tag-chip');
+    expect(chip).toHaveTextContent(/^metrics$/);
   });
 });

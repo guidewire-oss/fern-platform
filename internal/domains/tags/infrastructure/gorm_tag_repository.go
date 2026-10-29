@@ -72,18 +72,34 @@ func (r *GormTagRepository) FindByID(ctx context.Context, id domain.TagID) (*dom
 
 // FindByName retrieves a tag by name
 func (r *GormTagRepository) FindByName(ctx context.Context, name string) (*domain.Tag, error) {
-	// Normalize the name for search
-	normalizedName := strings.TrimSpace(strings.ToLower(name))
+	// Normalize the name for search, the same way NewTag does
+	normalizedName, _, _ := domain.ParseTagName(name)
 
-	var dbTag database.Tag
-	if err := r.db.WithContext(ctx).Where("LOWER(name) = ?", normalizedName).First(&dbTag).Error; err != nil {
+	dbTag, err := r.findByLowerName(ctx, normalizedName)
+	if err == gorm.ErrRecordNotFound {
+		// Rows written before quote stripping were never migrated and keep the
+		// wrapping quotes in name. Fall back to that spelling so re-ingesting
+		// such a tag reuses the row instead of creating a second one.
+		if legacyName := strings.TrimSpace(strings.ToLower(name)); legacyName != normalizedName {
+			dbTag, err = r.findByLowerName(ctx, legacyName)
+		}
+	}
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("tag not found")
 		}
 		return nil, fmt.Errorf("failed to find tag: %w", err)
 	}
 
-	return r.toDomainModel(&dbTag)
+	return r.toDomainModel(dbTag)
+}
+
+func (r *GormTagRepository) findByLowerName(ctx context.Context, lowerName string) (*database.Tag, error) {
+	var dbTag database.Tag
+	if err := r.db.WithContext(ctx).Where("LOWER(name) = ?", lowerName).First(&dbTag).Error; err != nil {
+		return nil, err
+	}
+	return &dbTag, nil
 }
 
 // FindAll retrieves all tags
