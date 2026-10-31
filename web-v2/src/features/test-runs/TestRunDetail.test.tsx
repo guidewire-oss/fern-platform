@@ -367,3 +367,65 @@ describe('TestRunDetail project identification', () => {
     expect(link?.getAttribute('data-to')).toBe('/projects/$projectId');
   });
 });
+
+describe('Suites and specs sort/filter', () => {
+  const specs: SpecLike[] = [
+    { ...baseSpec, id: 'a', specName: 'alpha', status: 'passed', duration: 300 },
+    { ...baseSpec, id: 'b', specName: 'bravo', status: 'skipped', duration: 0 },
+    {
+      ...baseSpec, id: 'c', specName: 'charlie', status: 'failed', duration: 100,
+      errorMessage: 'boom',
+      tags: [{ id: 't1', name: 'jira:GWCP-9', category: 'jira', value: 'GWCP-9', color: null }],
+    },
+  ];
+  const run: RunLike = {
+    ...baseRun,
+    suiteRuns: [
+      { ...baseSuite, id: 'su-1', suiteName: 'zulu', status: 'failed', specRuns: specs, totalSpecs: 3 },
+      { ...baseSuite, id: 'su-2', suiteName: 'yankee', status: 'passed' },
+    ],
+  };
+  const specNames = () =>
+    screen.getAllByTestId('spec-row').map((r) => r.querySelector('td')!.textContent);
+  const suiteNames = () =>
+    screen.getAllByTestId('suite-row').map((r) => r.querySelector('.font-medium')!.textContent);
+
+  it('sorts suites by name and filters them by status', () => {
+    renderWith(run);
+    expect(suiteNames()).toEqual(['zulu', 'yankee']);
+    fireEvent.click(screen.getByTestId('sort-name'));
+    expect(suiteNames()).toEqual(['yankee', 'zulu']);
+    fireEvent.click(screen.getByRole('button', { name: /^passed/ }));
+    expect(suiteNames()).toEqual(['yankee']);
+  });
+
+  it('hides skipped specs and filters by tag', () => {
+    renderWith(run);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    expect(specNames()).toEqual(['alpha', 'bravo', 'charlie']);
+
+    fireEvent.click(screen.getByTestId('hide-skipped'));
+    expect(specNames()).toEqual(['alpha', 'charlie']);
+
+    const tagGroup = screen.getByRole('group', { name: 'Tags' });
+    fireEvent.click(within(tagGroup).getByRole('button', { name: /jira: GWCP-9/ }));
+    expect(specNames()).toEqual(['charlie']);
+  });
+
+  it('sorts specs by duration descending on the second click', () => {
+    renderWith(run);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    fireEvent.click(screen.getByTestId('sort-duration'));
+    fireEvent.click(screen.getByTestId('sort-duration'));
+    expect(specNames()).toEqual(['alpha', 'charlie', 'bravo']);
+  });
+
+  it('keeps the suites filter when coming back from a suite', () => {
+    renderWith(run);
+    fireEvent.click(screen.getByRole('button', { name: /^failed/ }));
+    expect(suiteNames()).toEqual(['zulu']);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    fireEvent.click(screen.getByTestId('back-to-suites'));
+    expect(suiteNames()).toEqual(['zulu']);
+  });
+});

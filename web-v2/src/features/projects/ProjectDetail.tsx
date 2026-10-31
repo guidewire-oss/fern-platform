@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { Link, useParams, useRouter } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { restFetch } from '@/lib/api';
 import type { TestRunConnection } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
+import { SortableTH, Table, TBody, TD, THead, TR } from '@/components/ui/Table';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDuration } from '@/lib/duration';
+import { FilterChips } from '@/components/ui/FilterChips';
+import { orderOptions, STATUS_ORDER } from '@/lib/tableFilter';
+import type { SortState } from '@/lib/tableSort';
 import { TestHistoryChart } from './TestHistoryChart';
 import { useProject } from './hooks';
 import { presetRange } from '../test-runs/dateRange';
 import { DateRangeFilter } from '../test-runs/DateRangeFilter';
+import type { TestRunSortKey } from '../test-runs/hooks';
+import { runDuration } from '../test-runs/runDuration';
 
 const DEFAULT_WINDOW_DAYS = 7;
 
@@ -22,11 +26,23 @@ interface DateBounds {
   to?: string | undefined;
 }
 
+interface TableOpts {
+  sort?: SortState<TestRunSortKey> | null | undefined;
+  statuses?: readonly string[] | undefined;
+}
+
 // runsQuery builds the query string for the project's run list. Cleared
 // bounds mean all time, which must pass allTime=1: without it the v2
 // endpoint applies its own 7-day default whenever from/to are absent.
-function runsQuery(projectId: string, range: DateBounds): string {
+// Sort and status go to the server so they apply to the whole window,
+// not just the 20 rows that happen to be loaded.
+function runsQuery(projectId: string, range: DateBounds, opts: TableOpts = {}): string {
   const params = new URLSearchParams({ project: projectId, first: '20' });
+  if (opts.sort) {
+    params.set('sort', opts.sort.key);
+    params.set('order', opts.sort.dir);
+  }
+  for (const s of opts.statuses ?? []) params.append('status', s);
   if (!range.from && !range.to) {
     params.set('allTime', '1');
     return params.toString();
@@ -34,6 +50,29 @@ function runsQuery(projectId: string, range: DateBounds): string {
   if (range.from) params.set('from', range.from);
   if (range.to) params.set('to', range.to);
   return params.toString();
+}
+
+// useProjectRuns fetches one page of the project's runs. The chart calls
+// it with no table options and the table with its sort/status; while
+// those are unset the two share a query key, so there is one request.
+function useProjectRuns(projectId: string, range: DateBounds, opts: TableOpts = {}) {
+  return useQuery({
+    queryKey: [
+      'project-runs',
+      projectId,
+      range.from,
+      range.to,
+      opts.sort?.key ?? null,
+      opts.sort?.dir ?? null,
+      (opts.statuses ?? []).join(','),
+    ],
+    queryFn: () =>
+      restFetch<TestRunConnection>(
+        `/api/v2/test-runs?${runsQuery(projectId, range, opts)}`,
+      ),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
 }
 
 export default function ProjectDetail() {
@@ -57,14 +96,14 @@ export default function ProjectDetail() {
   // server-side default.
   const [range, setRange] = useState<DateBounds>(() => presetRange(DEFAULT_WINDOW_DAYS));
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['project-runs', projectId, range.from, range.to],
-    queryFn: () =>
-      restFetch<TestRunConnection>(
-        `/api/v2/test-runs?${runsQuery(projectId, range)}`,
-      ),
-    staleTime: 30_000,
-  });
+  const [sort, setSort] = useState<SortState<TestRunSortKey> | null>(null);
+  const [statuses, setStatuses] = useState<string[]>([]);
+
+  // `data` is the unfiltered window: it feeds the history chart, the
+  // total, and the status chip counts. `table` is the sorted/filtered
+  // page the run table renders.
+  const { data, isLoading, error } = useProjectRuns(projectId, range);
+  const table = useProjectRuns(projectId, range, { sort, statuses });
 
   if (isLoading) {
     return (
@@ -83,6 +122,10 @@ export default function ProjectDetail() {
   }
 
   const edges = data?.edges ?? [];
+  const tableEdges = table.data?.edges ?? [];
+  // Offer whatever statuses the window actually has (runs can also be
+  // e.g. "completed"), in workflow order.
+  const statusOptions = orderOptions(data?.facets.byStatus ?? [], STATUS_ORDER);
 
   return (
     <div className="space-y-4">
@@ -155,18 +198,44 @@ export default function ProjectDetail() {
         <>
         <TestHistoryChart runs={edges.map((e) => e.node)} />
         <Card>
+          <div className="flex flex-wrap items-center gap-3 border-b border-border px-3 py-2">
+            <FilterChips
+              label="Status"
+              options={statusOptions}
+              selected={statuses}
+              onChange={setStatuses}
+            />
+            <span className="ml-auto text-xs text-muted">
+              {table.isFetching && <Spinner className="mr-1" />}
+              Showing {tableEdges.length}
+              {table.data ? ` of ${table.data.totalCount.toLocaleString()}` : ''}
+            </span>
+          </div>
+          {tableEdges.length === 0 ? (
+            <EmptyState title="No runs match the status filter" />
+          ) : (
           <Table>
             <THead>
               <TR>
-                <TH>Started</TH>
-                <TH>Status</TH>
-                <TH>Branch</TH>
-                <TH className="text-right">Duration</TH>
-                <TH className="text-right">Passed / Failed</TH>
+                <SortableTH sortKey="started" sort={sort} onSortChange={setSort}>Started</SortableTH>
+                <SortableTH sortKey="status" sort={sort} onSortChange={setSort}>Status</SortableTH>
+                <SortableTH sortKey="branch" sort={sort} onSortChange={setSort}>Branch</SortableTH>
+                <SortableTH sortKey="duration" sort={sort} onSortChange={setSort} className="text-right">
+                  Duration
+                </SortableTH>
+                <SortableTH
+                  sortKey="failed"
+                  sort={sort}
+                  onSortChange={setSort}
+                  className="text-right"
+                  title="Sorts by failed count"
+                >
+                  Passed / Failed
+                </SortableTH>
               </TR>
             </THead>
             <TBody>
-              {edges.map(({ node }) => (
+              {tableEdges.map(({ node }) => (
                 <TR key={node.id}>
                   <TD>
                     <Link
@@ -180,14 +249,7 @@ export default function ProjectDetail() {
                   </TD>
                   <TD><StatusBadge status={node.status} /></TD>
                   <TD className="font-mono text-xs">{node.branch || '—'}</TD>
-                  <TD className="text-right tabular-nums">
-                    {node.end_time
-                      ? formatDuration(
-                          new Date(node.end_time).getTime() -
-                            new Date(node.start_time).getTime(),
-                        )
-                      : '—'}
-                  </TD>
+                  <TD className="text-right tabular-nums">{runDuration(node)}</TD>
                   <TD className="text-right tabular-nums">
                     <span className="text-green-600 dark:text-green-400">{node.passed_tests}</span>
                     {' / '}
@@ -197,6 +259,7 @@ export default function ProjectDetail() {
               ))}
             </TBody>
           </Table>
+          )}
         </Card>
         </>
       )}

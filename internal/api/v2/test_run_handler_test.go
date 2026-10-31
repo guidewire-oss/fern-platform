@@ -335,3 +335,46 @@ func TestList_NodeIncludesDurationMs(t *testing.T) {
 		t.Errorf("run_id = %q, want r1", got)
 	}
 }
+
+func TestList_SortAndOrderParsed(t *testing.T) {
+	svc := &fakeQuerySvc{}
+	r := newRouter(t, svc)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/test-runs?sort=duration&order=asc", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if svc.gotPage.Sort.Field != domain.SortDuration || !svc.gotPage.Sort.Asc {
+		t.Errorf("page.Sort = %+v, want duration ASC", svc.gotPage.Sort)
+	}
+}
+
+func TestList_SortDefaultsToStartedDesc(t *testing.T) {
+	svc := &fakeQuerySvc{}
+	r := newRouter(t, svc)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/test-runs", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d", w.Code)
+	}
+	if svc.gotPage.Sort.Field != domain.SortStarted || svc.gotPage.Sort.Asc {
+		t.Errorf("page.Sort = %+v, want started DESC", svc.gotPage.Sort)
+	}
+}
+
+func TestList_RejectsUnknownSortOrOrder(t *testing.T) {
+	for _, qs := range []string{"sort=nope", "sort=branch&order=sideways"} {
+		svc := &fakeQuerySvc{}
+		r := newRouter(t, svc)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/test-runs?"+qs, nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d", qs, w.Code)
+		}
+	}
+}

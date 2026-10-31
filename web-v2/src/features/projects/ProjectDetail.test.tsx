@@ -16,6 +16,7 @@ vi.mock('@tanstack/react-router', () => ({
 const mockRuns = vi.fn();
 const mockProject = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
+  keepPreviousData: undefined,
   useQuery: (opts: { queryKey: unknown[] }) =>
     (opts.queryKey[0] === 'project' ? mockProject : mockRuns)(opts),
 }));
@@ -165,5 +166,87 @@ describe('DateRangeFilter accessibility', () => {
     setup('Java Service 1');
     fireEvent.click(screen.getByRole('button', { name: 'All time' }));
     expect(screen.getByRole('button', { name: 'All time' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+// The run table sorts and filters on the server, so header clicks and
+// status chips must reach the runs URL. The chart's query (the first
+// runs call each render) must stay unsorted and unfiltered.
+describe('ProjectDetail run table sort and status filter', () => {
+  const node = {
+    id: 1,
+    run_id: 'r-1',
+    project_id: 'java-1-001',
+    branch: 'main',
+    git_branch: 'main',
+    git_commit: '',
+    status: 'failed',
+    start_time: '2026-10-01T00:00:00Z',
+    end_time: null,
+    total_tests: 2,
+    passed_tests: 1,
+    failed_tests: 1,
+    skipped_tests: 0,
+    duration_ms: 1000,
+    environment: '',
+  };
+
+  beforeEach(() => {
+    mockRuns.mockReset();
+    mockProject.mockReset();
+    mockRuns.mockReturnValue({
+      data: {
+        edges: [{ cursor: 'c', node }],
+        pageInfo: { hasNextPage: false, endCursor: '' },
+        totalCount: 1,
+        totalCountIsEstimate: false,
+        facets: {
+          byStatus: [{ value: 'failed', count: 1 }, { value: 'passed', count: 3 }],
+          byBranch: [],
+          byTag: [],
+          byProject: [],
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    });
+    mockProject.mockReturnValue({ data: { name: 'Java' }, isLoading: false, error: null });
+  });
+  afterEach(cleanup);
+
+  // Each render calls useQuery for the project, the chart runs, then the
+  // table runs; the last two runs calls are [chart, table].
+  function urlOf(callFromEnd: number): URLSearchParams {
+    const opts = mockRuns.mock.calls.at(callFromEnd)?.[0];
+    let captured = '';
+    restFetchSpy.mockImplementation((url: string) => {
+      captured = url;
+      return Promise.resolve(null);
+    });
+    opts.queryFn();
+    return new URLSearchParams(captured.split('?')[1]);
+  }
+
+  it('cycles a header through asc, desc, then unsorted', () => {
+    render(<ProjectDetail />);
+    const header = () => screen.getByTestId('sort-duration');
+
+    fireEvent.click(header());
+    expect(urlOf(-1).get('sort')).toBe('duration');
+    expect(urlOf(-1).get('order')).toBe('asc');
+
+    fireEvent.click(header());
+    expect(urlOf(-1).get('order')).toBe('desc');
+
+    fireEvent.click(header());
+    expect(urlOf(-1).get('sort')).toBeNull();
+  });
+
+  it('sends selected statuses to the table query only', () => {
+    render(<ProjectDetail />);
+    fireEvent.click(screen.getByRole('button', { name: /failed/ }));
+    expect(urlOf(-1).getAll('status')).toEqual(['failed']);
+    expect(urlOf(-2).getAll('status')).toEqual([]);
   });
 });

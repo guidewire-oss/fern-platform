@@ -425,3 +425,138 @@ func TestComputeFacets_ProjectFacetStillBroadensWithinScope(t *testing.T) {
 		t.Errorf("ByProject = %+v, want both in-scope projects", facets.ByProject)
 	}
 }
+
+// seedSortable inserts runs whose branch and duration orders differ
+// from their start_time order, so a sort that silently fell back to
+// start_time would fail the assertions.
+func seedSortable(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	base := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	rows := []struct {
+		branch   string
+		duration int64
+	}{
+		{"c", 300}, {"a", 100}, {"e", 500}, {"b", 200}, {"d", 400},
+	}
+	for i, r := range rows {
+		seedCounter++
+		row := database.TestRun{
+			ProjectID: "p1",
+			RunID:     uniqueRunID(),
+			Branch:    r.branch,
+			Status:    "passed",
+			StartTime: base.Add(time.Duration(i) * time.Hour),
+			Duration:  r.duration,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+}
+
+// collectAll pages through the whole result set two rows at a time.
+func collectAll(t *testing.T, repo *infrastructure.TestRunQueryRepo, sort domain.SortSpec) []*domain.TestRun {
+	t.Helper()
+	var out []*domain.TestRun
+	after := ""
+	for i := 0; i < 10; i++ {
+		page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+			domain.PageArgs{First: 2, After: after, Sort: sort})
+		if err != nil {
+			t.Fatalf("Query page %d: %v", i, err)
+		}
+		for _, e := range page.Edges {
+			out = append(out, e.Node)
+		}
+		if !page.PageInfo.HasNextPage {
+			return out
+		}
+		after = page.PageInfo.EndCursor
+	}
+	t.Fatal("pagination did not terminate")
+	return nil
+}
+
+func TestQuery_SortByBranchAscPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortBranch, Asc: true})
+	var branches []string
+	for _, n := range got {
+		branches = append(branches, n.Branch)
+	}
+	if !equalStringSlices(branches, []string{"a", "b", "c", "d", "e"}) {
+		t.Errorf("branch ASC across pages = %v", branches)
+	}
+}
+
+func TestQuery_SortByDurationDescPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortDuration})
+	var durations []time.Duration
+	for _, n := range got {
+		durations = append(durations, n.Duration)
+	}
+	if len(durations) != 5 {
+		t.Fatalf("expected 5 rows, got %d", len(durations))
+	}
+	for i := 0; i+1 < len(durations); i++ {
+		if durations[i] < durations[i+1] {
+			t.Errorf("duration DESC broken at %d: %v", i, durations)
+		}
+	}
+}
+
+func TestQuery_SortTiesBreakOnIDWithoutDuplicates(t *testing.T) {
+	// Every row shares a status, so the id tiebreak alone decides page
+	// boundaries. No row may repeat or vanish across pages.
+	db := openSQLite(t)
+	seedRuns(t, db, 5, "p1", "passed", "main")
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortStatus, Asc: true})
+	seen := map[uint]bool{}
+	for _, n := range got {
+		if seen[n.ID] {
+			t.Errorf("row %d returned twice", n.ID)
+		}
+		seen[n.ID] = true
+	}
+	if len(seen) != 5 {
+		t.Errorf("expected 5 distinct rows, got %d", len(seen))
+	}
+}
+
+func TestQuery_RejectsCursorFromDifferentSort(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, Sort: domain.SortSpec{Field: domain.SortBranch}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, After: page.PageInfo.EndCursor, Sort: domain.SortSpec{Field: domain.SortDuration}})
+	if err == nil {
+		t.Error("a branch cursor must not be accepted for a duration sort")
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -5,8 +5,23 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { FilterChips } from '@/components/ui/FilterChips';
+import { SortableTH, TH } from '@/components/ui/Table';
 import { cn } from '@/lib/cn';
+import { optionsWithCounts } from '@/lib/tableFilter';
+import { sortRows, type SortState, type SortValue } from '@/lib/tableSort';
 import { useUpdateUserRole, useUsers, type AdminUser } from './hooks';
+
+type UserSortKey = 'name' | 'role' | 'status' | 'lastLogin';
+
+const USER_ACCESSORS: Record<UserSortKey, (u: AdminUser) => SortValue> = {
+  name: (u) => u.name || u.email,
+  role: (u) => u.role,
+  status: (u) => u.status,
+  lastLogin: (u) => (u.lastLogin ? new Date(u.lastLogin) : null),
+};
+
+const ROLE_ORDER = ['admin', 'manager', 'user'];
 
 const ROLE_TINT: Record<string, string> = {
   admin:   'bg-gradient-primary text-white',
@@ -19,14 +34,27 @@ export default function Users() {
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const { data, isLoading, error } = useUsers({ limit: 200 });
 
+  const [sort, setSort] = useState<SortState<UserSortKey> | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+
   const items = data?.items ?? [];
-  const filtered = q
+  const searched = q
     ? items.filter((u) =>
         [u.name, u.email, u.userId, u.role].some((s) =>
           (s ?? '').toLowerCase().includes(q.toLowerCase()),
         ),
       )
     : items;
+  const filtered = sortRows(
+    searched.filter(
+      (u) =>
+        (roles.length === 0 || roles.includes(u.role)) &&
+        (statuses.length === 0 || statuses.includes(u.status)),
+    ),
+    sort,
+    USER_ACCESSORS,
+  );
 
   return (
     <div className="space-y-6">
@@ -64,19 +92,36 @@ export default function Users() {
         />
       )}
 
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4">
+          <FilterChips
+            label="Role"
+            options={optionsWithCounts(items.map((u) => u.role), ROLE_ORDER)}
+            selected={roles}
+            onChange={setRoles}
+          />
+          <FilterChips
+            label="Status"
+            options={optionsWithCounts(items.map((u) => u.status).filter(Boolean))}
+            selected={statuses}
+            onChange={setStatuses}
+          />
+        </div>
+      )}
+      {items.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No users match the current filter" />
+      )}
+
       {filtered.length > 0 && (
         <Card>
           <table className="w-full text-sm">
             <thead className="bg-surface-2 text-left">
               <tr>
-                {['User', 'Role', 'Status', 'Last login', ''].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted"
-                  >
-                    {h}
-                  </th>
-                ))}
+                <SortableTH sortKey="name" sort={sort} onSortChange={setSort}>User</SortableTH>
+                <SortableTH sortKey="role" sort={sort} onSortChange={setSort}>Role</SortableTH>
+                <SortableTH sortKey="status" sort={sort} onSortChange={setSort}>Status</SortableTH>
+                <SortableTH sortKey="lastLogin" sort={sort} onSortChange={setSort}>Last login</SortableTH>
+                <TH aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -85,7 +130,7 @@ export default function Users() {
                   key={u.userId}
                   className={cn(i % 2 ? 'bg-surface-2/30' : '', 'border-t border-border')}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-bold text-white">
                         {(u.name || u.email).split(/\s|@/).filter(Boolean).map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
@@ -96,7 +141,7 @@ export default function Users() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <span
                       className={cn(
                         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
@@ -111,7 +156,7 @@ export default function Users() {
                       {u.role}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs">
+                  <td className="px-3 py-3 text-xs">
                     {u.status === 'active' ? (
                       <span className="inline-flex items-center gap-1.5 text-status-passed-fg">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -124,10 +169,10 @@ export default function Users() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted">
+                  <td className="px-3 py-3 text-xs text-muted">
                     {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-3 text-right">
                     <Button
                       size="sm"
                       variant="ghost"

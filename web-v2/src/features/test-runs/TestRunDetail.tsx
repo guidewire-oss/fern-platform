@@ -1,15 +1,31 @@
 import { useState } from 'react';
 import { Link, useParams } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import { graphqlFetch } from '@/lib/api';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
+import { SortableTH, Table, THead, TBody, TR, TH, TD } from '@/components/ui/Table';
+import { FilterChips } from '@/components/ui/FilterChips';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { formatDuration } from '@/lib/duration';
+import { optionsWithCounts, STATUS_ORDER } from '@/lib/tableFilter';
+import type { SortState } from '@/lib/tableSort';
 import { LabeledValue } from './LabeledValue';
+import {
+  EMPTY_ROW_FILTER,
+  filterRows,
+  isRowFilterActive,
+  sortSpecs,
+  sortSuites,
+  tagLabel,
+  type RowFilter,
+  type SpecSortKey,
+  type SuiteSortKey,
+} from './runDetailFilters';
 
 // v1-parity test-run detail with drill navigation:
 //   /v2/test-runs/:runId  →  suites table  →  click a suite  →  specs table
@@ -171,6 +187,13 @@ export default function TestRunDetail() {
     queryFn: () => graphqlFetch<RunResp>(GET_RUN, { id: runId }),
   });
   const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
+  // Table view state lives here rather than in SuitesView/SpecsView:
+  // drilling into a suite unmounts the suites table, and the user's
+  // sort and filter should still be there when they come back. Spec
+  // state carries across suites for the same reason (e.g. "hide
+  // skipped" stays on while stepping through suites).
+  const [suiteView, setSuiteView] = useState<TableView<SuiteSortKey>>(EMPTY_VIEW);
+  const [specView, setSpecView] = useState<TableView<SpecSortKey>>(EMPTY_VIEW);
 
   if (isLoading) {
     return (
@@ -213,10 +236,17 @@ export default function TestRunDetail() {
       ) : selectedSuite ? (
         <SpecsView
           suite={selectedSuite}
+          view={specView}
+          onViewChange={setSpecView}
           onBack={() => setSelectedSuiteId(null)}
         />
       ) : (
-        <SuitesView suites={suites} onSelect={(id) => setSelectedSuiteId(id)} />
+        <SuitesView
+          suites={suites}
+          view={suiteView}
+          onViewChange={setSuiteView}
+          onSelect={(id) => setSelectedSuiteId(id)}
+        />
       )}
     </div>
   );
@@ -261,31 +291,64 @@ function RunHeader({ run }: { run: RunLike }) {
   );
 }
 
+interface TableView<K extends string> {
+  sort: SortState<K> | null;
+  filter: RowFilter;
+}
+
+const EMPTY_VIEW = { sort: null, filter: EMPTY_ROW_FILTER };
+
 function SuitesView({
   suites,
+  view,
+  onViewChange,
   onSelect,
 }: {
   suites: SuiteLike[];
+  view: TableView<SuiteSortKey>;
+  onViewChange: (next: TableView<SuiteSortKey>) => void;
   onSelect: (suiteId: string) => void;
 }) {
+  const rows = sortSuites(filterRows(suites, view.filter, (s) => [s.suiteName]), view.sort);
+  const setSort = (sort: SortState<SuiteSortKey> | null) => onViewChange({ ...view, sort });
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="space-y-2">
         <CardTitle>Test Suites ({suites.length})</CardTitle>
+        <RowFilterBar
+          rows={suites}
+          shown={rows.length}
+          filter={view.filter}
+          onChange={(filter) => onViewChange({ ...view, filter })}
+          searchPlaceholder="Search suites…"
+        />
       </CardHeader>
       <CardBody className="overflow-x-auto p-0">
+        {rows.length === 0 ? (
+          <EmptyState title="No suites match the current filter" />
+        ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Suite Name</TH>
-              <TH className="text-right">Test Results</TH>
-              <TH>Status</TH>
-              <TH className="text-right">Duration</TH>
+              <SortableTH sortKey="name" sort={view.sort} onSortChange={setSort}>Suite Name</SortableTH>
+              <SortableTH
+                sortKey="failed"
+                sort={view.sort}
+                onSortChange={setSort}
+                className="text-right"
+                title="Sorts by failed count"
+              >
+                Test Results
+              </SortableTH>
+              <SortableTH sortKey="status" sort={view.sort} onSortChange={setSort}>Status</SortableTH>
+              <SortableTH sortKey="duration" sort={view.sort} onSortChange={setSort} className="text-right">
+                Duration
+              </SortableTH>
               <TH>Tags</TH>
             </TR>
           </THead>
           <TBody>
-            {suites.map((s) => (
+            {rows.map((s) => (
               <TR
                 key={s.id}
                 role="button"
@@ -328,6 +391,7 @@ function SuitesView({
             ))}
           </TBody>
         </Table>
+        )}
       </CardBody>
     </Card>
   );
@@ -335,11 +399,20 @@ function SuitesView({
 
 function SpecsView({
   suite,
+  view,
+  onViewChange,
   onBack,
 }: {
   suite: SuiteLike;
+  view: TableView<SpecSortKey>;
+  onViewChange: (next: TableView<SpecSortKey>) => void;
   onBack: () => void;
 }) {
+  const rows = sortSpecs(
+    filterRows(suite.specRuns, view.filter, (s) => [s.specName, s.errorMessage]),
+    view.sort,
+  );
+  const setSort = (sort: SortState<SpecSortKey> | null) => onViewChange({ ...view, sort });
   return (
     <Card>
       <CardHeader className="space-y-2">
@@ -369,6 +442,16 @@ function SpecsView({
             ))}
           </div>
         )}
+        {suite.specRuns.length > 0 && (
+          <RowFilterBar
+            rows={suite.specRuns}
+            shown={rows.length}
+            filter={view.filter}
+            onChange={(filter) => onViewChange({ ...view, filter })}
+            searchPlaceholder="Search name or error…"
+            showHideSkipped
+          />
+        )}
       </CardHeader>
       <CardBody className="overflow-x-auto p-0">
         {suite.specRuns.length === 0 ? (
@@ -376,20 +459,24 @@ function SpecsView({
             title="No spec details available"
             description="This suite was recorded without per-spec rows."
           />
+        ) : rows.length === 0 ? (
+          <EmptyState title="No specs match the current filter" />
         ) : (
           <Table>
             <THead>
               <TR>
-                <TH>Test Name</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Duration</TH>
-                <TH>Error Message</TH>
+                <SortableTH sortKey="name" sort={view.sort} onSortChange={setSort}>Test Name</SortableTH>
+                <SortableTH sortKey="status" sort={view.sort} onSortChange={setSort}>Status</SortableTH>
+                <SortableTH sortKey="duration" sort={view.sort} onSortChange={setSort} className="text-right">
+                  Duration
+                </SortableTH>
+                <SortableTH sortKey="error" sort={view.sort} onSortChange={setSort}>Error Message</SortableTH>
                 <TH>Tags</TH>
-                <TH>Started</TH>
+                <SortableTH sortKey="started" sort={view.sort} onSortChange={setSort}>Started</SortableTH>
               </TR>
             </THead>
             <TBody>
-              {suite.specRuns.map((spec) => (
+              {rows.map((spec) => (
                 <SpecRow key={spec.id} spec={spec} />
               ))}
             </TBody>
@@ -468,13 +555,7 @@ function SpecRow({ spec }: { spec: SpecLike }) {
 }
 
 function TagChip({ tag }: { tag: TagRef }) {
-  // `name` is sometimes the raw, unprocessed "category:value" string (e.g.
-  // Ginkgo labels reported as-is) and sometimes a distinct human label with
-  // category/value tracked separately (e.g. "team" / owner / platform).
-  // Only substitute in "category: value" when name is exactly that raw
-  // compound -- otherwise appending value to name would double it up.
-  const isRawCompound = tag.value && tag.name === `${tag.category}:${tag.value}`;
-  const label = !tag.value ? tag.name : isRawCompound ? `${tag.category}: ${tag.value}` : `${tag.name}: ${tag.value}`;
+  const label = tagLabel(tag);
   const style = tag.color ? { backgroundColor: `${tag.color}22`, color: tag.color } : undefined;
   return (
     <span
@@ -533,5 +614,79 @@ function Stat({
         <div className={`mt-1 text-xl font-semibold tabular-nums ${tone ?? ''}`}>{value}</div>
       </CardBody>
     </Card>
+  );
+}
+
+// RowFilterBar is the search box and status/tag chips above the suites
+// and specs tables. Chip options come from the rows themselves, with
+// counts, so only values that actually occur are offered.
+function RowFilterBar({
+  rows,
+  shown,
+  filter,
+  onChange,
+  searchPlaceholder,
+  showHideSkipped = false,
+}: {
+  rows: { status: string; tags: TagRef[] }[];
+  shown: number;
+  filter: RowFilter;
+  onChange: (next: RowFilter) => void;
+  searchPlaceholder: string;
+  showHideSkipped?: boolean;
+}) {
+  const statusOptions = optionsWithCounts(
+    rows.map((r) => r.status).filter((s) => !(filter.hideSkipped && s === 'skipped')),
+    STATUS_ORDER,
+  );
+  const tagOptions = optionsWithCounts(rows.flatMap((r) => r.tags.map(tagLabel)));
+  return (
+    <div className="space-y-2 border-t border-border pt-2" data-testid="row-filter-bar">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-64">
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+          <Input
+            type="search"
+            value={filter.q}
+            onChange={(e) => onChange({ ...filter, q: e.target.value })}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="py-1 pl-7"
+          />
+        </div>
+        {showHideSkipped && (
+          <label className="inline-flex items-center gap-1.5 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={filter.hideSkipped}
+              onChange={(e) => onChange({ ...filter, hideSkipped: e.target.checked })}
+              data-testid="hide-skipped"
+            />
+            Hide skipped
+          </label>
+        )}
+        <span className="ml-auto text-xs text-muted">
+          Showing {shown} of {rows.length}
+        </span>
+        {isRowFilterActive(filter) && (
+          <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_ROW_FILTER)}>
+            <X className="h-3.5 w-3.5" />
+            Clear
+          </Button>
+        )}
+      </div>
+      <FilterChips
+        label="Status"
+        options={statusOptions}
+        selected={filter.statuses}
+        onChange={(statuses) => onChange({ ...filter, statuses })}
+      />
+      <FilterChips
+        label="Tags"
+        options={tagOptions}
+        selected={filter.tags}
+        onChange={(tags) => onChange({ ...filter, tags })}
+      />
+    </div>
   );
 }

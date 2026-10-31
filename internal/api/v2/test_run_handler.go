@@ -185,6 +185,21 @@ func decodeListQuery(q url.Values) (domain.TestRunFilter, domain.PageArgs, error
 	}
 	p.After = q.Get("after")
 
+	// ?sort=<field>&order=asc|desc. No sort means newest first; an
+	// explicit sort without an order defaults to DESC to match.
+	field, err := domain.ParseSortField(strings.TrimSpace(q.Get("sort")))
+	if err != nil {
+		return f, p, err
+	}
+	p.Sort.Field = field
+	switch strings.ToLower(strings.TrimSpace(q.Get("order"))) {
+	case "", "desc":
+	case "asc":
+		p.Sort.Asc = true
+	default:
+		return f, p, fmt.Errorf("order: must be asc or desc")
+	}
+
 	return f, p, nil
 }
 

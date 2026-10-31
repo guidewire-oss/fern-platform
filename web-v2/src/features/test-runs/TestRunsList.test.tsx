@@ -4,7 +4,7 @@
 // id.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import type { TestRunConnection, TestRunNode } from '@/lib/types';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -182,5 +182,36 @@ describe('TestRunsList duration for in-flight runs', () => {
       }),
     ]);
     expect(screen.getByText('45.0s')).toBeTruthy();
+  });
+});
+
+// The list is keyset-paginated, so sorting must go to the server via the
+// filter rather than reorder the loaded page.
+describe('TestRunsList column sort', () => {
+  beforeEach(() => {
+    mockUseTestRuns.mockReset();
+    window.sessionStorage.clear();
+  });
+  afterEach(cleanup);
+
+  const lastFilter = () => mockUseTestRuns.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+
+  it('puts the clicked column and direction into the query filter, then clears it', () => {
+    renderWith([node({})]);
+    fireEvent.click(screen.getByTestId('sort-duration'));
+    expect(lastFilter()).toMatchObject({ sort: 'duration', order: 'asc' });
+
+    fireEvent.click(screen.getByTestId('sort-duration'));
+    expect(lastFilter()).toMatchObject({ sort: 'duration', order: 'desc' });
+
+    fireEvent.click(screen.getByTestId('sort-duration'));
+    expect(lastFilter().sort).toBeUndefined();
+  });
+
+  it('marks the sorted column with aria-sort', () => {
+    renderWith([node({})]);
+    fireEvent.click(screen.getByTestId('sort-branch'));
+    expect(screen.getByTestId('sort-branch').closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+    expect(screen.getByTestId('sort-status').closest('th')?.getAttribute('aria-sort')).toBe('none');
   });
 });

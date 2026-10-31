@@ -8,12 +8,12 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
+import { SortableTH, Table, TBody, TD, THead, TR } from '@/components/ui/Table';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDuration } from '@/lib/duration';
-import type { TestRunNode } from '@/lib/types';
 import { cn } from '@/lib/cn';
-import { useTestRuns, type TestRunsFilter } from './hooks';
+import type { SortState } from '@/lib/tableSort';
+import { useTestRuns, type TestRunSortKey, type TestRunsFilter } from './hooks';
+import { runDuration } from './runDuration';
 import { FilterSidebar } from './FilterSidebar';
 import { LabeledValue } from './LabeledValue';
 import {
@@ -59,28 +59,6 @@ function loadPageSize(): number {
 function persistPageSize(n: number) {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(PAGE_SIZE_KEY, String(n));
-}
-
-// runDuration renders a run's wall-clock time.
-//
-// The server's recorded duration_ms wins: it is authoritative, and it is
-// the only source for a run with no end_time (still running, or ended
-// abnormally) — those used to render as an em dash. The end - start
-// fallback keeps the column populated against a backend that predates
-// duration_ms on this endpoint.
-//
-// A zero duration_ms is treated as "not recorded", not as a zero-length
-// run: the field has no omitempty, so an unset duration arrives as 0,
-// and rendering "0ms" for a run that is still going would be worse than
-// falling back.
-function runDuration(node: TestRunNode): string {
-  if (node.duration_ms) return formatDuration(node.duration_ms);
-  if (node.end_time) {
-    return formatDuration(
-      new Date(node.end_time).getTime() - new Date(node.start_time).getTime(),
-    );
-  }
-  return '—';
 }
 
 export default function TestRunsList() {
@@ -135,6 +113,15 @@ export default function TestRunsList() {
       setPage(1);
     }
   }, [pageSize, filter.first]);
+
+  // Sort lives in the filter so it reaches the server, survives the
+  // detail round-trip via sessionStorage, and resets pagination through
+  // the filterKey effect above (cursors are only valid for one sort).
+  const sort: SortState<TestRunSortKey> | null = filter.sort
+    ? { key: filter.sort, dir: filter.order ?? 'desc' }
+    : null;
+  const setSort = (next: SortState<TestRunSortKey> | null) =>
+    setFilter((f) => ({ ...f, sort: next?.key, order: next?.dir }));
 
   const goNext = () => {
     if (!data?.pageInfo.hasNextPage) return;
@@ -199,13 +186,23 @@ export default function TestRunsList() {
               <Table>
                 <THead>
                   <TR>
-                    <TH>Project</TH>
-                    <TH>Run ID</TH>
-                    <TH>Branch</TH>
-                    <TH className="text-right">Test Results</TH>
-                    <TH>Status</TH>
-                    <TH className="text-right">Duration</TH>
-                    <TH>Started</TH>
+                    <SortableTH sortKey="project" sort={sort} onSortChange={setSort}>Project</SortableTH>
+                    <SortableTH sortKey="run_id" sort={sort} onSortChange={setSort}>Run ID</SortableTH>
+                    <SortableTH sortKey="branch" sort={sort} onSortChange={setSort}>Branch</SortableTH>
+                    <SortableTH
+                      sortKey="failed"
+                      sort={sort}
+                      onSortChange={setSort}
+                      className="text-right"
+                      title="Sorts by failed count"
+                    >
+                      Test Results
+                    </SortableTH>
+                    <SortableTH sortKey="status" sort={sort} onSortChange={setSort}>Status</SortableTH>
+                    <SortableTH sortKey="duration" sort={sort} onSortChange={setSort} className="text-right">
+                      Duration
+                    </SortableTH>
+                    <SortableTH sortKey="started" sort={sort} onSortChange={setSort}>Started</SortableTH>
                   </TR>
                 </THead>
                 <TBody>

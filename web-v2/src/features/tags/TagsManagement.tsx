@@ -5,6 +5,10 @@ import { graphqlFetch } from '@/lib/api';
 import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { FilterChips } from '@/components/ui/FilterChips';
+import { SortableTH, Table, TBody, TD, THead, TR } from '@/components/ui/Table';
+import { optionsWithCounts } from '@/lib/tableFilter';
+import { sortRows, type SortState, type SortValue } from '@/lib/tableSort';
 
 const TAGS_Q = /* GraphQL */ `
   query AllTags($first: Int) {
@@ -31,12 +35,25 @@ interface Tag {
   description: string | null;
 }
 
+type TagSortKey = 'name' | 'description';
+
+const TAG_ACCESSORS: Record<TagSortKey, (t: Tag) => SortValue> = {
+  name: (t) => t.name,
+  description: (t) => t.description,
+};
+
+const categoryOf = (t: Tag) => t.category || 'uncategorized';
+
 interface TagsResp {
   tags: { totalCount: number; edges: { node: Tag }[] };
 }
 
 export default function TagsManagement() {
   const [q, setQ] = useState('');
+  // One sort and one category selection shared by every category table,
+  // so the cards stay consistent with each other.
+  const [sort, setSort] = useState<SortState<TagSortKey> | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['tags'],
@@ -55,7 +72,8 @@ export default function TagsManagement() {
 
   const byCategory = new Map<string, Tag[]>();
   for (const { node } of filtered) {
-    const key = node.category || 'uncategorized';
+    const key = categoryOf(node);
+    if (categories.length > 0 && !categories.includes(key)) continue;
     if (!byCategory.has(key)) byCategory.set(key, []);
     byCategory.get(key)!.push(node);
   }
@@ -81,6 +99,13 @@ export default function TagsManagement() {
         </div>
       </header>
 
+      <FilterChips
+        label="Category"
+        options={optionsWithCounts(edges.map(({ node }) => categoryOf(node)))}
+        selected={categories}
+        onChange={setCategories}
+      />
+
       {isLoading && (
         <div className="flex items-center gap-2 text-muted">
           <Spinner /> Loading tags…
@@ -105,19 +130,29 @@ export default function TagsManagement() {
                 <span className="text-xs text-muted">{tags.length}</span>
               </div>
             </div>
-            <ul className="divide-y divide-border">
-              {tags.map((tag) => (
-                <li key={tag.id} className="flex items-center gap-2 px-4 py-2">
-                  <TagIcon className="h-3.5 w-3.5 text-primary" />
-                  <span className="font-mono text-xs text-foreground">{tag.name}</span>
-                  {tag.description && (
-                    <span className="ml-auto truncate text-[11px] text-muted" title={tag.description}>
-                      {tag.description}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <Table className="table-fixed">
+              <THead>
+                <TR>
+                  <SortableTH sortKey="name" sort={sort} onSortChange={setSort}>Name</SortableTH>
+                  <SortableTH sortKey="description" sort={sort} onSortChange={setSort}>Description</SortableTH>
+                </TR>
+              </THead>
+              <TBody>
+                {sortRows(tags, sort, TAG_ACCESSORS).map((tag) => (
+                  <TR key={tag.id}>
+                    <TD>
+                      <span className="flex items-center gap-2">
+                        <TagIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="truncate font-mono text-xs" title={tag.name}>{tag.name}</span>
+                      </span>
+                    </TD>
+                    <TD className="truncate text-[11px] text-muted" title={tag.description ?? undefined}>
+                      {tag.description || '—'}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
           </Card>
         ))}
       </div>

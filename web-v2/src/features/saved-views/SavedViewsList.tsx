@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
+import { SortableTH, Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table';
+import { sortRows, type SortState } from '@/lib/tableSort';
 import { useDeleteSavedView, useSavedViews } from './integration';
+
+type ViewSortKey = 'name' | 'page';
 
 // The management page lists saved views across ALL pages and deletes them.
 // It shares the single saved-views query (useSavedViews) with the Test runs
@@ -18,6 +22,11 @@ export default function SavedViewsList() {
   // Shared idempotent delete: a 404 (already deleted elsewhere / stale row)
   // resolves as success so the row is always cleared from the list.
   const remove = useDeleteSavedView();
+  const [sort, setSort] = useState<SortState<ViewSortKey> | null>(null);
+  const views = sortRows(data?.views ?? [], sort, {
+    name: (v) => v.name,
+    page: (v) => v.page,
+  });
 
   return (
     <div className="space-y-4">
@@ -59,14 +68,14 @@ export default function SavedViewsList() {
           <Table>
             <THead>
               <TR>
-                <TH>Name</TH>
-                <TH>Page</TH>
+                <SortableTH sortKey="name" sort={sort} onSortChange={setSort}>Name</SortableTH>
+                <SortableTH sortKey="page" sort={sort} onSortChange={setSort}>Page</SortableTH>
                 <TH>Filter</TH>
                 <TH className="w-12 text-right" aria-label="Actions" />
               </TR>
             </THead>
             <TBody>
-              {data?.views.map((v) => (
+              {views.map((v) => (
                 <TR key={v.id}>
                   <TD className="font-medium">{v.name}</TD>
                   <TD className="font-mono text-xs">{v.page}</TD>
