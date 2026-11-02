@@ -29,7 +29,7 @@ func (m *Ci) GrepDir(directoryArg *dagger.Directory, pattern string) (string, er
 	// Using grep with || true ensures we don't fail when no matches are found
 	// The pattern is passed as a positional parameter to avoid shell injection
 	return dag.Container().
-		From("alpine:3.21").
+		From("alpine:3.24").
 		WithMountedDirectory("/search", directoryArg).
 		WithExec([]string{"sh", "-c", `
 			grep -r "$1" /search || true
@@ -192,7 +192,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 	
 	// Base builder stage
 	builder := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make"}).
@@ -203,7 +203,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 
 	// Final stage
 	return dag.Container().
-		From("alpine:3.21").
+		From("alpine:3.24").
 		WithExec([]string{"apk", "add", "--no-cache", "ca-certificates", "tzdata"}).
 		WithExec([]string{"addgroup", "-g", "1001", "-S", "fern"}).
 		WithExec([]string{"adduser", "-u", "1001", "-S", "fern", "-G", "fern"}).
@@ -220,7 +220,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 // Helper function to run tests
 func (m *Ci) runTests(ctx context.Context, source *dagger.Directory) (string, error) {
 	output, err := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
@@ -241,7 +241,7 @@ func (m *Ci) runLint(ctx context.Context, source *dagger.Directory) (string, err
 	// Use golang base image and install golangci-lint
 	// This ensures we have the right Go version and modules
 	container := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
@@ -309,7 +309,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		// Install Go with checksum verification
 		WithExec([]string{"sh", "-c", `
 			set -e
-			GO_VERSION="1.24.5"
+			GO_VERSION="1.26.10"
 			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
 			GO_URL="https://go.dev/dl/${GO_TARBALL}"
 			
@@ -994,7 +994,7 @@ func (m *Ci) AcceptanceTestSimple(
 		// Install Go with checksum verification
 		WithExec([]string{"sh", "-c", `
 			set -e
-			GO_VERSION="1.24.5"
+			GO_VERSION="1.26.10"
 			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
 			GO_URL="https://go.dev/dl/${GO_TARBALL}"
 			

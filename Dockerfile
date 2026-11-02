@@ -3,7 +3,7 @@
 # the host when pnpm is available; this stage is the fallback. Either
 # way, `//go:embed all:dist` in internal/web/embed.go captures whatever
 # is in internal/web/dist/ at Go-build time.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /web
 RUN corepack enable
 COPY web-v2/package.json web-v2/pnpm-lock.yaml ./
@@ -12,7 +12,7 @@ COPY web-v2/ ./
 RUN pnpm build
 
 # Go build stage
-FROM --platform=$BUILDPLATFORM golang:1.24.5-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 # Build arguments for cross-compilation
 ARG TARGETOS
@@ -49,7 +49,7 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -ldflags "-w -s" -o seed ./cmd/seed
 
 # Runtime stage
-FROM alpine:3.22
+FROM alpine:3.24
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata

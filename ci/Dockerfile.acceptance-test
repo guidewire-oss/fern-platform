@@ -1,5 +1,5 @@
 # Base image with all tools pre-installed for acceptance tests
-FROM golang:1.23-bookworm
+FROM golang:1.26-bookworm
 
 # Install system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -1,5 +1,5 @@
 # Simple Dockerfile using pre-built binary
-FROM alpine:latest
+FROM alpine:3.24
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata wget
