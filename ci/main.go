@@ -307,25 +307,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace/acceptance").
 		// Install Go with checksum verification
-		WithExec([]string{"sh", "-c", `
-			set -e
-			GO_VERSION="1.26.10"
-			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-			GO_URL="https://go.dev/dl/${GO_TARBALL}"
-			
-			# Download Go tarball
-			curl -LO "${GO_URL}"
-			
-			# Download and verify checksum
-			curl -LO "${GO_URL}.sha256"
-			sha256sum -c "${GO_TARBALL}.sha256"
-			
-			# Extract only if checksum is valid
-			tar -C /usr/local -xzf "${GO_TARBALL}"
-			
-			# Clean up
-			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
-		`}).
+		With(withGo).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
@@ -992,25 +974,7 @@ func (m *Ci) AcceptanceTestSimple(
 		WithServiceBinding("redis", redisService).
 		WithServiceBinding("app", appContainer).
 		// Install Go with checksum verification
-		WithExec([]string{"sh", "-c", `
-			set -e
-			GO_VERSION="1.26.10"
-			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-			GO_URL="https://go.dev/dl/${GO_TARBALL}"
-			
-			# Download Go tarball
-			curl -LO "${GO_URL}"
-			
-			# Download and verify checksum
-			curl -LO "${GO_URL}.sha256"
-			sha256sum -c "${GO_TARBALL}.sha256"
-			
-			# Extract only if checksum is valid
-			tar -C /usr/local -xzf "${GO_TARBALL}"
-			
-			# Clean up
-			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
-		`}).
+		With(withGo).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
@@ -1039,4 +1003,29 @@ func (m *Ci) AcceptanceTestSimple(
 			ginkgo -r -v
 		`}).
 		Stdout(ctx)
+}
+
+// Go toolchain installed into the Playwright image for acceptance tests.
+// goTarballSHA256 is pinned rather than fetched next to the tarball, so a
+// tampered download can't ship with a matching checksum. Update both
+// together; the digest is listed at https://go.dev/dl/?mode=json&include=all.
+const (
+	goVersion       = "1.26.10"
+	goTarballSHA256 = "ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5"
+)
+
+// withGo installs the pinned Go toolchain into /usr/local/go, verifying the
+// tarball against goTarballSHA256 before extracting it.
+func withGo(c *dagger.Container) *dagger.Container {
+	script := fmt.Sprintf(`
+		set -e
+		GO_TARBALL="go%s.linux-amd64.tar.gz"
+		# dl.google.com, not go.dev/dl: go.dev serves its HTML download page
+		# (200) for unknown paths instead of a 404.
+		curl -fsSLO "https://dl.google.com/go/${GO_TARBALL}"
+		echo "%s  ${GO_TARBALL}" | sha256sum -c -
+		tar -C /usr/local -xzf "${GO_TARBALL}"
+		rm -f "${GO_TARBALL}"
+	`, goVersion, goTarballSHA256)
+	return c.WithExec([]string{"sh", "-c", script})
 }
