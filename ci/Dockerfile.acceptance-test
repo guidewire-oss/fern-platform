@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Deselect the eMudhra (emSign) roots from the trust store. Debian's Mozilla
+# bundle still ships them; a leading "!" tells update-ca-certificates to skip.
+RUN sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh
+
 # Install kubectl
 RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.28.0/bin/linux/amd64/kubectl \
     && chmod +x kubectl \

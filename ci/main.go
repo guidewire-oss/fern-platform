@@ -205,6 +205,12 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 	return dag.Container().
 		From("alpine:3.24").
 		WithExec([]string{"apk", "add", "--no-cache", "ca-certificates", "tzdata"}).
+		// Alpine's Mozilla bundle still ships the eMudhra (emSign) root; drop it.
+		WithExec([]string{"sh", "-c", `
+			rm -f /usr/share/ca-certificates/mozilla/emSign_Root_CA_-_G1.crt
+			sed -i '/emSign_Root_CA_-_G1/d' /etc/ca-certificates.conf
+			update-ca-certificates --fresh
+		`}).
 		WithExec([]string{"addgroup", "-g", "1001", "-S", "fern"}).
 		WithExec([]string{"adduser", "-u", "1001", "-S", "fern", "-G", "fern"}).
 		WithFile("/app/fern-platform", builder.File("/src/fern-platform")).
