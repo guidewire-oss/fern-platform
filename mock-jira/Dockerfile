@@ -7,12 +7,17 @@ COPY go.mod .
 RUN go build -o mock-jira main.go
 
 FROM alpine:3.24
-# Drop the eMudhra (emSign) root from the trust store. Alpine's Mozilla
-# bundle still ships it.
+# Deselect the eMudhra (emSign) roots from the trust store (Alpine's Mozilla
+# bundle still ships them). The final check fails the build if an emSign
+# entry is still enabled or its cert is still in the bundle.
 RUN apk --no-cache add ca-certificates && \
-    rm -f /usr/share/ca-certificates/mozilla/emSign_Root_CA_-_G1.crt && \
-    sed -i '/emSign_Root_CA_-_G1/d' /etc/ca-certificates.conf && \
-    update-ca-certificates --fresh
+    sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh && \
+    ! grep -q '^mozilla/emSign' /etc/ca-certificates.conf && \
+    for f in /usr/share/ca-certificates/mozilla/emSign*.crt; do \
+      [ -e "$f" ] || continue; \
+      ! grep -v -- '-----' "$f" | grep -qxFf - /etc/ssl/certs/ca-certificates.crt || exit 1; \
+    done
 WORKDIR /root/
 COPY --from=builder /app/mock-jira .
 

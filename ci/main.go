@@ -205,11 +205,23 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 	return dag.Container().
 		From("alpine:3.24").
 		WithExec([]string{"apk", "add", "--no-cache", "ca-certificates", "tzdata"}).
-		// Alpine's Mozilla bundle still ships the eMudhra (emSign) root; drop it.
+		// Alpine's Mozilla bundle still ships the eMudhra (emSign) roots; deselect
+		// them and fail the build if one is still enabled or still in the bundle.
 		WithExec([]string{"sh", "-c", `
-			rm -f /usr/share/ca-certificates/mozilla/emSign_Root_CA_-_G1.crt
-			sed -i '/emSign_Root_CA_-_G1/d' /etc/ca-certificates.conf
+			set -e
+			sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf
 			update-ca-certificates --fresh
+			if grep -q '^mozilla/emSign' /etc/ca-certificates.conf; then
+				echo "emSign root still enabled in ca-certificates.conf" >&2
+				exit 1
+			fi
+			for f in /usr/share/ca-certificates/mozilla/emSign*.crt; do
+				[ -e "$f" ] || continue
+				if grep -v -- '-----' "$f" | grep -qxFf - /etc/ssl/certs/ca-certificates.crt; then
+					echo "emSign root $f still in ca-certificates.crt" >&2
+					exit 1
+				fi
+			done
 		`}).
 		WithExec([]string{"addgroup", "-g", "1001", "-S", "fern"}).
 		WithExec([]string{"adduser", "-u", "1001", "-S", "fern", "-G", "fern"}).
