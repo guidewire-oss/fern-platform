@@ -29,7 +29,7 @@ func (m *Ci) GrepDir(directoryArg *dagger.Directory, pattern string) (string, er
 	// Using grep with || true ensures we don't fail when no matches are found
 	// The pattern is passed as a positional parameter to avoid shell injection
 	return dag.Container().
-		From("alpine:3.21").
+		From("alpine:3.24").
 		WithMountedDirectory("/search", directoryArg).
 		WithExec([]string{"sh", "-c", `
 			grep -r "$1" /search || true
@@ -192,7 +192,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 	
 	// Base builder stage
 	builder := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make"}).
@@ -203,8 +203,26 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 
 	// Final stage
 	return dag.Container().
-		From("alpine:3.21").
+		From("alpine:3.24").
 		WithExec([]string{"apk", "add", "--no-cache", "ca-certificates", "tzdata"}).
+		// Alpine's Mozilla bundle still ships the eMudhra (emSign) roots; deselect
+		// them and fail the build if one is still enabled or still in the bundle.
+		WithExec([]string{"sh", "-c", `
+			set -e
+			sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf
+			update-ca-certificates --fresh
+			if grep -q '^mozilla/emSign' /etc/ca-certificates.conf; then
+				echo "emSign root still enabled in ca-certificates.conf" >&2
+				exit 1
+			fi
+			for f in /usr/share/ca-certificates/mozilla/emSign*.crt; do
+				[ -e "$f" ] || continue
+				if grep -v -- '-----' "$f" | grep -qxFf - /etc/ssl/certs/ca-certificates.crt; then
+					echo "emSign root $f still in ca-certificates.crt" >&2
+					exit 1
+				fi
+			done
+		`}).
 		WithExec([]string{"addgroup", "-g", "1001", "-S", "fern"}).
 		WithExec([]string{"adduser", "-u", "1001", "-S", "fern", "-G", "fern"}).
 		WithFile("/app/fern-platform", builder.File("/src/fern-platform")).
@@ -220,7 +238,7 @@ func (m *Ci) buildContainer(ctx context.Context, source *dagger.Directory, platf
 // Helper function to run tests
 func (m *Ci) runTests(ctx context.Context, source *dagger.Directory) (string, error) {
 	output, err := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
@@ -241,7 +259,7 @@ func (m *Ci) runLint(ctx context.Context, source *dagger.Directory) (string, err
 	// Use golang base image and install golangci-lint
 	// This ensures we have the right Go version and modules
 	container := dag.Container().
-		From("golang:1.24.5-alpine").
+		From("golang:1.26-alpine").
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
 		WithExec([]string{"apk", "add", "--no-cache", "git", "make", "gcc", "musl-dev", "binutils-gold"}).
@@ -307,25 +325,7 @@ func (m *Ci) runAcceptanceTestsWithPlaywright(ctx context.Context, source *dagge
 		WithMountedDirectory("/workspace", source).
 		WithWorkdir("/workspace/acceptance").
 		// Install Go with checksum verification
-		WithExec([]string{"sh", "-c", `
-			set -e
-			GO_VERSION="1.24.5"
-			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-			GO_URL="https://go.dev/dl/${GO_TARBALL}"
-			
-			# Download Go tarball
-			curl -LO "${GO_URL}"
-			
-			# Download and verify checksum
-			curl -LO "${GO_URL}.sha256"
-			sha256sum -c "${GO_TARBALL}.sha256"
-			
-			# Extract only if checksum is valid
-			tar -C /usr/local -xzf "${GO_TARBALL}"
-			
-			# Clean up
-			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
-		`}).
+		With(withGo).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
@@ -992,25 +992,7 @@ func (m *Ci) AcceptanceTestSimple(
 		WithServiceBinding("redis", redisService).
 		WithServiceBinding("app", appContainer).
 		// Install Go with checksum verification
-		WithExec([]string{"sh", "-c", `
-			set -e
-			GO_VERSION="1.24.5"
-			GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-			GO_URL="https://go.dev/dl/${GO_TARBALL}"
-			
-			# Download Go tarball
-			curl -LO "${GO_URL}"
-			
-			# Download and verify checksum
-			curl -LO "${GO_URL}.sha256"
-			sha256sum -c "${GO_TARBALL}.sha256"
-			
-			# Extract only if checksum is valid
-			tar -C /usr/local -xzf "${GO_TARBALL}"
-			
-			# Clean up
-			rm -f "${GO_TARBALL}" "${GO_TARBALL}.sha256"
-		`}).
+		With(withGo).
 		WithEnvVariable("PATH", "/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
 		WithEnvVariable("GOPATH", "/go").
 		// Install ginkgo
@@ -1039,4 +1021,29 @@ func (m *Ci) AcceptanceTestSimple(
 			ginkgo -r -v
 		`}).
 		Stdout(ctx)
+}
+
+// Go toolchain installed into the Playwright image for acceptance tests.
+// goTarballSHA256 is pinned rather than fetched next to the tarball, so a
+// tampered download can't ship with a matching checksum. Update both
+// together; the digest is listed at https://go.dev/dl/?mode=json&include=all.
+const (
+	goVersion       = "1.26.10"
+	goTarballSHA256 = "ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5"
+)
+
+// withGo installs the pinned Go toolchain into /usr/local/go, verifying the
+// tarball against goTarballSHA256 before extracting it.
+func withGo(c *dagger.Container) *dagger.Container {
+	script := fmt.Sprintf(`
+		set -e
+		GO_TARBALL="go%s.linux-amd64.tar.gz"
+		# dl.google.com, not go.dev/dl: go.dev serves its HTML download page
+		# (200) for unknown paths instead of a 404.
+		curl -fsSLO "https://dl.google.com/go/${GO_TARBALL}"
+		echo "%s  ${GO_TARBALL}" | sha256sum -c -
+		tar -C /usr/local -xzf "${GO_TARBALL}"
+		rm -f "${GO_TARBALL}"
+	`, goVersion, goTarballSHA256)
+	return c.WithExec([]string{"sh", "-c", script})
 }

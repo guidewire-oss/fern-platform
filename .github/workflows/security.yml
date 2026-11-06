@@ -46,7 +46,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.26'
     
     - name: Install go-licenses
       run: go install github.com/google/go-licenses@latest
@@ -96,7 +96,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.26'
     
     - name: Submit Dependency Snapshot
       uses: actions/go-dependency-submission@v2
