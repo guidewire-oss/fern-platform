@@ -202,7 +202,6 @@ func main() {
 		TestRunSvc:    queryService,
 		TrendsSvc:     testingService, // shares the TestRunService — implements AggregateDailyByProjects
 		SavedViewRepo: savedViewRepo,
-		JiraTests:     domainFactory.GetCoverageService(),
 		// VitalSink left nil: the telemetry endpoint accepts and
 		// drops vitals until a Prometheus-backed sink is wired.
 

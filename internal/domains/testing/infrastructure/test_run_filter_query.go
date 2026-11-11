@@ -86,17 +86,11 @@ func BuildTestRunWhere(f domain.TestRunFilter) ([]string, []any) {
 		case domain.LogicAnd:
 			// Each tag must match: one EXISTS per tag, AND-joined naturally.
 			for _, tag := range f.Tags {
-				clauses = append(clauses, tagExistsClause())
+				clauses = append(clauses, tagExistsClause("= ?"))
 				args = append(args, tag)
 			}
 		default: // LogicOr (default)
-			clauses = append(clauses, `EXISTS (
-					SELECT 1 FROM suite_runs sr
-					JOIN suite_run_tags srt ON srt.suite_run_id = sr.id
-					JOIN tags t ON t.id = srt.tag_id
-					WHERE sr.test_run_id = test_runs.id
-					  AND t.name IN (?)
-				)`)
+			clauses = append(clauses, tagExistsClause("IN (?)"))
 			args = append(args, f.Tags)
 		}
 	}
@@ -120,12 +114,55 @@ func JoinWhere(clauses []string) string {
 	return strings.Join(clauses, " AND ")
 }
 
-func tagExistsClause() string {
+// Tag links per level, each yielding (run_id, tag_name). tags is joined
+// inside every branch on purpose: callers filter on rt.tag_name, and
+// Postgres pushes a plain restriction like that into each UNION ALL
+// branch, so every branch starts from the tags.name and *_tags.tag_id
+// indexes. Joining tags once outside the union instead leaves the
+// suite/spec branches (which contain joins, so they stay subqueries)
+// unable to receive the tag condition, and they scan their link tables
+// whole: fine on a dev DB, a full spec_run_tags scan in production.
+const (
+	runLevelTagLinksSQL = `
+	SELECT trt.test_run_id AS run_id, t.name AS tag_name
+	FROM test_run_tags trt
+	JOIN tags t ON t.id = trt.tag_id`
+
+	suiteLevelTagLinksSQL = `
+	SELECT sr.test_run_id, t.name
+	FROM suite_run_tags srt
+	JOIN tags t ON t.id = srt.tag_id
+	JOIN suite_runs sr ON sr.id = srt.suite_run_id
+	WHERE sr.deleted_at IS NULL`
+
+	specLevelTagLinksSQL = `
+	SELECT sr.test_run_id, t.name
+	FROM spec_run_tags spt
+	JOIN tags t ON t.id = spt.tag_id
+	JOIN spec_runs sp ON sp.id = spt.spec_run_id
+	JOIN suite_runs sr ON sr.id = sp.suite_run_id
+	WHERE sp.deleted_at IS NULL AND sr.deleted_at IS NULL`
+)
+
+// RunAndSuiteTagLinksSQL backs the tag facet (spec level excluded; see
+// TestRunQueryRepo.tagFacet). AllLevelsTagLinksSQL backs the tag filter:
+// ingest writes tags at all three levels (e.g. `@jira:KEY` labels land
+// on specs), so a filter that only looked at suites missed most tags.
+const (
+	RunAndSuiteTagLinksSQL = runLevelTagLinksSQL + "\n\tUNION ALL" + suiteLevelTagLinksSQL
+	AllLevelsTagLinksSQL   = RunAndSuiteTagLinksSQL + "\n\tUNION ALL" + specLevelTagLinksSQL
+)
+
+// tagExistsClause matches runs carrying a tag whose name satisfies
+// nameCond (`= ?` or `IN (?)`) at any level. It is a single EXISTS with
+// a single placeholder, which keeps the one-arg-per-clause contract the
+// callers rely on and lets Postgres plan it as a semi-join (three OR'd
+// EXISTS would force a per-row subplan).
+func tagExistsClause(nameCond string) string {
 	return `EXISTS (
-		SELECT 1 FROM suite_runs sr
-		JOIN suite_run_tags srt ON srt.suite_run_id = sr.id
-		JOIN tags t ON t.id = srt.tag_id
-		WHERE sr.test_run_id = test_runs.id
-		  AND t.name = ?
+		SELECT 1 FROM (` + AllLevelsTagLinksSQL + `
+		) rt
+		WHERE rt.run_id = test_runs.id
+		  AND rt.tag_name ` + nameCond + `
 	)`
 }

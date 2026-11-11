@@ -127,7 +127,13 @@ func (r *TestRunQueryRepo) ComputeFacets(ctx context.Context, f domain.TestRunFi
 	return out, nil
 }
 
-// tagFacet computes tag counts via the suite_run_tags many-to-many.
+// tagFacet counts runs per tag for tags attached to the run itself or to
+// one of its suites. Spec-level tags are deliberately left out: one row
+// per spec per run makes spec_run_tags by far the largest link table, and
+// grouping it over a whole time window would dominate the facet query.
+// Filtering by a spec-level tag still works (see tagExistsClause); such a
+// tag just doesn't appear as a facet option.
+//
 // The filter's own Tags constraint is excluded so the UI can broaden
 // or switch tag selection without all other tags vanishing.
 func (r *TestRunQueryRepo) tagFacet(ctx context.Context, f domain.TestRunFilter) ([]domain.FacetCount, error) {
@@ -137,11 +143,9 @@ func (r *TestRunQueryRepo) tagFacet(ctx context.Context, f domain.TestRunFilter)
 	clauses, args := BuildTestRunWhere(scoped)
 
 	q := r.db.WithContext(ctx).Table("test_runs").
-		Select("tags.name AS value, COUNT(DISTINCT test_runs.id) AS count").
-		Joins("JOIN suite_runs sr ON sr.test_run_id = test_runs.id").
-		Joins("JOIN suite_run_tags srt ON srt.suite_run_id = sr.id").
-		Joins("JOIN tags ON tags.id = srt.tag_id").
-		Group("tags.name").
+		Select("rt.tag_name AS value, COUNT(DISTINCT test_runs.id) AS count").
+		Joins("JOIN (" + RunAndSuiteTagLinksSQL + "\n\t\t) rt ON rt.run_id = test_runs.id").
+		Group("rt.tag_name").
 		Order("count DESC")
 	for i, c := range clauses {
 		q = q.Where(c, sliceArg(args[i])...)

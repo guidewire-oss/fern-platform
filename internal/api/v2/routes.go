@@ -21,7 +21,6 @@ type MountOptions struct {
 	TrendsSvc     TestRunTrendsService
 	SavedViewRepo SavedViewRepo
 	VitalSink     WebVitalSink
-	JiraTests     JiraTestLookup
 	UserID        UserIDProvider // optional; defaults to DefaultUserIDProvider
 	// Scope is the authorization boundary applied to the test-run and
 	// trends read endpoints. Nil disables per-project team scoping —
@@ -61,9 +60,6 @@ func MountV2(opts MountOptions) {
 	}
 	if opts.SavedViewRepo != nil {
 		NewSavedViewHandler(opts.SavedViewRepo, opts.UserID).Register(authedGroup)
-	}
-	if opts.JiraTests != nil {
-		NewJiraTestsHandler(opts.JiraTests).WithScope(opts.Scope).Register(authedGroup)
 	}
 }
 
