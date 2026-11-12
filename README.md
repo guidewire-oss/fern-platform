@@ -35,7 +35,7 @@ Choose based on your installation method:
 
 **For Docker:**
 - Docker Engine 20.10+
-- PostgreSQL 14+ (external or containerized)
+- PostgreSQL 14+ (external or containerized; 17 recommended, matching the CNPG default)
 - Redis 6+ (external or containerized)
 
 **For Kubernetes deployment:**
