@@ -335,3 +335,88 @@ func TestList_NodeIncludesDurationMs(t *testing.T) {
 		t.Errorf("run_id = %q, want r1", got)
 	}
 }
+
+// /projects/:projectId/test-runs is /test-runs pinned to the path's
+// project: the path wins over any ?project=, other filters pass through.
+func TestListForProject_PinsProjectFromPath(t *testing.T) {
+	svc := &fakeQuerySvc{}
+	r := newRouter(t, svc)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v2/projects/p1/test-runs?project=p2&project=p3&tag=jira:GWCP-1&tag=smoke&tagMode=AND&status=failed&allTime=1&first=10", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !equalStrings(svc.gotFilter.ProjectIDs, []string{"p1"}) {
+		t.Errorf("ProjectIDs = %v, want [p1]", svc.gotFilter.ProjectIDs)
+	}
+	if !equalStrings(svc.gotFilter.Tags, []string{"jira:GWCP-1", "smoke"}) || svc.gotFilter.TagMode != domain.LogicAnd {
+		t.Errorf("Tags = %v mode %q", svc.gotFilter.Tags, svc.gotFilter.TagMode)
+	}
+	if !equalStrings(svc.gotFilter.Status, []string{"failed"}) {
+		t.Errorf("Status = %v", svc.gotFilter.Status)
+	}
+	if svc.gotFilter.StartedAt != nil {
+		t.Errorf("allTime=1 should leave StartedAt unset, got %+v", svc.gotFilter.StartedAt)
+	}
+	if svc.gotPage.First != 10 {
+		t.Errorf("First = %d, want 10", svc.gotPage.First)
+	}
+}
+
+func TestListForProject_DefaultsToLast7Days(t *testing.T) {
+	svc := &fakeQuerySvc{}
+	r := newRouter(t, svc)
+	before := time.Now().UTC()
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v2/projects/p1/test-runs", nil))
+	after := time.Now().UTC()
+	if svc.gotFilter.StartedAt == nil || svc.gotFilter.StartedAt.Gte == nil {
+		t.Fatal("expected default 7-day window")
+	}
+	const week = 7 * 24 * time.Hour
+	if gte := *svc.gotFilter.StartedAt.Gte; gte.Before(before.Add(-week)) || gte.After(after.Add(-week)) {
+		t.Errorf("StartedAt.Gte = %v, want now-7d (between %v and %v)", gte, before.Add(-week), after.Add(-week))
+	}
+	if svc.gotFilter.StartedAt.Lte != nil {
+		t.Errorf("StartedAt.Lte = %v, want unset", *svc.gotFilter.StartedAt.Lte)
+	}
+}
+
+func TestListForProject_RespectsScope(t *testing.T) {
+	cases := []struct {
+		name        string
+		scope       fakeScope
+		wantCalled  bool
+		wantProject []string
+	}{
+		{"readable project", fakeScope{allowed: allow("p1", "p9")}, true, []string{"p1"}},
+		{"unreadable project returns empty", fakeScope{allowed: allow("p9")}, false, nil},
+		{"unrestricted", fakeScope{unrestricted: true}, true, []string{"p1"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &fakeQuerySvc{}
+			gin.SetMode(gin.TestMode)
+			r := gin.New()
+			apiv2.NewTestRunHandler(svc).WithScope(tc.scope).Register(r.Group("/api/v2"))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v2/projects/p1/test-runs?tag=jira:GWCP-1", nil))
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+			called := svc.gotFilter.Tags != nil
+			if called != tc.wantCalled {
+				t.Fatalf("query called = %v, want %v", called, tc.wantCalled)
+			}
+			if called && !equalStrings(svc.gotFilter.ProjectIDs, tc.wantProject) {
+				t.Errorf("ProjectIDs = %v, want %v", svc.gotFilter.ProjectIDs, tc.wantProject)
+			}
+			if !called && !strings.Contains(w.Body.String(), `"edges":[]`) {
+				t.Errorf("expected empty connection, got %s", w.Body.String())
+			}
+		})
+	}
+}

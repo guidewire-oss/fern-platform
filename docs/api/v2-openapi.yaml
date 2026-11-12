@@ -37,72 +37,65 @@ paths:
       summary: List test runs with filters, pagination, and facets.
       operationId: listTestRuns
       parameters:
-        - name: project
-          in: query
-          description: Filter by project id. Repeatable; values OR together.
-          schema: { type: array, items: { type: string } }
-          explode: true
-        - name: status
-          in: query
-          description: Filter by run status. Repeatable.
-          schema:
-            type: array
-            items:
-              type: string
-              enum: [passed, failed, flaky, running, skipped]
-          explode: true
-        - name: branch
-          in: query
-          description: Filter by branch. Repeatable.
-          schema: { type: array, items: { type: string } }
-          explode: true
-        - name: tag
-          in: query
-          description: Filter by tag. Repeatable.
-          schema: { type: array, items: { type: string } }
-          explode: true
-        - name: tagMode
-          in: query
+        - $ref: '#/components/parameters/TestRunListProject'
+        - $ref: '#/components/parameters/TestRunListStatus'
+        - $ref: '#/components/parameters/TestRunListBranch'
+        - $ref: '#/components/parameters/TestRunListTag'
+        - $ref: '#/components/parameters/TestRunListTagMode'
+        - $ref: '#/components/parameters/TestRunListCommit'
+        - $ref: '#/components/parameters/TestRunListQ'
+        - $ref: '#/components/parameters/TestRunListFrom'
+        - $ref: '#/components/parameters/TestRunListTo'
+        - $ref: '#/components/parameters/TestRunListAllTime'
+        - $ref: '#/components/parameters/TestRunListDurationGte'
+        - $ref: '#/components/parameters/TestRunListDurationLte'
+        - $ref: '#/components/parameters/TestRunListFirst'
+        - $ref: '#/components/parameters/TestRunListAfter'
+        - $ref: '#/components/parameters/TestRunListFacets'
+      responses:
+        '200':
+          description: Filtered, paginated test runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestRunConnection' }
+        '400':
           description: |
-            How to combine multiple `tag` values. `OR` (default) matches
-            runs with any of the tags; `AND` matches runs that carry
-            every tag.
-          schema:
-            type: string
-            enum: [OR, AND]
-            default: OR
-        - name: commit
-          in: query
-          description: Exact git commit SHA.
+            Malformed query. Examples: non-integer `first`, invalid
+            timestamp, inverted date or duration range.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /projects/{projectId}/test-runs:
+    get:
+      tags: [test-runs]
+      summary: List one project's test runs (alias of /test-runs).
+      description: |
+        Same as `GET /test-runs?project={projectId}`. The path's project
+        replaces any `project` query params; every other parameter
+        behaves identically. A project the caller cannot read yields an
+        empty connection (`200`, no edges), not `403`.
+      operationId: listProjectTestRuns
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          description: Project id. Must not contain `/`.
           schema: { type: string }
-        - name: q
-          in: query
-          description: Full-text search over spec name + error message.
-          schema: { type: string }
-        - name: from
-          in: query
-          description: Inclusive lower bound on `start_time` (RFC 3339).
-          schema: { type: string, format: date-time }
-        - name: to
-          in: query
-          description: Inclusive upper bound on `start_time` (RFC 3339).
-          schema: { type: string, format: date-time }
-        - name: durationGte
-          in: query
-          description: Inclusive lower bound on `duration_ms`.
-          schema: { type: integer, minimum: 0 }
-        - name: durationLte
-          in: query
-          description: Inclusive upper bound on `duration_ms`.
-          schema: { type: integer, minimum: 0 }
-        - name: first
-          in: query
-          description: Page size. Default 50, clamped to 200.
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-        - name: after
-          in: query
-          description: Opaque cursor returned in a previous response's `pageInfo.endCursor`.
-          schema: { type: string }
+        - $ref: '#/components/parameters/TestRunListStatus'
+        - $ref: '#/components/parameters/TestRunListBranch'
+        - $ref: '#/components/parameters/TestRunListTag'
+        - $ref: '#/components/parameters/TestRunListTagMode'
+        - $ref: '#/components/parameters/TestRunListCommit'
+        - $ref: '#/components/parameters/TestRunListQ'
+        - $ref: '#/components/parameters/TestRunListFrom'
+        - $ref: '#/components/parameters/TestRunListTo'
+        - $ref: '#/components/parameters/TestRunListAllTime'
+        - $ref: '#/components/parameters/TestRunListDurationGte'
+        - $ref: '#/components/parameters/TestRunListDurationLte'
+        - $ref: '#/components/parameters/TestRunListFirst'
+        - $ref: '#/components/parameters/TestRunListAfter'
+        - $ref: '#/components/parameters/TestRunListFacets'
       responses:
         '200':
           description: Filtered, paginated test runs.
@@ -205,6 +198,104 @@ paths:
         '400': { description: Unknown metric, out-of-range value, or missing route. }
 
 components:
+  parameters:
+    TestRunListProject:
+      name: project
+      in: query
+      description: Filter by project id. Repeatable; values OR together.
+      schema: { type: array, items: { type: string } }
+      explode: true
+    TestRunListStatus:
+      name: status
+      in: query
+      description: Filter by run status. Repeatable.
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [passed, failed, flaky, running, skipped]
+      explode: true
+    TestRunListBranch:
+      name: branch
+      in: query
+      description: Filter by branch. Repeatable.
+      schema: { type: array, items: { type: string } }
+      explode: true
+    TestRunListTag:
+      name: tag
+      in: query
+      description: Filter by tag. Repeatable.
+      schema: { type: array, items: { type: string } }
+      explode: true
+    TestRunListTagMode:
+      name: tagMode
+      in: query
+      description: |
+        How to combine multiple `tag` values. `OR` (default) matches
+        runs with any of the tags; `AND` matches runs that carry
+        every tag.
+      schema:
+        type: string
+        enum: [OR, AND]
+        default: OR
+    TestRunListCommit:
+      name: commit
+      in: query
+      description: Exact git commit SHA.
+      schema: { type: string }
+    TestRunListQ:
+      name: q
+      in: query
+      description: Full-text search over spec name + error message.
+      schema: { type: string }
+    TestRunListFrom:
+      name: from
+      in: query
+      description: Inclusive lower bound on `start_time` (RFC 3339).
+      schema: { type: string, format: date-time }
+    TestRunListTo:
+      name: to
+      in: query
+      description: Inclusive upper bound on `start_time` (RFC 3339).
+      schema: { type: string, format: date-time }
+    TestRunListDurationGte:
+      name: durationGte
+      in: query
+      description: Inclusive lower bound on `duration_ms`.
+      schema: { type: integer, minimum: 0 }
+    TestRunListDurationLte:
+      name: durationLte
+      in: query
+      description: Inclusive upper bound on `duration_ms`.
+      schema: { type: integer, minimum: 0 }
+    TestRunListFirst:
+      name: first
+      in: query
+      description: Page size. Default 50, clamped to 200.
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    TestRunListAfter:
+      name: after
+      in: query
+      description: Opaque cursor returned in a previous response's `pageInfo.endCursor`.
+      schema: { type: string }
+    TestRunListAllTime:
+      name: allTime
+      in: query
+      description: |
+        `1` disables the default time window. Without `from`/`to` or
+        `allTime=1`, only runs that started in the last 7 days are
+        returned.
+      schema: { type: string, enum: ['1'] }
+    TestRunListFacets:
+      name: facets
+      in: query
+      description: |
+        Extra facets to compute. `tag` adds `facets.byTag` (counts runs
+        per run- or suite-level tag); it is skipped by default because
+        it is the costliest facet. Comma-separated or repeatable.
+      schema: { type: array, items: { type: string, enum: [tag] } }
+      explode: true
+
   responses:
     Unauthorized:
       description: No authenticated user on the request.

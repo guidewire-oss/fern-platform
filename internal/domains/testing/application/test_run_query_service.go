@@ -179,6 +179,10 @@ func filterKeyView(f domain.TestRunFilter) any {
 		DurationMs *domain.IntRange      `json:"d"`
 		StartedAt  *domain.DateTimeRange `json:"st"`
 		Search     *string               `json:"q"`
+		// TagFacet is part of the key because it changes what is cached:
+		// without it, a list request (no tag facet computed) would seed
+		// an empty ByTag that a later facets=tag request is then served.
+		TagFacet bool `json:"tf"`
 	}{
 		ProjectIDs: f.ProjectIDs,
 		AllowedIDs: f.AllowedProjectIDs,
@@ -191,5 +195,6 @@ func filterKeyView(f domain.TestRunFilter) any {
 		DurationMs: f.DurationMs,
 		StartedAt:  f.StartedAt,
 		Search:     f.Search,
+		TagFacet:   f.IncludeTagFacet,
 	}
 }
