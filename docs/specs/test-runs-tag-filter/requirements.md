@@ -35,10 +35,13 @@ JIRA-specific endpoint. It supersedes the earlier
 - **R5** The project scope shall apply to both routes: a project the
   caller cannot read yields an empty connection (`200`, no edges), as
   `/test-runs?project=` already does.
-- **R6** Where `facets=tag` is requested, the tag facet shall count runs
-  per tag for tags attached at run or suite level. Spec-level tags are
-  excluded from the facet (cost: `spec_run_tags` is the largest link
-  table) but still filter (R1).
+- **R6** Where `facets=tag` is requested, the tag facet shall count live
+  (not soft-deleted) runs per tag for tags attached at run or suite
+  level. Spec-level tags are excluded from the facet (cost:
+  `spec_run_tags` is the largest link table) but still filter (R1).
+- **R7** Facet cache entries shall be keyed on whether the tag facet was
+  requested, so a list request without `facets=tag` never serves its
+  (empty) tag facet to a later `facets=tag` request.
 
 Tag names match exactly (`t.name`), as before.
 
@@ -54,25 +57,26 @@ Tag names match exactly (`t.name`), as before.
   suite/spec branches contain joins, stay subqueries, cannot receive the
   join qual, and scan their link tables whole.
 - `TestRunQueryRepo.tagFacet` joins `RunAndSuiteTagLinksSQL` (run + suite
-  branches only).
+  branches only). It and the status/branch/project facets add
+  `test_runs.deleted_at IS NULL` explicitly: they use `Table` + `Scan`,
+  which skips GORM's soft-delete scope that the list and count get.
+- `application.filterKeyView` includes `IncludeTagFacet` in the facet
+  cache key.
 - `internal/api/v2/test_run_handler.go`: `listForProject` copies the query,
   pins `project` to the path segment, and shares `serveList` with `list`.
+  Documented in `docs/api/v2-openapi.yaml` (shared list parameters live
+  under `components/parameters`). Like every v1 `/projects/:projectId`
+  route, it cannot address a project ID containing `/`.
 
 ## Verification
 
 - SQLite repo tests (`test_run_tag_filter_test.go`): each level matches,
   project scoping, no duplicates, OR/AND across levels, soft-deleted specs
-  ignored, facet counts run + suite but not spec. These fail on the
-  previous suite-only filter.
+  ignored, facet counts run + suite but not spec, facets skip
+  soft-deleted runs. These fail on the previous code.
+- Cache key test: with and without `IncludeTagFacet` differ.
 - Handler tests: path pins project over `?project=`, params pass through,
-  default 7-day window, scope (readable / unreadable → empty / unrestricted).
+  default window is now − 7 days, scope (readable / unreadable → empty / unrestricted).
 - Against Postgres with seeded data: for 300 (tag, project) pairs the
   filter returned exactly the runs found by the JIRA coverage lookup SQL;
   `EXPLAIN ANALYZE` shows index access in all three branches.
-
-## Known issue (pre-existing, not changed here)
-
-The facet cache key (`filterKeyView`) omits `IncludeTagFacet`, so a
-request without `facets=tag` can cache an empty tag facet that a later
-`facets=tag` request with the same filter receives until the entry
-expires.

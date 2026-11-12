@@ -145,6 +145,7 @@ func (r *TestRunQueryRepo) tagFacet(ctx context.Context, f domain.TestRunFilter)
 	q := r.db.WithContext(ctx).Table("test_runs").
 		Select("rt.tag_name AS value, COUNT(DISTINCT test_runs.id) AS count").
 		Joins("JOIN (" + RunAndSuiteTagLinksSQL + "\n\t\t) rt ON rt.run_id = test_runs.id").
+		Where(liveTestRunsSQL).
 		Group("rt.tag_name").
 		Order("count DESC")
 	for i, c := range clauses {
@@ -169,6 +170,12 @@ func (r *TestRunQueryRepo) tagFacet(ctx context.Context, f domain.TestRunFilter)
 	return out, nil
 }
 
+// liveTestRunsSQL excludes soft-deleted runs. The facet queries go
+// through Table + Scan (see facet), which skips GORM's automatic
+// soft-delete predicate, so they must state it to agree with the list
+// and count queries (Model(&database.TestRun{}) adds it there).
+const liveTestRunsSQL = "test_runs.deleted_at IS NULL"
+
 type facetExclude int
 
 const (
@@ -184,6 +191,7 @@ func (r *TestRunQueryRepo) facet(ctx context.Context, f domain.TestRunFilter, co
 	clauses, args := BuildTestRunWhere(scoped)
 	q := r.db.WithContext(ctx).Table("test_runs").
 		Select(col + " AS value, COUNT(*) AS count").
+		Where(liveTestRunsSQL).
 		Group(col).
 		Order("count DESC")
 	for i, c := range clauses {

@@ -190,3 +190,33 @@ func TestComputeFacets_TagFacetCountsRunAndSuiteLevels(t *testing.T) {
 		t.Errorf("spec-level tag should not appear in the facet: %+v", counts)
 	}
 }
+
+// Facets must agree with the list: a soft-deleted run is gone from
+// every facet, the tag facet included.
+func TestComputeFacets_IgnoresSoftDeletedRuns(t *testing.T) {
+	f := newTagFixture(t)
+	f.mkRun(t, "p1", runTags{run: []database.Tag{f.tRun}})
+	gone := f.mkRun(t, "p1", runTags{run: []database.Tag{f.tRun}, suite: []database.Tag{f.tSuite}})
+	if err := f.db.Where("run_id = ?", gone).Delete(&database.TestRun{}).Error; err != nil { // soft delete
+		t.Fatal(err)
+	}
+
+	facets, err := infrastructure.NewTestRunQueryRepo(f.db).ComputeFacets(context.Background(),
+		domain.TestRunFilter{ProjectIDs: []string{"p1"}, IncludeTagFacet: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := map[string]int64{}
+	for _, fc := range facets.ByTag {
+		tags[fc.Value] = fc.Count
+	}
+	if tags["jira:RUN-1"] != 1 {
+		t.Errorf("byTag[jira:RUN-1] = %d, want 1 (deleted run counted)", tags["jira:RUN-1"])
+	}
+	if _, ok := tags["smoke"]; ok {
+		t.Errorf("tag only on a deleted run appears in the facet: %+v", tags)
+	}
+	if len(facets.ByStatus) != 1 || facets.ByStatus[0].Count != 1 {
+		t.Errorf("byStatus = %+v, want passed=1", facets.ByStatus)
+	}
+}

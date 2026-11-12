@@ -369,9 +369,18 @@ func TestListForProject_PinsProjectFromPath(t *testing.T) {
 func TestListForProject_DefaultsToLast7Days(t *testing.T) {
 	svc := &fakeQuerySvc{}
 	r := newRouter(t, svc)
+	before := time.Now().UTC()
 	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v2/projects/p1/test-runs", nil))
+	after := time.Now().UTC()
 	if svc.gotFilter.StartedAt == nil || svc.gotFilter.StartedAt.Gte == nil {
 		t.Fatal("expected default 7-day window")
+	}
+	const week = 7 * 24 * time.Hour
+	if gte := *svc.gotFilter.StartedAt.Gte; gte.Before(before.Add(-week)) || gte.After(after.Add(-week)) {
+		t.Errorf("StartedAt.Gte = %v, want now-7d (between %v and %v)", gte, before.Add(-week), after.Add(-week))
+	}
+	if svc.gotFilter.StartedAt.Lte != nil {
+		t.Errorf("StartedAt.Lte = %v, want unset", *svc.gotFilter.StartedAt.Lte)
 	}
 }
 
