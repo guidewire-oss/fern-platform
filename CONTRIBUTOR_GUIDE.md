@@ -155,7 +155,7 @@ will be disabled or stubbed.
 
 ```bash
 # 1. Bring up dependencies
-docker run -d --name fern-pg    -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:14
+docker run -d --name fern-pg    -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17
 docker run -d --name fern-redis -p 6379:6379 redis:7
 
 # 2. Set env (or use config/ files)
@@ -171,6 +171,22 @@ make run                 # or: go run ./cmd/fern-platform
 ```
 
 The server listens on `:8080`. Hit `GET /health` to confirm it's up.
+
+> **Upgrading from Postgres 14?** Local dev now uses Postgres 17, the same
+> major version as the CNPG deployment. Postgres 17 can't start on a data
+> directory created by 14, so an existing container or volume needs one of:
+>
+> - **Discard local data:**
+>   - Path B: `docker rm -f fern-pg`, then repeat step 1 and the `createdb`
+>     in step 3. Removing the container also removes the `fern_platform`
+>     database, and migrations don't create it.
+>   - `docker-compose.yml`: `docker compose down -v`, then start again. Compose
+>     creates `fern_platform` itself.
+>
+>   Migrations recreate the schema on first start.
+> - **Keep local data:** run `pg_dumpall` against the 14 container, start a 17
+>   container (on a fresh volume if you use one), then restore the dump with
+>   `psql`.
 
 ### Path C — Docker (coming soon)
 

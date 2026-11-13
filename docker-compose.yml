@@ -15,7 +15,7 @@
 
 services:
   postgres:
-    image: postgres:14-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER:     postgres
       POSTGRES_PASSWORD: postgres
@@ -36,7 +36,7 @@ services:
   # We tolerate the role already existing (49P04 duplicate_object) so
   # restarts on the same volume don't fail.
   postgres-init:
-    image: postgres:14-alpine
+    image: postgres:17-alpine
     depends_on:
       postgres: { condition: service_healthy }
     environment:
