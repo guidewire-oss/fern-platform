@@ -248,9 +248,10 @@ describe('Specs view (after drilling into a suite)', () => {
     expect(within(rows[0]!).getByTestId('spec-error-message')).toHaveTextContent('AssertionError');
     expect(within(rows[1]!).queryByTestId('spec-error-message')).toBeNull();
     // The row without an error message has a "—" placeholder in the
-    // Error cell (and also in Tags, both empty). Confirm the empty cells
-    // resolve to the placeholder by counting them — Tags + Error = 2.
-    expect(within(rows[1]!).getAllByText('—')).toHaveLength(2);
+    // Error cell (and also in Tags and History, both empty here: the
+    // mocked query returns no history). Confirm the empty cells resolve
+    // to the placeholder by counting them — History + Error + Tags = 3.
+    expect(within(rows[1]!).getAllByText('—')).toHaveLength(3);
   });
 
   it('clicking the error cell expands a stack-trace pre block', () => {
@@ -427,5 +428,203 @@ describe('Suites and specs sort/filter', () => {
     fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
     fireEvent.click(screen.getByTestId('back-to-suites'));
     expect(suiteNames()).toEqual(['zulu']);
+  });
+});
+
+describe('History strip (requirement 8)', () => {
+  const historyResponse = {
+    runs: [
+      { id: 1, runId: 'old', branch: 'main', status: 'failed', startTime: '2026-05-21T10:00:00Z', durationMs: 4000 },
+      { id: 2, runId: 'run-1', branch: 'main', status: 'passed', startTime: '2026-05-23T10:00:00Z', durationMs: 5000 },
+    ],
+    suites: [{ suiteName: 'auth/login', results: [{ status: 'failed', durationMs: 10 }, { status: 'passed', durationMs: 12 }] }],
+    specs: [
+      {
+        suiteName: 'auth/login',
+        specName: 'logs in with valid credentials',
+        results: [null, { status: 'passed', durationMs: 7 }],
+      },
+    ],
+  };
+
+  // Answers each useQuery by its key: the GraphQL run, or the REST history.
+  // The mock is also invoked once with no options, so opts is optional.
+  function renderWithHistory(run: RunLike, history: unknown) {
+    mockQuery.mockImplementation((opts?: { queryKey: unknown[] }) =>
+      opts?.queryKey[0] === 'run-history'
+        ? { data: history, isLoading: false, error: null }
+        : { data: { testRun: run }, isLoading: false, error: null },
+    );
+    return render(<TestRunDetail />);
+  }
+
+  it('asks for the history of the run by its database id', () => {
+    renderWithHistory(baseRun, historyResponse);
+    const keys = mockQuery.mock.calls.map(([o]) => (o as { queryKey?: unknown[] } | undefined)?.queryKey);
+    expect(keys).toContainEqual(['run-history', 'r-1']);
+  });
+
+  it('shows a History column with a strip per suite', () => {
+    renderWithHistory(baseRun, historyResponse);
+    expect(screen.getByRole('columnheader', { name: /^history$/i })).toBeInTheDocument();
+    const row = screen.getAllByTestId('suite-row')[0]!;
+    const cells = within(row).getAllByTestId('history-cell');
+    expect(cells.map((c) => c.dataset.status)).toEqual(['failed', 'passed']);
+  });
+
+  it('shows the spec strip after drilling in, with absent runs and the viewed run marked', () => {
+    renderWithHistory(baseRun, historyResponse);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    const row = screen.getAllByTestId('spec-row')[0]!;
+    const cells = within(row).getAllByTestId('history-cell');
+    expect(cells.map((c) => c.dataset.status)).toEqual(['absent', 'passed']);
+    expect(cells[1]!.dataset.viewed).toBe('true');
+    expect(cells[0]!.dataset.viewed).toBeUndefined();
+    expect(within(row).getByRole('img')).toHaveAccessibleName('Last 2 runs: 1 not run, 1 passed');
+  });
+
+  it('falls back to a dash when the history has nothing for a row', () => {
+    renderWithHistory(baseRun, { ...historyResponse, suites: [], specs: [] });
+    const row = screen.getAllByTestId('suite-row')[0]!;
+    expect(within(row).queryByTestId('history-strip')).toBeNull();
+  });
+});
+
+describe('Spec history panel (requirement 9)', () => {
+  const runs = [
+    { id: 1, runId: 'old', branch: 'main', status: 'failed', startTime: '2026-05-21T10:00:00Z', durationMs: 4000 },
+    { id: 2, runId: 'mid', branch: 'main', status: 'passed', startTime: '2026-05-22T10:00:00Z', durationMs: 4000 },
+    { id: 3, runId: 'run-1', branch: 'main', status: 'passed', startTime: '2026-05-23T10:00:00Z', durationMs: 5000 },
+  ];
+  const specName = 'logs in with valid credentials';
+  const strip = {
+    runs,
+    suites: [],
+    specs: [{ suiteName: 'auth/login', specName, results: [{ status: 'failed', durationMs: 900 }, null, { status: 'passed', durationMs: 300 }] }],
+  };
+  const specHistory = {
+    runs,
+    suiteName: 'auth/login',
+    specName,
+    results: [
+      { status: 'failed', durationMs: 900, errorMessage: 'expected 200, got 401', stackTrace: 'at login_test.go:42' },
+      null,
+      { status: 'passed', durationMs: 300 },
+    ],
+  };
+
+  type Answer = { data?: unknown; isLoading?: boolean; error?: unknown };
+  function renderPanel(spec: Answer = { data: specHistory }) {
+    const specCalls: unknown[][] = [];
+    mockQuery.mockImplementation((opts?: { queryKey: unknown[] }) => {
+      const key = opts?.queryKey[0];
+      if (key === 'run-history') return { data: strip, isLoading: false, error: null };
+      if (key === 'spec-history') {
+        specCalls.push(opts!.queryKey);
+        return { isLoading: false, error: null, ...spec };
+      }
+      return { data: { testRun: baseRun }, isLoading: false, error: null };
+    });
+    render(<TestRunDetail />);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    return specCalls;
+  }
+
+  it('is closed until the strip is clicked, and the strip toggles it', () => {
+    const calls = renderPanel();
+    expect(screen.queryByTestId('spec-history-panel')).toBeNull();
+    expect(calls).toHaveLength(0);
+    const toggle = screen.getByTestId('spec-history-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('spec-history-panel')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(calls[0]).toEqual(['spec-history', 'r-1', 'auth/login', specName]);
+
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('spec-history-panel')).toBeNull();
+  });
+
+  it('plots one bar per run with absent runs empty, the viewed run marked, and a median', () => {
+    renderPanel();
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    const bars = screen.getAllByTestId('duration-bar');
+    expect(bars.map((b) => b.dataset.status)).toEqual(['failed', 'absent', 'passed']);
+    expect(bars[2]!.dataset.viewed).toBe('true');
+    expect(screen.getByTestId('median-line')).toBeInTheDocument();
+    expect(screen.getByTestId('duration-summary')).toHaveTextContent('median 600ms · longest 900ms');
+    expect(screen.getByRole('img', { name: /^Duration per run/ })).toBeInTheDocument();
+  });
+
+  it('lists failed runs with a link to the run and the error, expandable to the stack trace', () => {
+    renderPanel();
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    const items = screen.getAllByTestId('failed-run');
+    expect(items).toHaveLength(1);
+    expect(screen.getByText(/Failures \(1 of 3 runs\)/)).toBeInTheDocument();
+    expect(within(items[0]!).getByRole('link')).toHaveAttribute('data-to', '/test-runs/$runId');
+    const err = within(items[0]!).getByTestId('failed-run-error');
+    expect(err).toHaveTextContent('expected 200, got 401');
+    expect(within(items[0]!).queryByTestId('failed-run-stack')).toBeNull();
+    fireEvent.click(err);
+    expect(within(items[0]!).getByTestId('failed-run-stack')).toHaveTextContent('at login_test.go:42');
+  });
+
+  it('says so when there are no failures', () => {
+    renderPanel({ data: { ...specHistory, results: [null, null, { status: 'passed', durationMs: 300 }] } });
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    expect(screen.getByText('No failures in these runs.')).toBeInTheDocument();
+  });
+
+  it('shows loading and error states inside the panel', () => {
+    renderPanel({ isLoading: true });
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    expect(screen.getByText('Loading history…')).toBeInTheDocument();
+    cleanup();
+    renderPanel({ error: new Error('nope') });
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    expect(screen.getByText("Couldn't load this spec's history.")).toBeInTheDocument();
+  });
+});
+
+describe('Closing the spec history panel', () => {
+  const runs = [{ id: 1, runId: 'run-1', branch: 'main', status: 'passed', startTime: '2026-05-23T10:00:00Z', durationMs: 1 }];
+  const specName = 'logs in with valid credentials';
+  function open(spec: { data?: unknown; isLoading?: boolean } = {}) {
+    mockQuery.mockImplementation((opts?: { queryKey: unknown[] }) => {
+      const key = opts?.queryKey[0];
+      if (key === 'run-history') {
+        return { data: { runs, suites: [], specs: [{ suiteName: 'auth/login', specName, results: [{ status: 'passed', durationMs: 1 }] }] }, isLoading: false, error: null };
+      }
+      if (key === 'spec-history') {
+        return { data: { runs, suiteName: 'auth/login', specName, results: [{ status: 'passed', durationMs: 1 }] }, isLoading: false, error: null, ...spec };
+      }
+      return { data: { testRun: baseRun }, isLoading: false, error: null };
+    });
+    render(<TestRunDetail />);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    fireEvent.click(screen.getByTestId('spec-history-toggle'));
+    expect(screen.getByTestId('spec-history-panel')).toBeInTheDocument();
+  }
+
+  it('closes from the Close button and returns focus to the strip', () => {
+    open();
+    fireEvent.click(screen.getByTestId('spec-history-close'));
+    expect(screen.queryByTestId('spec-history-panel')).toBeNull();
+    expect(screen.getByTestId('spec-history-toggle')).toHaveFocus();
+    expect(screen.getByTestId('spec-history-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes on Escape from inside the panel', () => {
+    open();
+    fireEvent.keyDown(screen.getByTestId('spec-history-close'), { key: 'Escape' });
+    expect(screen.queryByTestId('spec-history-panel')).toBeNull();
+  });
+
+  it('can be closed while it is still loading', () => {
+    open({ data: undefined, isLoading: true });
+    fireEvent.click(screen.getByTestId('spec-history-close'));
+    expect(screen.queryByTestId('spec-history-panel')).toBeNull();
   });
 });

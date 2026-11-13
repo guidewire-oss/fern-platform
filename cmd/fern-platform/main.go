@@ -201,6 +201,7 @@ func main() {
 		Engine:        router,
 		TestRunSvc:    queryService,
 		TrendsSvc:     testingService, // shares the TestRunService — implements AggregateDailyByProjects
+		HistorySvc:    testinginfra.NewRunHistoryRepo(db.DB),
 		SavedViewRepo: savedViewRepo,
 		// VitalSink left nil: the telemetry endpoint accepts and
 		// drops vitals until a Prometheus-backed sink is wired.

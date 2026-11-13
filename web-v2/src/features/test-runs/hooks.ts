@@ -1,6 +1,6 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { restFetch } from '@/lib/api';
-import type { TestRunConnection } from '@/lib/types';
+import type { RunHistory, SpecRunHistory, TestRunConnection } from '@/lib/types';
 import type { SortDir } from '@/lib/tableSort';
 
 // Server-side sort keys accepted by GET /api/v2/test-runs?sort=. Sorting
@@ -71,5 +71,37 @@ export function useTestRuns(filter: TestRunsFilter) {
       restFetch<TestRunConnection>(`/api/v2/test-runs${buildQuery(filter)}`),
     staleTime: 15_000,
     placeholderData: keepPreviousData,
+  });
+}
+
+// useRunHistory loads the history strip data for one run: how each of
+// its suites and specs fared in the project's last runs on the same
+// branch. `id` is the run's database id (the GraphQL TestRun.id); the
+// query waits until it is known. A run's past doesn't change, so the
+// result can stay fresh a while.
+export function useRunHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: ['run-history', id],
+    queryFn: () =>
+      restFetch<RunHistory>(`/api/v2/test-runs/${encodeURIComponent(id ?? '')}/history`),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
+// useSpecHistory loads one spec's history with error messages for the
+// spec history panel. It runs only while the panel is open, so error
+// text is never fetched for specs nobody looks at.
+export function useSpecHistory(id: string, suiteName: string, specName: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['spec-history', id, suiteName, specName],
+    queryFn: () => {
+      const q = new URLSearchParams({ suite: suiteName, spec: specName });
+      return restFetch<SpecRunHistory>(
+        `/api/v2/test-runs/${encodeURIComponent(id)}/history/spec?${q.toString()}`,
+      );
+    },
+    enabled,
+    staleTime: 60_000,
   });
 }

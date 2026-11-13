@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
@@ -14,7 +14,12 @@ import { Button } from '@/components/ui/Button';
 import { formatDuration } from '@/lib/duration';
 import { optionsWithCounts, STATUS_ORDER } from '@/lib/tableFilter';
 import type { SortState } from '@/lib/tableSort';
+import type { HistoryRun } from '@/lib/types';
 import { LabeledValue } from './LabeledValue';
+import { HistoryStrip } from './HistoryStrip';
+import { SpecHistoryPanel } from './SpecHistoryPanel';
+import { useRunHistory } from './hooks';
+import { historyLookup, type HistoryLookup, type HistoryResults } from './runHistory';
 import {
   EMPTY_ROW_FILTER,
   filterRows,
@@ -194,6 +199,13 @@ export default function TestRunDetail() {
   // skipped" stays on while stepping through suites).
   const [suiteView, setSuiteView] = useState<TableView<SuiteSortKey>>(EMPTY_VIEW);
   const [specView, setSpecView] = useState<TableView<SpecSortKey>>(EMPTY_VIEW);
+  // The history strip loads separately and never blocks the page: until
+  // it arrives (or if it fails) the History cells show a dash.
+  const historyQuery = useRunHistory(data?.testRun?.id);
+  const history = useMemo<HistoryView>(
+    () => ({ runs: historyQuery.data?.runs ?? [], lookup: historyLookup(historyQuery.data) }),
+    [historyQuery.data],
+  );
 
   if (isLoading) {
     return (
@@ -235,7 +247,9 @@ export default function TestRunDetail() {
         />
       ) : selectedSuite ? (
         <SpecsView
+          runDbId={run.id}
           suite={selectedSuite}
+          history={history}
           view={specView}
           onViewChange={setSpecView}
           onBack={() => setSelectedSuiteId(null)}
@@ -243,6 +257,7 @@ export default function TestRunDetail() {
       ) : (
         <SuitesView
           suites={suites}
+          history={history}
           view={suiteView}
           onViewChange={setSuiteView}
           onSelect={(id) => setSelectedSuiteId(id)}
@@ -298,13 +313,30 @@ interface TableView<K extends string> {
 
 const EMPTY_VIEW = { sort: null, filter: EMPTY_ROW_FILTER };
 
+interface HistoryView {
+  runs: HistoryRun[];
+  lookup: HistoryLookup;
+}
+
+// HistoryColumn renders a row's strip, or a dash while the history is
+// loading, failed, or has nothing for this suite or spec.
+function HistoryColumn({ runs, results }: { runs: HistoryRun[]; results: HistoryResults | undefined }) {
+  return results && results.length > 0 ? (
+    <HistoryStrip runs={runs} results={results} />
+  ) : (
+    <span className="text-muted">—</span>
+  );
+}
+
 function SuitesView({
   suites,
+  history,
   view,
   onViewChange,
   onSelect,
 }: {
   suites: SuiteLike[];
+  history: HistoryView;
   view: TableView<SuiteSortKey>;
   onViewChange: (next: TableView<SuiteSortKey>) => void;
   onSelect: (suiteId: string) => void;
@@ -341,6 +373,7 @@ function SuitesView({
                 Test Results
               </SortableTH>
               <SortableTH sortKey="status" sort={view.sort} onSortChange={setSort}>Status</SortableTH>
+              <TH title="This suite in the project's recent runs on the same branch, oldest left">History</TH>
               <SortableTH sortKey="duration" sort={view.sort} onSortChange={setSort} className="text-right">
                 Duration
               </SortableTH>
@@ -375,6 +408,9 @@ function SuitesView({
                   <span className="text-muted"    title="skipped">{s.skippedSpecs}</span>
                 </TD>
                 <TD><StatusBadge status={s.status} /></TD>
+                <TD>
+                  <HistoryColumn runs={history.runs} results={history.lookup.suite(s.suiteName)} />
+                </TD>
                 <TD className="text-right tabular-nums">{formatDuration(s.duration)}</TD>
                 <TD>
                   {s.tags.length > 0 ? (
@@ -398,12 +434,16 @@ function SuitesView({
 }
 
 function SpecsView({
+  runDbId,
   suite,
+  history,
   view,
   onViewChange,
   onBack,
 }: {
+  runDbId: string;
   suite: SuiteLike;
+  history: HistoryView;
   view: TableView<SpecSortKey>;
   onViewChange: (next: TableView<SpecSortKey>) => void;
   onBack: () => void;
@@ -467,6 +507,7 @@ function SpecsView({
               <TR>
                 <SortableTH sortKey="name" sort={view.sort} onSortChange={setSort}>Test Name</SortableTH>
                 <SortableTH sortKey="status" sort={view.sort} onSortChange={setSort}>Status</SortableTH>
+                <TH title="This spec in the project's recent runs on the same branch, oldest left">History</TH>
                 <SortableTH sortKey="duration" sort={view.sort} onSortChange={setSort} className="text-right">
                   Duration
                 </SortableTH>
@@ -477,7 +518,14 @@ function SpecsView({
             </THead>
             <TBody>
               {rows.map((spec) => (
-                <SpecRow key={spec.id} spec={spec} />
+                <SpecRow
+                  key={spec.id}
+                  runDbId={runDbId}
+                  suiteName={suite.suiteName}
+                  spec={spec}
+                  historyRuns={history.runs}
+                  history={history.lookup.spec(suite.suiteName, spec.specName)}
+                />
               ))}
             </TBody>
           </Table>
@@ -487,8 +535,29 @@ function SpecsView({
   );
 }
 
-function SpecRow({ spec }: { spec: SpecLike }) {
+function SpecRow({
+  runDbId,
+  suiteName,
+  spec,
+  historyRuns,
+  history,
+}: {
+  runDbId: string;
+  suiteName: string;
+  spec: SpecLike;
+  historyRuns: HistoryRun[];
+  history: HistoryResults | undefined;
+}) {
   const [open, setOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyToggle = useRef<HTMLButtonElement>(null);
+  const panelId = `spec-history-${spec.id}`;
+  // Closing from inside the panel removes the focused button, so hand
+  // focus back to the strip that opened it.
+  const closeHistory = () => {
+    setHistoryOpen(false);
+    historyToggle.current?.focus();
+  };
   return (
     <>
       <TR data-testid="spec-row">
@@ -505,6 +574,29 @@ function SpecRow({ spec }: { spec: SpecLike }) {
           )}
         </TD>
         <TD><StatusBadge status={spec.status} /></TD>
+        <TD>
+          {history && history.length > 0 ? (
+            <button
+              ref={historyToggle}
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
+              aria-controls={panelId}
+              title={historyOpen ? 'Hide history' : 'Show duration and failures across these runs'}
+              className="inline-flex items-center gap-1 rounded p-0.5 text-muted hover:bg-surface-2 hover:text-foreground focus-visible:outline focus-visible:outline-2"
+              data-testid="spec-history-toggle"
+            >
+              <HistoryStrip runs={historyRuns} results={history} />
+              {historyOpen ? (
+                <ChevronDown className="h-3 w-3 shrink-0" aria-hidden />
+              ) : (
+                <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
+              )}
+            </button>
+          ) : (
+            <HistoryColumn runs={historyRuns} results={history} />
+          )}
+        </TD>
         <TD className="text-right tabular-nums">{formatDuration(spec.duration)}</TD>
         <TD>
           {spec.errorMessage ? (
@@ -540,13 +632,25 @@ function SpecRow({ spec }: { spec: SpecLike }) {
       </TR>
       {open && (spec.errorMessage || spec.stackTrace) && (
         <TR>
-          <TD colSpan={6}>
+          <TD colSpan={7}>
             <pre
               className="overflow-x-auto rounded bg-surface-2 p-2 font-mono text-[11px] text-foreground"
               data-testid="spec-stack-trace"
             >
 {spec.stackTrace ?? spec.errorMessage}
             </pre>
+          </TD>
+        </TR>
+      )}
+      {historyOpen && (
+        <TR id={panelId} className="bg-surface-2/40">
+          <TD colSpan={7}>
+            <SpecHistoryPanel
+              runDbId={runDbId}
+              suiteName={suiteName}
+              specName={spec.specName}
+              onClose={closeHistory}
+            />
           </TD>
         </TR>
       )}

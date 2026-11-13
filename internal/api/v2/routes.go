@@ -19,6 +19,7 @@ type MountOptions struct {
 	Engine        *gin.Engine
 	TestRunSvc    TestRunQueryService
 	TrendsSvc     TestRunTrendsService
+	HistorySvc    RunHistoryService
 	SavedViewRepo SavedViewRepo
 	VitalSink     WebVitalSink
 	UserID        UserIDProvider // optional; defaults to DefaultUserIDProvider
@@ -57,6 +58,9 @@ func MountV2(opts MountOptions) {
 	}
 	if opts.TrendsSvc != nil {
 		NewTestRunTrendsHandler(opts.TrendsSvc, opts.UserID).WithScope(opts.Scope).Register(authedGroup)
+	}
+	if opts.HistorySvc != nil {
+		NewRunHistoryHandler(opts.HistorySvc).WithScope(opts.Scope).Register(authedGroup)
 	}
 	if opts.SavedViewRepo != nil {
 		NewSavedViewHandler(opts.SavedViewRepo, opts.UserID).Register(authedGroup)

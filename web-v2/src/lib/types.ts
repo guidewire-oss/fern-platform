@@ -101,3 +101,44 @@ export interface SavedViewList {
   limit: number;
   offset: number;
 }
+
+// GET /api/v2/test-runs/:id/history — the run-detail history strip.
+// `runs` is oldest first and ends with the viewed run; every `results`
+// array is aligned with it, and a null entry means the suite or spec
+// was absent from that run.
+export interface HistoryRun {
+  id: number;
+  runId: string;
+  branch: string;
+  status: string;
+  startTime: string;
+  durationMs: number;
+}
+
+export interface HistoryCell {
+  status: string;
+  durationMs: number;
+}
+
+export interface RunHistory {
+  runs: HistoryRun[];
+  suites: { suiteName: string; results: (HistoryCell | null)[] }[];
+  specs: { suiteName: string; specName: string; results: (HistoryCell | null)[] }[];
+}
+
+// GET /api/v2/test-runs/:id/history/spec?suite=&spec= — one spec across
+// the same window as the history strip, with failure text. A null entry
+// in `results` means the spec was absent from that run.
+export interface SpecHistoryCell {
+  status: string;
+  durationMs: number;
+  errorMessage?: string;
+  stackTrace?: string;
+}
+
+export interface SpecRunHistory {
+  runs: HistoryRun[];
+  suiteName: string;
+  specName: string;
+  results: (SpecHistoryCell | null)[];
+}
