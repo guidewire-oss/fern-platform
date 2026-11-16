@@ -9,6 +9,7 @@ import { useUserPreferences } from '../profile/hooks';
 import { LabeledValue } from './LabeledValue';
 import { DateRangeFilter } from './DateRangeFilter';
 import { displayText, naturalCompare } from './facetSort';
+import { STATUS_ORDER } from '@/lib/tableFilter';
 import type { TestRunsFilter } from './hooks';
 
 interface Props {
@@ -25,7 +26,7 @@ interface Props {
 // Status is intentionally workflow-ordered, not alphabetical: green
 // states first, then degraded, then in-flight. This is the order users
 // scan for triage.
-const KNOWN_STATUSES = ['passed', 'failed', 'flaky', 'skipped', 'running'];
+const KNOWN_STATUSES = STATUS_ORDER;
 
 // Branches users care about most should float to the top; everything
 // else is alphabetical so the list is predictable.

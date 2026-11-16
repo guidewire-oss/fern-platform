@@ -138,9 +138,30 @@ func TestBuildTestRunWhere_TagsAndModeUsesMultipleExists(t *testing.T) {
 }
 
 func TestBuildTestRunOrderBy(t *testing.T) {
-	got := infrastructure.BuildTestRunOrderBy()
+	got := infrastructure.BuildTestRunOrderBy(domain.SortSpec{})
 	if !strings.Contains(got, "start_time DESC") || !strings.Contains(got, "id DESC") {
 		t.Errorf("ORDER BY should be deterministic keyset: %q", got)
+	}
+}
+
+func TestBuildTestRunOrderBy_FieldAndDirection(t *testing.T) {
+	got := infrastructure.BuildTestRunOrderBy(domain.SortSpec{Field: domain.SortDuration, Asc: true})
+	if !strings.Contains(got, "duration_ms, 0) ASC") || !strings.Contains(got, "id ASC") {
+		t.Errorf("duration ASC should order by duration then id, both ASC: %q", got)
+	}
+}
+
+func TestBuildTestRunKeyset_DirectionFlipsOperator(t *testing.T) {
+	desc := infrastructure.BuildTestRunKeyset(domain.SortSpec{Field: domain.SortBranch})
+	asc := infrastructure.BuildTestRunKeyset(domain.SortSpec{Field: domain.SortBranch, Asc: true})
+	if !strings.Contains(desc, ") < (") {
+		t.Errorf("DESC keyset should use <: %q", desc)
+	}
+	if !strings.Contains(asc, ") > (") {
+		t.Errorf("ASC keyset should use >: %q", asc)
+	}
+	if !strings.Contains(asc, "branch") {
+		t.Errorf("keyset should compare the sort column: %q", asc)
 	}
 }
 

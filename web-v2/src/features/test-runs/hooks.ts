@@ -1,6 +1,19 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { restFetch } from '@/lib/api';
 import type { TestRunConnection } from '@/lib/types';
+import type { SortDir } from '@/lib/tableSort';
+
+// Server-side sort keys accepted by GET /api/v2/test-runs?sort=. Sorting
+// happens in the query (not on the loaded page) because the list is
+// keyset-paginated: a client sort would only reorder the visible page.
+export type TestRunSortKey =
+  | 'started'
+  | 'duration'
+  | 'status'
+  | 'branch'
+  | 'project'
+  | 'run_id'
+  | 'failed';
 
 export interface TestRunsFilter {
   // All optional fields allow explicit undefined so callers can clear
@@ -16,6 +29,9 @@ export interface TestRunsFilter {
   // Duration filter in milliseconds.
   durationGte?: number | undefined;
   durationLte?: number | undefined;
+  // Ordering. Absent means newest first (start_time DESC).
+  sort?: TestRunSortKey | undefined;
+  order?: SortDir | undefined;
   // Pagination.
   first?: number | undefined;
   after?: string | undefined;
@@ -35,6 +51,8 @@ function buildQuery(f: TestRunsFilter): string {
   if (f.to)    params.set('to',    f.to);
   if (f.durationGte != null) params.set('durationGte', String(f.durationGte));
   if (f.durationLte != null) params.set('durationLte', String(f.durationLte));
+  if (f.sort)  params.set('sort',  f.sort);
+  if (f.sort && f.order) params.set('order', f.order);
   if (f.first) params.set('first', String(f.first));
   if (f.after) params.set('after', f.after);
   // If the user already has any tag-facet visible (selected tags) or

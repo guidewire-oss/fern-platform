@@ -70,16 +70,55 @@ type TestRunFilter struct {
 	IncludeTagFacet bool
 }
 
+// SortField names a column the test-run list can be ordered by. The
+// wire values are what the v2 endpoint accepts in ?sort=.
+type SortField string
+
+const (
+	SortStarted  SortField = "started"
+	SortDuration SortField = "duration"
+	SortStatus   SortField = "status"
+	SortBranch   SortField = "branch"
+	SortProject  SortField = "project"
+	SortRunID    SortField = "run_id"
+	SortFailed   SortField = "failed"
+)
+
+// ParseSortField maps a wire value to a SortField. Empty means the
+// default (newest first); anything unknown is an error so a typo does
+// not silently fall back to the default order.
+func ParseSortField(s string) (SortField, error) {
+	switch f := SortField(s); f {
+	case "":
+		return SortStarted, nil
+	case SortStarted, SortDuration, SortStatus, SortBranch, SortProject, SortRunID, SortFailed:
+		return f, nil
+	default:
+		return "", fmt.Errorf("sort: %q is not a sortable field", s)
+	}
+}
+
+// SortSpec is the list ordering. The zero value is start_time DESC,
+// which is the list's historical default.
+type SortSpec struct {
+	Field SortField
+	Asc   bool
+}
+
 // PageArgs is cursor-based pagination input.
 type PageArgs struct {
 	First int
 	After string // opaque cursor; empty = first page
+	Sort  SortSpec
 }
 
 // Normalize clamps First into [1, MaxPageSize] with DefaultPageSize for
-// zero or negative inputs. Callers should call this before issuing a
-// query.
+// zero or negative inputs, and fills in the default sort field. Callers
+// should call this before issuing a query.
 func (p *PageArgs) Normalize() {
+	if p.Sort.Field == "" {
+		p.Sort.Field = SortStarted
+	}
 	if p.First <= 0 {
 		p.First = DefaultPageSize
 		return

@@ -2,6 +2,8 @@ package infrastructure_test
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -424,4 +426,229 @@ func TestComputeFacets_ProjectFacetStillBroadensWithinScope(t *testing.T) {
 	if len(facets.ByProject) != 2 {
 		t.Errorf("ByProject = %+v, want both in-scope projects", facets.ByProject)
 	}
+}
+
+// seedSortable inserts runs whose branch and duration orders differ
+// from their start_time order, so a sort that silently fell back to
+// start_time would fail the assertions.
+func seedSortable(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	base := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	rows := []struct {
+		branch   string
+		duration int64
+	}{
+		{"c", 300}, {"a", 100}, {"e", 500}, {"b", 200}, {"d", 400},
+	}
+	for i, r := range rows {
+		seedCounter++
+		row := database.TestRun{
+			ProjectID: "p1",
+			RunID:     uniqueRunID(),
+			Branch:    r.branch,
+			Status:    "passed",
+			StartTime: base.Add(time.Duration(i) * time.Hour),
+			Duration:  r.duration,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+}
+
+// collectAll pages through the whole result set two rows at a time.
+func collectAll(t *testing.T, repo *infrastructure.TestRunQueryRepo, sort domain.SortSpec) []*domain.TestRun {
+	t.Helper()
+	var out []*domain.TestRun
+	after := ""
+	for i := 0; i < 10; i++ {
+		page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+			domain.PageArgs{First: 2, After: after, Sort: sort})
+		if err != nil {
+			t.Fatalf("Query page %d: %v", i, err)
+		}
+		for _, e := range page.Edges {
+			out = append(out, e.Node)
+		}
+		if !page.PageInfo.HasNextPage {
+			return out
+		}
+		after = page.PageInfo.EndCursor
+	}
+	t.Fatal("pagination did not terminate")
+	return nil
+}
+
+func TestQuery_SortByBranchAscPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortBranch, Asc: true})
+	var branches []string
+	for _, n := range got {
+		branches = append(branches, n.Branch)
+	}
+	if !equalStringSlices(branches, []string{"a", "b", "c", "d", "e"}) {
+		t.Errorf("branch ASC across pages = %v", branches)
+	}
+}
+
+func TestQuery_SortByDurationDescPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortDuration})
+	var durations []time.Duration
+	for _, n := range got {
+		durations = append(durations, n.Duration)
+	}
+	if len(durations) != 5 {
+		t.Fatalf("expected 5 rows, got %d", len(durations))
+	}
+	for i := 0; i+1 < len(durations); i++ {
+		if durations[i] < durations[i+1] {
+			t.Errorf("duration DESC broken at %d: %v", i, durations)
+		}
+	}
+}
+
+func TestQuery_SortTiesBreakOnIDWithoutDuplicates(t *testing.T) {
+	// Every row shares a status, so the id tiebreak alone decides page
+	// boundaries. No row may repeat or vanish across pages.
+	db := openSQLite(t)
+	seedRuns(t, db, 5, "p1", "passed", "main")
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortStatus, Asc: true})
+	seen := map[uint]bool{}
+	for _, n := range got {
+		if seen[n.ID] {
+			t.Errorf("row %d returned twice", n.ID)
+		}
+		seen[n.ID] = true
+	}
+	if len(seen) != 5 {
+		t.Errorf("expected 5 distinct rows, got %d", len(seen))
+	}
+	// Ties must be broken by id in the sort direction (ASC here), not
+	// in whatever order the database happens to return them.
+	for i := 0; i+1 < len(got); i++ {
+		if got[i].ID >= got[i+1].ID {
+			t.Errorf("tied rows not in id ASC order at %d: %d then %d", i, got[i].ID, got[i+1].ID)
+		}
+	}
+
+	desc := collectAll(t, repo, domain.SortSpec{Field: domain.SortStatus})
+	for i := 0; i+1 < len(desc); i++ {
+		if desc[i].ID <= desc[i+1].ID {
+			t.Errorf("tied rows not in id DESC order at %d: %d then %d", i, desc[i].ID, desc[i+1].ID)
+		}
+	}
+}
+
+func TestQuery_SortByStartedAscPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortStarted, Asc: true})
+	if len(got) != 5 {
+		t.Fatalf("expected 5 rows, got %d", len(got))
+	}
+	for i := 0; i+1 < len(got); i++ {
+		if got[i].StartTime.After(got[i+1].StartTime) {
+			t.Errorf("start_time ASC broken at %d", i)
+		}
+	}
+}
+
+func TestQuery_RejectsCursorFromOppositeDirection(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	cases := []struct {
+		name     string
+		from, to domain.SortSpec
+	}{
+		{"branch asc to desc", domain.SortSpec{Field: domain.SortBranch, Asc: true}, domain.SortSpec{Field: domain.SortBranch}},
+		{"branch desc to asc", domain.SortSpec{Field: domain.SortBranch}, domain.SortSpec{Field: domain.SortBranch, Asc: true}},
+		{"default to started asc", domain.SortSpec{}, domain.SortSpec{Field: domain.SortStarted, Asc: true}},
+		{"started asc to default", domain.SortSpec{Field: domain.SortStarted, Asc: true}, domain.SortSpec{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+				domain.PageArgs{First: 2, Sort: tc.from})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if page.PageInfo.EndCursor == "" {
+				t.Fatal("expected a next-page cursor")
+			}
+			_, err = repo.Query(context.Background(), domain.TestRunFilter{},
+				domain.PageArgs{First: 2, After: page.PageInfo.EndCursor, Sort: tc.to})
+			if err == nil {
+				t.Error("a cursor must not be accepted under the opposite direction")
+			}
+		})
+	}
+}
+
+func TestQuery_DefaultSortCursorKeepsLegacyShape(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{}, domain.PageArgs{First: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := page.PageInfo.EndCursor
+	if !strings.HasPrefix(c, "ts=") {
+		t.Errorf("default cursor changed shape: %q", c)
+	}
+	v, err := url.ParseQuery(c)
+	if err != nil {
+		t.Fatalf("parse cursor: %v", err)
+	}
+	if v.Has("s") || v.Has("d") {
+		t.Errorf("default cursor must not carry sort/direction keys: %q", c)
+	}
+	// Explicit start_time DESC is the same ordering and must accept it.
+	if _, err := repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, After: c, Sort: domain.SortSpec{Field: domain.SortStarted}}); err != nil {
+		t.Errorf("legacy cursor rejected under explicit started desc: %v", err)
+	}
+}
+
+func TestQuery_RejectsCursorFromDifferentSort(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, Sort: domain.SortSpec{Field: domain.SortBranch}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, After: page.PageInfo.EndCursor, Sort: domain.SortSpec{Field: domain.SortDuration}})
+	if err == nil {
+		t.Error("a branch cursor must not be accepted for a duration sort")
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

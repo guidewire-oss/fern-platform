@@ -20,8 +20,9 @@ import (
 // go through GormTestRunRepository.
 //
 // Design choices:
-//   - Pagination uses keyset (start_time DESC, id DESC) with a Relay-
-//     style "fetch first+1, drop the extra to detect hasNextPage".
+//   - Pagination is keyset on (sort column, id), start_time DESC by
+//     default, with a Relay-style "fetch first+1, drop the extra to
+//     detect hasNextPage".
 //   - Filter→SQL is delegated to BuildTestRunWhere so the translator
 //     can be unit-tested without a DB.
 //   - Count exact vs estimate is chosen by ChooseCountStrategy.
@@ -62,7 +63,7 @@ func (r *TestRunQueryRepo) Query(ctx context.Context, filter domain.TestRunFilte
 	for _, row := range rows {
 		node := toDomain(row)
 		edges = append(edges, domain.TestRunEdge{
-			Cursor: encodeCursorForRow(row),
+			Cursor: encodeCursorForRow(row, page.Sort),
 			Node:   node,
 		})
 	}
@@ -238,16 +239,13 @@ func (r *TestRunQueryRepo) fetchPage(ctx context.Context, f domain.TestRunFilter
 		q = q.Where(c, sliceArg(args[i])...)
 	}
 	if p.After != "" {
-		ts, id, err := decodeCursor(p.After)
+		val, id, err := decodeCursor(p.After, p.Sort)
 		if err != nil {
 			return nil, false, fmt.Errorf("after: %w", err)
 		}
-		q = q.Where(
-			"(test_runs.start_time, test_runs.id) < (?, ?)",
-			ts, id,
-		)
+		q = q.Where(BuildTestRunKeyset(p.Sort), val, id)
 	}
-	q = q.Order(BuildTestRunOrderBy()).Limit(p.First + 1)
+	q = q.Order(BuildTestRunOrderBy(p.Sort)).Limit(p.First + 1)
 
 	var rows []database.TestRun
 	if err := q.Find(&rows).Error; err != nil {
@@ -306,33 +304,82 @@ func sliceArg(a any) []any {
 	return []any{a}
 }
 
-// decodeCursor reverses encodeCursorForRow's "ts=<unixNs>&id=<rowId>"
-// form. Stale or malformed cursors return an error so the caller can
-// fail the request rather than silently restart pagination from page 1
-// (the symptom we previously had: the cursor was discarded entirely
-// and "Next" returned the same first page in a loop).
-func decodeCursor(s string) (time.Time, uint, error) {
+// decodeCursor reverses encodeCursorForRow, returning the sort-column
+// value and row id to resume after. Stale or malformed cursors return
+// an error so the caller can fail the request rather than silently
+// restart pagination from page 1 (the symptom we previously had: the
+// cursor was discarded entirely and "Next" returned the same first
+// page in a loop). A cursor minted under a different sort field or
+// direction is rejected too: its value would be compared against the
+// wrong column, or the keyset would resume from the wrong side.
+func decodeCursor(s string, sort domain.SortSpec) (any, uint, error) {
+	field := sort.Field
+	if field == "" {
+		field = domain.SortStarted
+	}
 	v, err := url.ParseQuery(s)
 	if err != nil {
-		return time.Time{}, 0, fmt.Errorf("malformed cursor: %w", err)
+		return nil, 0, fmt.Errorf("malformed cursor: %w", err)
 	}
-	tsStr := v.Get("ts")
 	idStr := v.Get("id")
-	if tsStr == "" || idStr == "" {
-		return time.Time{}, 0, fmt.Errorf("malformed cursor: missing ts/id")
-	}
-	tsNs, err := strconv.ParseInt(tsStr, 10, 64)
-	if err != nil {
-		return time.Time{}, 0, fmt.Errorf("malformed cursor ts: %w", err)
+	if idStr == "" {
+		return nil, 0, fmt.Errorf("malformed cursor: missing id")
 	}
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		return time.Time{}, 0, fmt.Errorf("malformed cursor id: %w", err)
+		return nil, 0, fmt.Errorf("malformed cursor id: %w", err)
 	}
 	if id > math.MaxUint {
-		return time.Time{}, 0, fmt.Errorf("malformed cursor id: out of range")
+		return nil, 0, fmt.Errorf("malformed cursor id: out of range")
 	}
-	return time.Unix(0, tsNs).UTC(), uint(id), nil
+
+	// The legacy "ts=…&id=…" shape carries neither field nor direction;
+	// it only ever meant start_time DESC.
+	gotField := domain.SortField(v.Get("s"))
+	if gotField == "" {
+		gotField = domain.SortStarted
+	}
+	gotAsc := v.Get("d") == "asc"
+	if gotField != field || gotAsc != sort.Asc {
+		return nil, 0, fmt.Errorf("cursor was issued for sort %q %s, not %q %s",
+			gotField, dirName(gotAsc), field, dirName(sort.Asc))
+	}
+
+	if field == domain.SortStarted {
+		tsStr := v.Get("ts")
+		if tsStr == "" {
+			return nil, 0, fmt.Errorf("malformed cursor: missing ts")
+		}
+		tsNs, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			return nil, 0, fmt.Errorf("malformed cursor ts: %w", err)
+		}
+		return time.Unix(0, tsNs).UTC(), uint(id), nil
+	}
+
+	if !v.Has("v") {
+		return nil, 0, fmt.Errorf("malformed cursor: missing v")
+	}
+	raw := v.Get("v")
+	if isNumericSort(field) {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return nil, 0, fmt.Errorf("malformed cursor v: %w", err)
+		}
+		return n, uint(id), nil
+	}
+	return raw, uint(id), nil
+}
+
+func dirName(asc bool) string {
+	if asc {
+		return "asc"
+	}
+	return "desc"
+}
+
+func isNumericSort(f domain.SortField) bool {
+	return f == domain.SortDuration || f == domain.SortFailed
 }
 
 // encodeCursorForRow produces a deterministic cursor string for a row.
@@ -342,8 +389,50 @@ func decodeCursor(s string) (time.Time, uint, error) {
 // Until then we emit an unsigned debug string. The TestRunQueryService
 // in the application layer wraps the repo and replaces this with a
 // signed cursor before the response goes out.
-func encodeCursorForRow(r database.TestRun) string {
-	return fmt.Sprintf("ts=%d&id=%d", r.StartTime.UnixNano(), r.ID)
+//
+// The default sort (start_time DESC) keeps its original "ts=…&id=…"
+// shape so cursors already held by open tabs stay valid. Every other
+// sort also carries the field name ("s") and direction ("d") so a
+// cursor can't be replayed under a different ordering.
+func encodeCursorForRow(r database.TestRun, sort domain.SortSpec) string {
+	field := sort.Field
+	if field == "" {
+		field = domain.SortStarted
+	}
+	if field == domain.SortStarted && !sort.Asc {
+		return fmt.Sprintf("ts=%d&id=%d", r.StartTime.UnixNano(), r.ID)
+	}
+	v := url.Values{}
+	v.Set("s", string(field))
+	v.Set("d", dirName(sort.Asc))
+	if field == domain.SortStarted {
+		v.Set("ts", strconv.FormatInt(r.StartTime.UnixNano(), 10))
+	} else {
+		v.Set("v", sortValueString(r, field))
+	}
+	v.Set("id", strconv.FormatUint(uint64(r.ID), 10))
+	return v.Encode()
+}
+
+// sortValueString renders a row's value for a non-default sort field,
+// matching the COALESCE defaults in sortColumns.
+func sortValueString(r database.TestRun, field domain.SortField) string {
+	switch field {
+	case domain.SortDuration:
+		return strconv.FormatInt(r.Duration, 10)
+	case domain.SortFailed:
+		return strconv.Itoa(r.FailedTests)
+	case domain.SortStatus:
+		return r.Status
+	case domain.SortBranch:
+		return r.Branch
+	case domain.SortProject:
+		return r.ProjectID
+	case domain.SortRunID:
+		return r.RunID
+	default:
+		return ""
+	}
 }
 
 // toDomain projects a database row into the read-side domain shape.

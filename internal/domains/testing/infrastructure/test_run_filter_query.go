@@ -104,11 +104,49 @@ func BuildTestRunWhere(f domain.TestRunFilter) ([]string, []any) {
 	return clauses, args
 }
 
-// BuildTestRunOrderBy returns the canonical ORDER BY for keyset
-// pagination of test runs. It must align with the cursor codec's
-// encoded fields and the (project_id, start_time DESC) index.
-func BuildTestRunOrderBy() string {
-	return "test_runs.start_time DESC, test_runs.id DESC"
+// sortColumns maps each sortable field to the SQL expression it orders
+// by. Text and count columns are COALESCEd so a NULL can't drop a row
+// out of the keyset comparison — (NULL, id) < (?, ?) is never true.
+var sortColumns = map[domain.SortField]string{
+	domain.SortStarted:  "test_runs.start_time",
+	domain.SortDuration: "COALESCE(test_runs.duration_ms, 0)",
+	domain.SortStatus:   "COALESCE(test_runs.status, '')",
+	domain.SortBranch:   "COALESCE(test_runs.branch, '')",
+	domain.SortProject:  "COALESCE(test_runs.project_id, '')",
+	domain.SortRunID:    "COALESCE(test_runs.run_id, '')",
+	domain.SortFailed:   "COALESCE(test_runs.failed_tests, 0)",
+}
+
+// sortColumn returns the SQL expression for a sort field, falling back
+// to start_time for the zero value.
+func sortColumn(f domain.SortField) string {
+	if col, ok := sortColumns[f]; ok {
+		return col
+	}
+	return sortColumns[domain.SortStarted]
+}
+
+// BuildTestRunOrderBy returns the ORDER BY for keyset pagination of
+// test runs. id breaks ties in the same direction as the sort column so
+// the (column, id) pair is a strict total order the cursor can resume
+// from. The default (start_time DESC) is the one the
+// (start_time DESC, id DESC) index serves.
+func BuildTestRunOrderBy(s domain.SortSpec) string {
+	dir := "DESC"
+	if s.Asc {
+		dir = "ASC"
+	}
+	return sortColumn(s.Field) + " " + dir + ", test_runs.id " + dir
+}
+
+// BuildTestRunKeyset returns the keyset predicate that resumes after a
+// cursor row: strictly past (value, id) in the sort direction.
+func BuildTestRunKeyset(s domain.SortSpec) string {
+	op := "<"
+	if s.Asc {
+		op = ">"
+	}
+	return "(" + sortColumn(s.Field) + ", test_runs.id) " + op + " (?, ?)"
 }
 
 // JoinWhere joins a set of clauses with AND, or returns the empty
