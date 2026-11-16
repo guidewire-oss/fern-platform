@@ -659,7 +659,18 @@ function RowFilterBar({
             <input
               type="checkbox"
               checked={filter.hideSkipped}
-              onChange={(e) => onChange({ ...filter, hideSkipped: e.target.checked })}
+              onChange={(e) =>
+                // Hiding skipped also removes the skipped chip, so drop a
+                // selected "skipped" status rather than leave it applied
+                // with no chip left to clear it.
+                onChange({
+                  ...filter,
+                  hideSkipped: e.target.checked,
+                  statuses: e.target.checked
+                    ? filter.statuses.filter((s) => s !== 'skipped')
+                    : filter.statuses,
+                })
+              }
               data-testid="hide-skipped"
             />
             Hide skipped

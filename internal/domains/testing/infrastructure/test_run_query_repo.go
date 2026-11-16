@@ -63,7 +63,7 @@ func (r *TestRunQueryRepo) Query(ctx context.Context, filter domain.TestRunFilte
 	for _, row := range rows {
 		node := toDomain(row)
 		edges = append(edges, domain.TestRunEdge{
-			Cursor: encodeCursorForRow(row, page.Sort.Field),
+			Cursor: encodeCursorForRow(row, page.Sort),
 			Node:   node,
 		})
 	}
@@ -239,7 +239,7 @@ func (r *TestRunQueryRepo) fetchPage(ctx context.Context, f domain.TestRunFilter
 		q = q.Where(c, sliceArg(args[i])...)
 	}
 	if p.After != "" {
-		val, id, err := decodeCursor(p.After, p.Sort.Field)
+		val, id, err := decodeCursor(p.After, p.Sort)
 		if err != nil {
 			return nil, false, fmt.Errorf("after: %w", err)
 		}
@@ -309,9 +309,14 @@ func sliceArg(a any) []any {
 // an error so the caller can fail the request rather than silently
 // restart pagination from page 1 (the symptom we previously had: the
 // cursor was discarded entirely and "Next" returned the same first
-// page in a loop). A cursor minted under a different sort field is
-// rejected too: its value would be compared against the wrong column.
-func decodeCursor(s string, field domain.SortField) (any, uint, error) {
+// page in a loop). A cursor minted under a different sort field or
+// direction is rejected too: its value would be compared against the
+// wrong column, or the keyset would resume from the wrong side.
+func decodeCursor(s string, sort domain.SortSpec) (any, uint, error) {
+	field := sort.Field
+	if field == "" {
+		field = domain.SortStarted
+	}
 	v, err := url.ParseQuery(s)
 	if err != nil {
 		return nil, 0, fmt.Errorf("malformed cursor: %w", err)
@@ -328,6 +333,18 @@ func decodeCursor(s string, field domain.SortField) (any, uint, error) {
 		return nil, 0, fmt.Errorf("malformed cursor id: out of range")
 	}
 
+	// The legacy "ts=…&id=…" shape carries neither field nor direction;
+	// it only ever meant start_time DESC.
+	gotField := domain.SortField(v.Get("s"))
+	if gotField == "" {
+		gotField = domain.SortStarted
+	}
+	gotAsc := v.Get("d") == "asc"
+	if gotField != field || gotAsc != sort.Asc {
+		return nil, 0, fmt.Errorf("cursor was issued for sort %q %s, not %q %s",
+			gotField, dirName(gotAsc), field, dirName(sort.Asc))
+	}
+
 	if field == domain.SortStarted {
 		tsStr := v.Get("ts")
 		if tsStr == "" {
@@ -340,9 +357,6 @@ func decodeCursor(s string, field domain.SortField) (any, uint, error) {
 		return time.Unix(0, tsNs).UTC(), uint(id), nil
 	}
 
-	if got := domain.SortField(v.Get("s")); got != field {
-		return nil, 0, fmt.Errorf("cursor was issued for sort %q, not %q", got, field)
-	}
 	if !v.Has("v") {
 		return nil, 0, fmt.Errorf("malformed cursor: missing v")
 	}
@@ -357,6 +371,13 @@ func decodeCursor(s string, field domain.SortField) (any, uint, error) {
 	return raw, uint(id), nil
 }
 
+func dirName(asc bool) string {
+	if asc {
+		return "asc"
+	}
+	return "desc"
+}
+
 func isNumericSort(f domain.SortField) bool {
 	return f == domain.SortDuration || f == domain.SortFailed
 }
@@ -369,16 +390,26 @@ func isNumericSort(f domain.SortField) bool {
 // in the application layer wraps the repo and replaces this with a
 // signed cursor before the response goes out.
 //
-// The default start_time sort keeps its original "ts=…&id=…" shape so
-// cursors already held by open tabs stay valid. Other sorts carry the
-// field name and that row's value for it.
-func encodeCursorForRow(r database.TestRun, field domain.SortField) string {
-	if field == "" || field == domain.SortStarted {
+// The default sort (start_time DESC) keeps its original "ts=…&id=…"
+// shape so cursors already held by open tabs stay valid. Every other
+// sort also carries the field name ("s") and direction ("d") so a
+// cursor can't be replayed under a different ordering.
+func encodeCursorForRow(r database.TestRun, sort domain.SortSpec) string {
+	field := sort.Field
+	if field == "" {
+		field = domain.SortStarted
+	}
+	if field == domain.SortStarted && !sort.Asc {
 		return fmt.Sprintf("ts=%d&id=%d", r.StartTime.UnixNano(), r.ID)
 	}
 	v := url.Values{}
 	v.Set("s", string(field))
-	v.Set("v", sortValueString(r, field))
+	v.Set("d", dirName(sort.Asc))
+	if field == domain.SortStarted {
+		v.Set("ts", strconv.FormatInt(r.StartTime.UnixNano(), 10))
+	} else {
+		v.Set("v", sortValueString(r, field))
+	}
 	v.Set("id", strconv.FormatUint(uint64(r.ID), 10))
 	return v.Encode()
 }

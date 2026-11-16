@@ -17,9 +17,11 @@ export interface TagLike {
 // as-is) and sometimes a distinct human label with category/value
 // tracked separately (e.g. "team" / owner / platform). Only substitute
 // in "category: value" when name is exactly that raw compound —
-// otherwise appending value to name would double it up.
+// otherwise appending value to name would double it up. A simple tag
+// with no category (e.g. "smoke") comes back from the backend with the
+// whole name copied into value, so it is shown as just its name.
 export function tagLabel(tag: TagLike): string {
-  if (!tag.value) return tag.name;
+  if (!tag.value || !tag.category) return tag.name;
   if (tag.name === `${tag.category}:${tag.value}`) return `${tag.category}: ${tag.value}`;
   return `${tag.name}: ${tag.value}`;
 }

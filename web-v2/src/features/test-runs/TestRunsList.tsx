@@ -115,13 +115,16 @@ export default function TestRunsList() {
   }, [pageSize, filter.first]);
 
   // Sort lives in the filter so it reaches the server, survives the
-  // detail round-trip via sessionStorage, and resets pagination through
-  // the filterKey effect above (cursors are only valid for one sort).
+  // detail round-trip via sessionStorage, and resets the page number and
+  // cursor stack through the filterKey effect above. `after` is cleared
+  // here too, in the same update: the effect runs only after a render,
+  // and that render would otherwise request the new sort with the old
+  // sort's cursor, which the server rejects.
   const sort: SortState<TestRunSortKey> | null = filter.sort
     ? { key: filter.sort, dir: filter.order ?? 'desc' }
     : null;
   const setSort = (next: SortState<TestRunSortKey> | null) =>
-    setFilter((f) => ({ ...f, sort: next?.key, order: next?.dir }));
+    setFilter((f) => ({ ...f, sort: next?.key, order: next?.dir, after: undefined }));
 
   const goNext = () => {
     if (!data?.pageInfo.hasNextPage) return;
@@ -319,7 +322,9 @@ function SavedViewsBar({
     !filter.from &&
     !filter.to &&
     filter.durationGte == null &&
-    filter.durationLte == null;
+    filter.durationLte == null &&
+    // A sort on its own is still worth saving (it's part of the view).
+    !filter.sort;
 
   // The shared query returns all pages' views; the bar shows only this page's.
   const list = (views.data?.views ?? []).filter((v) => v.page === TEST_RUNS_PAGE);

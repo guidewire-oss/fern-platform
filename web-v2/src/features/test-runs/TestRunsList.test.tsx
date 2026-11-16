@@ -208,6 +208,34 @@ describe('TestRunsList column sort', () => {
     expect(lastFilter().sort).toBeUndefined();
   });
 
+  it('never requests a new sort with the previous page cursor', () => {
+    mockUseTestRuns.mockReturnValue({
+      data: { ...connection([node({})]), pageInfo: { hasNextPage: true, endCursor: 'page2' } },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+    });
+    render(<TestRunsList />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(lastFilter().after).toBe('page2');
+
+    mockUseTestRuns.mockClear();
+    fireEvent.click(screen.getByTestId('sort-branch'));
+    const sorted = mockUseTestRuns.mock.calls
+      .map((c) => c[0] as Record<string, unknown>)
+      .filter((f) => f.sort === 'branch');
+    expect(sorted.length).toBeGreaterThan(0);
+    for (const f of sorted) expect(f.after).toBeUndefined();
+  });
+
+  it('lets a sort on its own be saved as a view', () => {
+    renderWith([node({})]);
+    const save = screen.getByRole('button', { name: /save view/i });
+    expect(save).toBeDisabled();
+    fireEvent.click(screen.getByTestId('sort-branch'));
+    expect(screen.getByRole('button', { name: /save view/i })).not.toBeDisabled();
+  });
+
   it('marks the sorted column with aria-sort', () => {
     renderWith([node({})]);
     fireEvent.click(screen.getByTestId('sort-branch'));

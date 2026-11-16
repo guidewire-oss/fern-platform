@@ -243,6 +243,23 @@ describe('ProjectDetail run table sort and status filter', () => {
     expect(urlOf(-1).get('sort')).toBeNull();
   });
 
+  it('shows the table request error instead of the no-match state', () => {
+    const ok = mockRuns();
+    // Only the table query carries the selected status in its key.
+    mockRuns.mockImplementation((opts: { queryKey: unknown[] }) =>
+      opts.queryKey.includes('failed')
+        ? { data: undefined, isLoading: false, isFetching: false, error: new Error('server said no') }
+        : ok,
+    );
+    render(<ProjectDetail />);
+    fireEvent.click(screen.getByRole('button', { name: /failed/ }));
+    expect(screen.getByText("Couldn't load runs")).toBeTruthy();
+    expect(screen.getByText('server said no')).toBeTruthy();
+    expect(screen.queryByText('No runs match the status filter')).toBeNull();
+    // The chart still renders from its own, successful query.
+    expect(screen.getByTestId('history-chart')).toBeTruthy();
+  });
+
   it('sends selected statuses to the table query only', () => {
     render(<ProjectDetail />);
     fireEvent.click(screen.getByRole('button', { name: /failed/ }));

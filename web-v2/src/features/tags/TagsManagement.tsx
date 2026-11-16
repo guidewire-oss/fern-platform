@@ -117,8 +117,10 @@ export default function TagsManagement() {
           description={(error as Error).message}
         />
       )}
-      {!isLoading && filtered.length === 0 && (
-        <EmptyState title="No tags match your search" />
+      {/* byCategory, not filtered: the category chips can empty the page
+          even when the search alone still matches tags. */}
+      {!isLoading && !error && byCategory.size === 0 && (
+        <EmptyState title="No tags match your search or category filter" />
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

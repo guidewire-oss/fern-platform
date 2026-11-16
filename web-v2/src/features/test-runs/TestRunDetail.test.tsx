@@ -412,6 +412,21 @@ describe('Suites and specs sort/filter', () => {
     expect(specNames()).toEqual(['charlie']);
   });
 
+  it('drops a selected skipped status when Hide skipped is checked', () => {
+    renderWith(run);
+    fireEvent.click(screen.getAllByTestId('suite-row')[0]!);
+    const statusGroup = screen.getByRole('group', { name: 'Status' });
+    fireEvent.click(within(statusGroup).getByRole('button', { name: /^skipped/ }));
+    expect(specNames()).toEqual(['bravo']);
+
+    fireEvent.click(screen.getByTestId('hide-skipped'));
+    expect(specNames()).toEqual(['alpha', 'charlie']);
+
+    // Unchecking must not bring back a filter the user can no longer see.
+    fireEvent.click(screen.getByTestId('hide-skipped'));
+    expect(specNames()).toEqual(['alpha', 'bravo', 'charlie']);
+  });
+
   it('sorts specs by duration descending on the second click', () => {
     renderWith(run);
     fireEvent.click(screen.getAllByTestId('suite-row')[0]!);

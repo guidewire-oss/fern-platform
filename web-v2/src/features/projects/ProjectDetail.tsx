@@ -211,7 +211,15 @@ export default function ProjectDetail() {
               {table.data ? ` of ${table.data.totalCount.toLocaleString()}` : ''}
             </span>
           </div>
-          {tableEdges.length === 0 ? (
+          {table.error ? (
+            // Checked before the empty state: a failed sorted/filtered
+            // request leaves no edges, which would otherwise read as
+            // "nothing matches".
+            <EmptyState
+              title="Couldn't load runs"
+              description={(table.error as Error).message}
+            />
+          ) : tableEdges.length === 0 ? (
             <EmptyState title="No runs match the status filter" />
           ) : (
           <Table>

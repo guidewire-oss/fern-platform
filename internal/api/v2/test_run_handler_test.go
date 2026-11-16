@@ -366,6 +366,21 @@ func TestList_SortDefaultsToStartedDesc(t *testing.T) {
 	}
 }
 
+func TestList_OrderWithoutSortKeepsNewestFirst(t *testing.T) {
+	svc := &fakeQuerySvc{}
+	r := newRouter(t, svc)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/test-runs?order=asc", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d", w.Code)
+	}
+	if svc.gotPage.Sort.Field != domain.SortStarted || svc.gotPage.Sort.Asc {
+		t.Errorf("page.Sort = %+v, want started DESC (order ignored without sort)", svc.gotPage.Sort)
+	}
+}
+
 func TestList_RejectsUnknownSortOrOrder(t *testing.T) {
 	for _, qs := range []string{"sort=nope", "sort=branch&order=sideways"} {
 		svc := &fakeQuerySvc{}

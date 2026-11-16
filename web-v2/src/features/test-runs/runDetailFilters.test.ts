@@ -30,6 +30,11 @@ describe('tagLabel', () => {
   it('is just the name without a value', () => {
     expect(tagLabel(tag('smoke'))).toBe('smoke');
   });
+  it('does not repeat a simple tag the backend copied into value', () => {
+    // NewTag("smoke") stores category "" and value "smoke".
+    expect(tagLabel(tag('smoke', '', 'smoke'))).toBe('smoke');
+    expect(tagLabel(tag('smoke', null, 'smoke'))).toBe('smoke');
+  });
 });
 
 describe('filterRows', () => {

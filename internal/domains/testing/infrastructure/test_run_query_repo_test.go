@@ -2,6 +2,8 @@ package infrastructure_test
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -529,6 +531,96 @@ func TestQuery_SortTiesBreakOnIDWithoutDuplicates(t *testing.T) {
 	}
 	if len(seen) != 5 {
 		t.Errorf("expected 5 distinct rows, got %d", len(seen))
+	}
+	// Ties must be broken by id in the sort direction (ASC here), not
+	// in whatever order the database happens to return them.
+	for i := 0; i+1 < len(got); i++ {
+		if got[i].ID >= got[i+1].ID {
+			t.Errorf("tied rows not in id ASC order at %d: %d then %d", i, got[i].ID, got[i+1].ID)
+		}
+	}
+
+	desc := collectAll(t, repo, domain.SortSpec{Field: domain.SortStatus})
+	for i := 0; i+1 < len(desc); i++ {
+		if desc[i].ID <= desc[i+1].ID {
+			t.Errorf("tied rows not in id DESC order at %d: %d then %d", i, desc[i].ID, desc[i+1].ID)
+		}
+	}
+}
+
+func TestQuery_SortByStartedAscPaginates(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	got := collectAll(t, repo, domain.SortSpec{Field: domain.SortStarted, Asc: true})
+	if len(got) != 5 {
+		t.Fatalf("expected 5 rows, got %d", len(got))
+	}
+	for i := 0; i+1 < len(got); i++ {
+		if got[i].StartTime.After(got[i+1].StartTime) {
+			t.Errorf("start_time ASC broken at %d", i)
+		}
+	}
+}
+
+func TestQuery_RejectsCursorFromOppositeDirection(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	cases := []struct {
+		name     string
+		from, to domain.SortSpec
+	}{
+		{"branch asc to desc", domain.SortSpec{Field: domain.SortBranch, Asc: true}, domain.SortSpec{Field: domain.SortBranch}},
+		{"branch desc to asc", domain.SortSpec{Field: domain.SortBranch}, domain.SortSpec{Field: domain.SortBranch, Asc: true}},
+		{"default to started asc", domain.SortSpec{}, domain.SortSpec{Field: domain.SortStarted, Asc: true}},
+		{"started asc to default", domain.SortSpec{Field: domain.SortStarted, Asc: true}, domain.SortSpec{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := repo.Query(context.Background(), domain.TestRunFilter{},
+				domain.PageArgs{First: 2, Sort: tc.from})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if page.PageInfo.EndCursor == "" {
+				t.Fatal("expected a next-page cursor")
+			}
+			_, err = repo.Query(context.Background(), domain.TestRunFilter{},
+				domain.PageArgs{First: 2, After: page.PageInfo.EndCursor, Sort: tc.to})
+			if err == nil {
+				t.Error("a cursor must not be accepted under the opposite direction")
+			}
+		})
+	}
+}
+
+func TestQuery_DefaultSortCursorKeepsLegacyShape(t *testing.T) {
+	db := openSQLite(t)
+	seedSortable(t, db)
+	repo := infrastructure.NewTestRunQueryRepo(db)
+
+	page, err := repo.Query(context.Background(), domain.TestRunFilter{}, domain.PageArgs{First: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := page.PageInfo.EndCursor
+	if !strings.HasPrefix(c, "ts=") {
+		t.Errorf("default cursor changed shape: %q", c)
+	}
+	v, err := url.ParseQuery(c)
+	if err != nil {
+		t.Fatalf("parse cursor: %v", err)
+	}
+	if v.Has("s") || v.Has("d") {
+		t.Errorf("default cursor must not carry sort/direction keys: %q", c)
+	}
+	// Explicit start_time DESC is the same ordering and must accept it.
+	if _, err := repo.Query(context.Background(), domain.TestRunFilter{},
+		domain.PageArgs{First: 2, After: c, Sort: domain.SortSpec{Field: domain.SortStarted}}); err != nil {
+		t.Errorf("legacy cursor rejected under explicit started desc: %v", err)
 	}
 }
 
