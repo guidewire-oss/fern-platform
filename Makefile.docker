@@ -316,7 +316,7 @@ docker-test-seed-dry: ## Show the estimated row counts without inserting anythin
 docker-test-perf-counts: ## Print row counts for the seeded tables
 	@docker run --rm --network fern-platform_default \
 		-e PGPASSWORD=postgres \
-		postgres:14-alpine psql -h postgres -U postgres -d fern_platform -c \
+		postgres:17-alpine psql -h postgres -U postgres -d fern_platform -c \
 		"SELECT 'projects' AS table, COUNT(*) FROM project_details \
 		 UNION ALL SELECT 'test_runs', COUNT(*) FROM test_runs \
 		 UNION ALL SELECT 'suite_runs', COUNT(*) FROM suite_runs \

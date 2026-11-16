@@ -155,7 +155,7 @@ will be disabled or stubbed.
 
 ```bash
 # 1. Bring up dependencies
-docker run -d --name fern-pg    -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:14
+docker run -d --name fern-pg    -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17-alpine
 docker run -d --name fern-redis -p 6379:6379 redis:7
 
 # 2. Set env (or use config/ files)
@@ -171,6 +171,39 @@ make run                 # or: go run ./cmd/fern-platform
 ```
 
 The server listens on `:8080`. Hit `GET /health` to confirm it's up.
+
+> **Upgrading from Postgres 14?** Local dev now uses Postgres 17, the same
+> major version as the CNPG deployment. Postgres 17 can't start on a data
+> directory created by 14, so an existing container or volume needs one of:
+>
+> - **Discard local data:**
+>   - Path B: `docker rm -f fern-pg`, then repeat step 1 and the `createdb`
+>     in step 3. Removing the container also removes the `fern_platform`
+>     database, and migrations don't create it.
+>   - `docker-compose.yml`: `docker compose down -v`, then start again. Compose
+>     creates `fern_platform` itself.
+>
+>   Migrations recreate the schema on first start.
+> - **Keep local data (Path B):** dump while the 14 container is still
+>   running, move it out of the way, then start 17 and restore:
+>
+>   ```bash
+>   docker exec fern-pg pg_dumpall -U postgres > fern-pg14.sql
+>   docker stop fern-pg && docker rename fern-pg fern-pg-14   # frees the name and port 5432
+>   # start the 17 container with the fern-pg command from step 1,
+>   # then give it a few seconds to accept connections
+>   docker exec -i fern-pg psql -U postgres < fern-pg14.sql
+>   ```
+>
+>   `role "postgres" already exists` during the restore is expected. Once the
+>   app works against 17, remove the old container with `docker rm fern-pg-14`.
+> - **Keep local data (`docker-compose.yml`):** same idea. Dump with
+>   `docker compose exec -T postgres pg_dumpall -U postgres > fern-pg14.sql`
+>   before switching images, run `docker compose down -v`, start only the
+>   database with `docker compose up -d postgres`, restore with
+>   `docker compose exec -T postgres psql -U postgres < fern-pg14.sql`, then
+>   start the rest of the stack. "Already exists" errors for the `postgres`
+>   role and `fern_platform` database are expected.
 
 ### Path C — Docker (coming soon)
 

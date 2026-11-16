@@ -363,7 +363,7 @@ function DatabasePanel() {
       </CardHeader>
       <CardBody className="grid gap-4 sm:grid-cols-2">
         <Field label="Engine">
-          <ReadonlyValue value="PostgreSQL 14" />
+          <ReadonlyValue value="PostgreSQL 17" />
         </Field>
         <Field label="Host">
           <ReadonlyValue value="postgres:5432" />
