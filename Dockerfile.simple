@@ -1,8 +1,18 @@
 # Simple Dockerfile using pre-built binary
-FROM alpine:latest
+FROM alpine:3.24
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata wget
+# Install runtime dependencies, then deselect the eMudhra (emSign) roots from
+# the trust store (Alpine's Mozilla bundle still ships them). The final check
+# fails the build if an emSign entry is still enabled or its cert is still in
+# the bundle.
+RUN apk add --no-cache ca-certificates tzdata wget && \
+    sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh && \
+    ! grep -q '^mozilla/emSign' /etc/ca-certificates.conf && \
+    for f in /usr/share/ca-certificates/mozilla/emSign*.crt; do \
+      [ -e "$f" ] || continue; \
+      ! grep -v -- '-----' "$f" | grep -qxFf - /etc/ssl/certs/ca-certificates.crt || exit 1; \
+    done
 
 # Create non-root user
 RUN addgroup -g 1001 -S fern && \

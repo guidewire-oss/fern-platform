@@ -3,7 +3,7 @@
 # the host when pnpm is available; this stage is the fallback. Either
 # way, `//go:embed all:dist` in internal/web/embed.go captures whatever
 # is in internal/web/dist/ at Go-build time.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /web
 RUN corepack enable
 COPY web-v2/package.json web-v2/pnpm-lock.yaml ./
@@ -12,7 +12,7 @@ COPY web-v2/ ./
 RUN pnpm build
 
 # Go build stage
-FROM --platform=$BUILDPLATFORM golang:1.24.5-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 # Build arguments for cross-compilation
 ARG TARGETOS
@@ -49,10 +49,20 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -ldflags "-w -s" -o seed ./cmd/seed
 
 # Runtime stage
-FROM alpine:3.22
+FROM alpine:3.24
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+# Install runtime dependencies, then deselect the eMudhra (emSign) roots from
+# the trust store (Alpine's Mozilla bundle still ships them). The final check
+# fails the build if an emSign entry is still enabled or its cert is still in
+# the bundle.
+RUN apk add --no-cache ca-certificates tzdata && \
+    sed -i 's#^mozilla/emSign#!mozilla/emSign#' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh && \
+    ! grep -q '^mozilla/emSign' /etc/ca-certificates.conf && \
+    for f in /usr/share/ca-certificates/mozilla/emSign*.crt; do \
+      [ -e "$f" ] || continue; \
+      ! grep -v -- '-----' "$f" | grep -qxFf - /etc/ssl/certs/ca-certificates.crt || exit 1; \
+    done
 
 # Create non-root user
 RUN addgroup -g 1001 -S fern && \
