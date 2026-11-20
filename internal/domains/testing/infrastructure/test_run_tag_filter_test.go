@@ -211,7 +211,7 @@ func TestComputeFacets_IgnoresSoftDeletedRuns(t *testing.T) {
 		tags[fc.Value] = fc.Count
 	}
 	if tags["jira:RUN-1"] != 1 {
-		t.Errorf("byTag[jira:RUN-1] = %d, want 1 (deleted run counted)", tags["jira:RUN-1"])
+		t.Errorf("byTag[jira:RUN-1] = %d, want 1 (deleted run excluded)", tags["jira:RUN-1"])
 	}
 	if _, ok := tags["smoke"]; ok {
 		t.Errorf("tag only on a deleted run appears in the facet: %+v", tags)
