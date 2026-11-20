@@ -27,7 +27,8 @@ type TestRunQueryService interface {
 	Query(ctx context.Context, filter domain.TestRunFilter, page domain.PageArgs) (domain.TestRunPage, error)
 }
 
-// TestRunHandler serves /api/v2/test-runs.
+// TestRunHandler serves /api/v2/test-runs and its per-project alias
+// /api/v2/projects/:projectId/test-runs.
 type TestRunHandler struct {
 	svc   TestRunQueryService
 	scope ProjectScoper
@@ -52,10 +53,26 @@ func (h *TestRunHandler) WithScope(s ProjectScoper) *TestRunHandler {
 // Register mounts the handler's routes on the given v2 group.
 func (h *TestRunHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/test-runs", h.list)
+	rg.GET("/projects/:projectId/test-runs", h.listForProject)
 }
 
 func (h *TestRunHandler) list(c *gin.Context) {
-	filter, page, err := decodeListQuery(c.Request.URL.Query())
+	h.serveList(c, c.Request.URL.Query())
+}
+
+// listForProject is /test-runs pinned to one project: the path segment
+// replaces any `project` query params, and every other filter (tag,
+// status, branch, time window, paging, facets) works the same. A project
+// the caller cannot read yields an empty connection, as with
+// /test-runs?project=… — not a 403.
+func (h *TestRunHandler) listForProject(c *gin.Context) {
+	q := c.Request.URL.Query() // fresh copy; safe to mutate
+	q["project"] = []string{c.Param("projectId")}
+	h.serveList(c, q)
+}
+
+func (h *TestRunHandler) serveList(c *gin.Context, q url.Values) {
+	filter, page, err := decodeListQuery(q)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -95,7 +112,7 @@ func (h *TestRunHandler) list(c *gin.Context) {
 	// typical triage span (users scan the last week of activity from
 	// the dashboard). Wider windows are explicit — UI presets jump
 	// to 30d/90d, or clients can pass `allTime=1` to opt out.
-	if filter.StartedAt == nil && c.Request.URL.Query().Get("allTime") != "1" {
+	if filter.StartedAt == nil && q.Get("allTime") != "1" {
 		gte := time.Now().UTC().Add(-7 * 24 * time.Hour)
 		filter.StartedAt = &domain.DateTimeRange{Gte: &gte}
 	}

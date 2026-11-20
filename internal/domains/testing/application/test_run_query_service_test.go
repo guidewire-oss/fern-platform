@@ -384,3 +384,14 @@ func TestCacheKeyForFilter_VariesByAuthorizationScope(t *testing.T) {
 		t.Error("a scoped caller shares the unrestricted (admin) cache key")
 	}
 }
+
+// IncludeTagFacet changes what gets cached (ByTag is only computed when
+// it is set), so it must change the key; otherwise a plain list request
+// seeds an empty tag facet that a later facets=tag request is served.
+func TestCacheKeyForFilter_VariesByTagFacet(t *testing.T) {
+	without := application.CacheKeyForFilter(domain.TestRunFilter{ProjectIDs: []string{"p1"}})
+	with := application.CacheKeyForFilter(domain.TestRunFilter{ProjectIDs: []string{"p1"}, IncludeTagFacet: true})
+	if without == with {
+		t.Error("requests with and without the tag facet share a cache key")
+	}
+}
